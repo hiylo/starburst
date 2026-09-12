@@ -1171,39 +1171,28 @@ fun ChatScreen(
     val isListening by viewModel.isListening.collectAsState()
     val speechError by viewModel.speechError.collectAsState()
     val voiceLevel by viewModel.voiceLevel.collectAsState()
-    val voiceEnabled = remember { MnnAsr.modelDirectory(context) != null }
+    // 麦克风按钮：端侧 MNN 模型已下载，或后端流式识别引擎可用（服务端回退）。
+    val backendAsrAvailable by viewModel.backendAsrAvailable.collectAsState()
+    val voiceEnabled = remember { MnnAsr.modelDirectory(context) != null } || backendAsrAvailable
 
-    // Live partial ASR text replaces the previous partial; the final result appends.
-    var lastRecognizedPartial by remember { mutableStateOf("") }
+    // 录音开始前输入框里已有的文字。识别引擎返回的是「累积全文」而不是增量片段，
+    // 所以每次都用「前缀 + 累积文本」整体重写输入框，绝不能往末尾追加——引擎中途
+    // 回改前文时（"昨天是" → "昨天是 MONDAY"），追加会把上一版的字留在原地，
+    // 表现为重字。
+    var asrPrefix by remember { mutableStateOf("") }
+
+    // 发送后置 true：识别完成（含后台 refine 迟到回调）不得再写回输入框，
+    // 否则用户刚发送、输入框已清空，校对结果又把它塞回来，表现为"发了还在还变多"。
+    // 下一次按下麦克风时重置为 false。
+    var asrSuppressed by remember { mutableStateOf(false) }
 
     // Fill recognized ASR text back into the input field and persist to the draft.
     LaunchedEffect(Unit) {
-        viewModel.partialRecognizedText.collect { partial ->
-            val current = inputText.text
-            val base = if (lastRecognizedPartial.isNotEmpty() && current.endsWith(lastRecognizedPartial)) {
-                current.removeSuffix(lastRecognizedPartial).trimEnd()
-            } else {
-                current
-            }
-            lastRecognizedPartial = partial
-            val separator = if (base.isBlank() || base.endsWith(" ")) "" else " "
-            val merged = base + separator + partial
-            inputText = TextFieldValue(merged, TextRange(merged.length))
-            viewModel.updateDraftText(merged)
-        }
-    }
-
-    LaunchedEffect(Unit) {
-        viewModel.recognizedText.collect { text ->
-            val current = inputText.text
-            val base = if (lastRecognizedPartial.isNotEmpty() && current.endsWith(lastRecognizedPartial)) {
-                current.removeSuffix(lastRecognizedPartial).trimEnd()
-            } else {
-                current
-            }
-            lastRecognizedPartial = ""
-            val separator = if (base.isBlank() || base.endsWith(" ")) "" else " "
-            val merged = base + separator + text
+        viewModel.partialRecognizedText.collect { transcript ->
+            if (asrSuppressed) return@collect
+            val prefix = asrPrefix
+            val separator = if (prefix.isBlank() || prefix.endsWith(" ") || prefix.endsWith("\n")) "" else " "
+            val merged = prefix + separator + transcript
             inputText = TextFieldValue(merged, TextRange(merged.length))
             viewModel.updateDraftText(merged)
         }
