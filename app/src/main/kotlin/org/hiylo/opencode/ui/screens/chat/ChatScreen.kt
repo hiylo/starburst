@@ -9560,9 +9560,9 @@ private fun ChatInputBar(
 
             // Input row
             Row(
-                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                modifier = Modifier.height(IntrinsicSize.Max)
+                modifier = Modifier
+                    .fillMaxWidth()
             ) {
                 // Text field — minimal style, no heavy outline
                 val mentionHighlightColor = MaterialTheme.colorScheme.primary
@@ -9616,8 +9616,7 @@ private fun ChatInputBar(
                                 end = if (showInlineAttach) 48.dp else 16.dp,
                                 top = 10.dp,
                                 bottom = 10.dp,
-                            )
-                            .heightIn(min = 24.dp),
+                            ),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             color = MaterialTheme.colorScheme.onSurface,
                             fontFamily = if (isShellMode) FontFamily.Monospace else FontFamily.Default
@@ -9718,8 +9717,7 @@ private fun ChatInputBar(
                 // Send button — tap to send, long-press toggles shell mode
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .aspectRatio(1f)
+                        .size(44.dp)
                         .clip(RoundedCornerShape(22.dp))
                         .background(
                             if (action == ComposerAction.STOP) {
