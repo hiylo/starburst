@@ -937,8 +937,18 @@
     <!-- Bookmarks & full-text search -->
     <string name="bookmarks_title">书签</string>
     <string name="bookmarks_desc">查看已收藏的消息</string>
+    <string name="bookmarks_title_for">书签 · %1$s</string>
     <string name="fts_search_title">全文搜索</string>
     <string name="fts_search_desc">跨所有消息搜索</string>
+    <string name="fts_search_title_for">全文搜索 · %1$s</string>
+    <string name="fts_search_hint">输入关键词搜索消息</string>
+    <string name="fts_search_prompt">输入关键词开始搜索</string>
+    <string name="fts_search_no_results">无结果</string>
+    <string name="fts_search_empty_title">无标题</string>
+    <string name="fts_search_clear">清除</string>
+    <string name="bookmarks_empty">暂无书签</string>
+    <string name="bookmarks_empty_hint">长按消息并选择「书签」即可收藏到这里</string>
+    <string name="bookmarks_delete">删除</string>
     <string name="chat_bookmark">书签</string>
     <string name="menu_view_share">查看分享</string>
     <string name="server_mgmt_process_cpu">opencode CPU</string>

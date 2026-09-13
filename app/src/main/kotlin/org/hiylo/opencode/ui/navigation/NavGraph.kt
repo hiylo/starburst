@@ -565,12 +565,21 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.Bookmarks.route) {
+        composable(
+            route = Screen.Bookmarks.route + "?serverId={serverId}&serverName={serverName}",
+            arguments = listOf(
+                navArgument("serverId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("serverName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { backStackEntry ->
             val servers by serverRepository.servers.collectAsState(initial = emptyList())
+            val serverId = backStackEntry.arguments?.getString("serverId").orEmpty()
+            val serverName = backStackEntry.arguments?.getString("serverName").orEmpty()
             BookmarksScreen(
+                serverName = serverName,
                 onNavigateBack = { navController.popBackStack() },
-                onOpenSession = { serverId, sessionId ->
-                    val server = servers.firstOrNull { it.id == serverId } ?: return@BookmarksScreen
+                onOpenSession = { targetServerId, sessionId ->
+                    val server = servers.firstOrNull { it.id == targetServerId } ?: return@BookmarksScreen
                     navController.navigate(
                         Screen.Chat.createRoute(
                             serverUrl = server.url,
@@ -585,12 +594,21 @@ fun NavGraph(
             )
         }
 
-        composable(Screen.FtsSearch.route) {
+        composable(
+            route = Screen.FtsSearch.route + "?serverId={serverId}&serverName={serverName}",
+            arguments = listOf(
+                navArgument("serverId") { type = NavType.StringType; defaultValue = "" },
+                navArgument("serverName") { type = NavType.StringType; defaultValue = "" },
+            ),
+        ) { backStackEntry ->
             val servers by serverRepository.servers.collectAsState(initial = emptyList())
+            val serverId = backStackEntry.arguments?.getString("serverId").orEmpty()
+            val serverName = backStackEntry.arguments?.getString("serverName").orEmpty()
             FtsSearchScreen(
+                serverName = serverName,
                 onNavigateBack = { navController.popBackStack() },
-                onOpenResult = { serverId, sessionId, _ ->
-                    val server = servers.firstOrNull { it.id == serverId } ?: return@FtsSearchScreen
+                onOpenResult = { targetServerId, sessionId, _ ->
+                    val server = servers.firstOrNull { it.id == targetServerId } ?: return@FtsSearchScreen
                     navController.navigate(
                         Screen.Chat.createRoute(
                             serverUrl = server.url,
@@ -621,8 +639,6 @@ fun NavGraph(
                 onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 onNavigateToSync = { navController.navigate(Screen.SyncSettings.route) },
                 onNavigateToLlmProvider = { navController.navigate(Screen.LlmProvider.route) },
-                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
-                onNavigateToFtsSearch = { navController.navigate(Screen.FtsSearch.route) },
             )
         }
 
@@ -658,6 +674,7 @@ fun NavGraph(
             val serverName = it.arguments?.getString("serverName").orEmpty()
             val serverId = it.arguments?.getString("serverId").orEmpty()
             ServerSettingsScreen(
+                serverId = serverId,
                 onNavigateBack = { navController.popBackStack() },
                 onOpenProviders = {
                     navController.navigate(
@@ -952,6 +969,12 @@ fun NavGraph(
                                 onSwitchServer = { targetServerId ->
                                     switchToServer(targetServerId)
                                 },
+                                onOpenBookmarks = { targetServerId ->
+                                    navController.navigate(Screen.Bookmarks.createRoute(targetServerId, serverName))
+                                },
+                                onOpenFtsSearch = { targetServerId ->
+                                    navController.navigate(Screen.FtsSearch.createRoute(targetServerId, serverName))
+                                },
                             )
                         }
                         VerticalDivider()
@@ -1062,6 +1085,12 @@ fun NavGraph(
                         },
                         onSwitchServer = { targetServerId ->
                             switchToServer(targetServerId)
+                        },
+                        onOpenBookmarks = { targetServerId ->
+                            navController.navigate(Screen.Bookmarks.createRoute(targetServerId, serverName))
+                        },
+                        onOpenFtsSearch = { targetServerId ->
+                            navController.navigate(Screen.FtsSearch.createRoute(targetServerId, serverName))
                         },
                     )
                 }

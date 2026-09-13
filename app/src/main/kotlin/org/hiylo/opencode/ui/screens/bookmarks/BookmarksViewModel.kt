@@ -9,10 +9,14 @@
  */
 package org.hiylo.opencode.ui.screens.bookmarks
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import org.hiylo.opencode.data.repository.BookmarkRepository
 import org.hiylo.opencode.domain.model.MessageBookmark
@@ -30,10 +34,21 @@ import javax.inject.Inject
 @HiltViewModel
 class BookmarksViewModel @Inject constructor(
     private val bookmarkRepository: BookmarkRepository,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
 
-    /** 全部书签，按添加时间倒序排列。 */
-    val bookmarks: StateFlow<List<MessageBookmark>> = bookmarkRepository.bookmarks
+    /** 当前书签所属服务器 ID；为空表示不过滤（展示全部服务器书签）。 */
+    private val serverId: String? = savedStateHandle["serverId"]
+
+    /** 书签列表，按添加时间倒序排列；绑定服务器时仅展示该服务器的书签。 */
+    val bookmarks: StateFlow<List<MessageBookmark>> =
+        bookmarkRepository.bookmarks.map { all ->
+            if (serverId.isNullOrBlank()) all else all.filter { it.serverId == serverId }
+        }.stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList(),
+        )
 
     /**
      * 加载书签列表。

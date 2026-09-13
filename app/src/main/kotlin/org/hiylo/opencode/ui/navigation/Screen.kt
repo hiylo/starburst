@@ -48,8 +48,15 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object CrossServerSessions : Screen("cross_server_sessions")
     data object GlobalSearch : Screen("global_search")
-    data object Bookmarks : Screen("bookmarks")
-    data object FtsSearch : Screen("fts_search")
+    data object Bookmarks : Screen("bookmarks") {
+        fun createRoute(serverId: String, serverName: String): String =
+            "bookmarks?serverId=${encodeNavigationArgument(serverId)}&serverName=${encodeNavigationArgument(serverName)}"
+    }
+
+    data object FtsSearch : Screen("fts_search") {
+        fun createRoute(serverId: String, serverName: String): String =
+            "fts_search?serverId=${encodeNavigationArgument(serverId)}&serverName=${encodeNavigationArgument(serverName)}"
+    }
 
     data object SharedSession : Screen("shared_session") {
         fun createRoute(shareId: String): String =

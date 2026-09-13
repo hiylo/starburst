@@ -78,20 +78,27 @@ class MessageFtsIndex @Inject constructor(
      * @param limit 返回命中条数上限，默认 50
      * @return 命中结果列表；查询词为空时返回空列表
      */
-    suspend fun search(query: String, limit: Int = DEFAULT_LIMIT): List<FtsHit> = withContext(Dispatchers.IO) {
+    suspend fun search(query: String, limit: Int = DEFAULT_LIMIT, serverId: String? = null): List<FtsHit> =
+        withContext(Dispatchers.IO) {
         val keyword = query.trim()
         if (keyword.isBlank()) return@withContext emptyList()
         val like = "%${keyword.escapeLike()}%"
         val results = mutableListOf<FtsHit>()
+        val args = buildList {
+            add(like)
+            add(like)
+            if (serverId != null) add(serverId)
+        }
         helper.readableDatabase.rawQuery(
             """
             SELECT $COL_SERVER_ID, $COL_SESSION_ID, $COL_MESSAGE_ID, $COL_TITLE, $COL_CONTENT
             FROM $TABLE_NAME
-            WHERE $COL_CONTENT LIKE ? ESCAPE '\' OR $COL_TITLE LIKE ? ESCAPE '\'
+            WHERE ($COL_CONTENT LIKE ? ESCAPE '\' OR $COL_TITLE LIKE ? ESCAPE '\')
+            ${if (serverId != null) "AND $COL_SERVER_ID = ?" else ""}
             ORDER BY $COL_MESSAGE_ID DESC
             LIMIT ${limit.coerceIn(1, MAX_LIMIT)}
             """.trimIndent(),
-            arrayOf(like, like),
+            args.toTypedArray(),
         ).use { cursor ->
             val serverIdx = cursor.getColumnIndexOrThrow(COL_SERVER_ID)
             val sessionIdx = cursor.getColumnIndexOrThrow(COL_SESSION_ID)

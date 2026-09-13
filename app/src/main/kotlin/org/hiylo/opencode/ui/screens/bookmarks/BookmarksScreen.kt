@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -46,12 +47,14 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import org.hiylo.opencode.R
 import org.hiylo.opencode.domain.model.MessageBookmark
 import org.hiylo.opencode.ui.components.AppCardShape
 import org.hiylo.opencode.ui.components.appAmoledBorder
@@ -69,6 +72,7 @@ import org.hiylo.opencode.ui.components.isAmoledTheme
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun BookmarksScreen(
+    serverName: String = "",
     onNavigateBack: () -> Unit,
     onOpenSession: (serverId: String, sessionId: String) -> Unit,
     viewModel: BookmarksViewModel = hiltViewModel(),
@@ -80,12 +84,20 @@ fun BookmarksScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("书签") }, // TODO i18n
+                title = {
+                    Text(
+                        if (serverName.isNotBlank()) {
+                            stringResource(R.string.bookmarks_title_for, serverName)
+                        } else {
+                            stringResource(R.string.bookmarks_title)
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回", // TODO i18n
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -102,14 +114,30 @@ fun BookmarksScreen(
                 .padding(padding),
         ) {
             if (bookmarks.isEmpty()) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center,
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 32.dp),
+                    verticalArrangement = Arrangement.Center,
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
+                    Icon(
+                        Icons.Default.BookmarkBorder,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                        modifier = Modifier.size(48.dp),
+                    )
+                    Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "暂无书签", // TODO i18n
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        text = stringResource(R.string.bookmarks_empty),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        text = stringResource(R.string.bookmarks_empty_hint),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.45f),
                     )
                 }
             } else {
@@ -182,7 +210,7 @@ private fun BookmarkCard(
             IconButton(onClick = onRemove) {
                 Icon(
                     Icons.Filled.Delete,
-                    contentDescription = "删除", // TODO i18n
+                    contentDescription = stringResource(R.string.bookmarks_delete),
                     tint = MaterialTheme.colorScheme.error.copy(alpha = 0.8f),
                     modifier = Modifier.size(20.dp),
                 )

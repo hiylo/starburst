@@ -99,8 +99,6 @@ fun SettingsScreen(
     onNavigateToDiagnostics: () -> Unit = {},
     onNavigateToSync: () -> Unit = {},
     onNavigateToLlmProvider: () -> Unit = {},
-    onNavigateToBookmarks: () -> Unit = {},
-    onNavigateToFtsSearch: () -> Unit = {},
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val currentLanguage by viewModel.appLanguage.collectAsState()
@@ -227,20 +225,6 @@ fun SettingsScreen(
                 supportingContent = { Text(stringResource(R.string.llm_provider_settings_desc)) },
                 leadingContent = { Icon(Icons.Default.Settings, contentDescription = null) },
                 modifier = Modifier.clickable { onNavigateToLlmProvider() },
-            )
-
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.bookmarks_title)) },
-                supportingContent = { Text(stringResource(R.string.bookmarks_desc)) },
-                leadingContent = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
-                modifier = Modifier.clickable { onNavigateToBookmarks() },
-            )
-
-            ListItem(
-                headlineContent = { Text(stringResource(R.string.fts_search_title)) },
-                supportingContent = { Text(stringResource(R.string.fts_search_desc)) },
-                leadingContent = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.clickable { onNavigateToFtsSearch() },
             )
 
             // On-device model download (used for offline next-step suggestions)

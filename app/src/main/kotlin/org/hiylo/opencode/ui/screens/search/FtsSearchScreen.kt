@@ -38,6 +38,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.ui.res.stringResource
+import org.hiylo.opencode.R
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -78,6 +80,7 @@ import org.hiylo.opencode.ui.components.isAmoledTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FtsSearchScreen(
+    serverName: String = "",
     onNavigateBack: () -> Unit,
     onOpenResult: (serverId: String, sessionId: String, messageId: String) -> Unit,
     viewModel: FtsSearchViewModel = hiltViewModel(),
@@ -99,12 +102,20 @@ fun FtsSearchScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("全文搜索") }, // TODO i18n
+                title = {
+                    Text(
+                        if (serverName.isNotBlank()) {
+                            stringResource(R.string.fts_search_title_for, serverName)
+                        } else {
+                            stringResource(R.string.fts_search_title)
+                        }
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回", // TODO i18n
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -133,13 +144,13 @@ fun FtsSearchScreen(
                 trailingIcon = if (query.isNotEmpty()) {
                     {
                         IconButton(onClick = { viewModel.onQueryChange("") }) {
-                            Icon(Icons.Default.Close, contentDescription = "清除") // TODO i18n
+                            Icon(Icons.Default.Close, contentDescription = stringResource(R.string.fts_search_clear))
                         }
                     }
                 } else {
                     null
                 },
-                placeholder = { Text("输入关键词搜索消息") }, // TODO i18n
+                placeholder = { Text(stringResource(R.string.fts_search_hint)) },
                 singleLine = true,
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedContainerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
@@ -151,7 +162,7 @@ fun FtsSearchScreen(
                 query.trim().isEmpty() -> {
                     EmptyStateHint(
                         icon = Icons.Default.Search,
-                        text = "输入关键词开始搜索", // TODO i18n
+                        text = stringResource(R.string.fts_search_prompt),
                     )
                 }
 
@@ -167,7 +178,7 @@ fun FtsSearchScreen(
                 results.isEmpty() -> {
                     EmptyStateHint(
                         icon = Icons.Default.Search,
-                        text = "无结果", // TODO i18n
+                        text = stringResource(R.string.fts_search_no_results),
                     )
                 }
 
@@ -237,7 +248,7 @@ private fun FtsHitCard(
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Text(
-                text = hit.title.ifBlank { "无标题" }, // TODO i18n
+                text = hit.title.ifBlank { stringResource(R.string.fts_search_empty_title) },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,

@@ -8,6 +8,7 @@
  */
 package org.hiylo.opencode.ui.screens.search
 
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -35,7 +36,11 @@ import javax.inject.Inject
 @HiltViewModel
 class FtsSearchViewModel @Inject constructor(
     private val messageFtsIndex: MessageFtsIndex,
+    savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+
+    /** 当前全文搜索所属服务器 ID；为空表示不做服务器过滤（全库搜索）。 */
+    private val serverId: String? = savedStateHandle["serverId"]
 
     private val _query = MutableStateFlow("")
 
@@ -64,7 +69,7 @@ class FtsSearchViewModel @Inject constructor(
                         return@collectLatest
                     }
                     _searching.value = true
-                    _results.value = messageFtsIndex.search(keyword)
+                    _results.value = messageFtsIndex.search(keyword, serverId = serverId)
                     _searching.value = false
                 }
         }

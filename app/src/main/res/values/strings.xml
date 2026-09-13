@@ -973,8 +973,18 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <!-- Bookmarks & full-text search -->
     <string name="bookmarks_title">Bookmarks</string>
     <string name="bookmarks_desc">View your saved messages</string>
+    <string name="bookmarks_title_for">Bookmarks · %1$s</string>
     <string name="fts_search_title">Full-text search</string>
     <string name="fts_search_desc">Search across all messages</string>
+    <string name="fts_search_title_for">Full-text search · %1$s</string>
+    <string name="fts_search_hint">Search messages by keyword</string>
+    <string name="fts_search_prompt">Type a keyword to start searching</string>
+    <string name="fts_search_no_results">No results</string>
+    <string name="fts_search_empty_title">No title</string>
+    <string name="fts_search_clear">Clear</string>
+    <string name="bookmarks_empty">No bookmarks yet</string>
+    <string name="bookmarks_empty_hint">Long-press a message and choose Bookmark to save it here</string>
+    <string name="bookmarks_delete">Delete</string>
     <string name="chat_bookmark">Bookmark</string>
     <string name="menu_view_share">View share</string>
     <string name="server_mgmt_process_cpu">opencode CPU</string>

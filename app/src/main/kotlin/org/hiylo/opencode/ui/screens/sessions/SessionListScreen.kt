@@ -266,6 +266,8 @@ fun SessionListScreen(
     onNavigateToChat: (sessionId: String, openTerminal: Boolean) -> Unit,
     onNavigateBack: () -> Unit,
     onSwitchServer: (serverId: String) -> Unit = {},
+    onOpenBookmarks: (serverId: String) -> Unit = {},
+    onOpenFtsSearch: (serverId: String) -> Unit = {},
     viewModel: SessionListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -521,6 +523,22 @@ fun SessionListScreen(
                                     contentDescription = stringResource(R.string.search_sessions),
                                 )
                             }
+                            IconButton(
+                                onClick = { onOpenBookmarks(viewModel.serverId) },
+                            ) {
+                                Icon(
+                                    Icons.Default.BookmarkBorder,
+                                    contentDescription = stringResource(R.string.bookmarks_title),
+                                )
+                            }
+                            IconButton(
+                                onClick = { onOpenFtsSearch(viewModel.serverId) },
+                            ) {
+                                Icon(
+                                    Icons.Default.ManageSearch,
+                                    contentDescription = stringResource(R.string.fts_search_title),
+                                )
+                            }
                             Box {
                                 IconButton(onClick = { showFilterMenu = true }) {
                                     Icon(
@@ -655,17 +673,36 @@ fun SessionListScreen(
                                             },
                                         )
                                     }
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                                    )
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text(
+                                                stringResource(
+                                                    if (groupByProject) R.string.sessions_view_recent
+                                                    else R.string.sessions_view_projects,
+                                                ),
+                                            )
+                                        },
+                                        leadingIcon = {
+                                            Icon(
+                                                imageVector = if (groupByProject) {
+                                                    Icons.AutoMirrored.Filled.ViewList
+                                                } else {
+                                                    Icons.Default.Folder
+                                                },
+                                                contentDescription = null,
+                                            )
+                                        },
+                                        onClick = {
+                                            viewModel.setGroupSessionsByProject(!groupByProject)
+                                            showFilterMenu = false
+                                        },
+                                    )
                                 }
                             }
-                        }
-                        IconButton(onClick = { viewModel.setGroupSessionsByProject(!groupByProject) }) {
-                            Icon(
-                                imageVector = if (groupByProject) Icons.AutoMirrored.Filled.ViewList else Icons.Default.Folder,
-                                contentDescription = stringResource(
-                                    if (groupByProject) R.string.sessions_view_recent
-                                    else R.string.sessions_view_projects,
-                                ),
-                            )
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
