@@ -18,6 +18,8 @@ import org.hiylo.opencode.domain.model.Part
 import org.hiylo.opencode.domain.model.PendingInteraction
 import org.hiylo.opencode.domain.model.TimeInfo
 import org.hiylo.opencode.domain.model.ToolState
+import org.hiylo.opencode.data.search.MessageFtsIndex
+import org.hiylo.opencode.data.search.FtsHit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -29,9 +31,30 @@ import kotlinx.serialization.json.put
 
 class EventReducerTest {
 
+    /** no-op 全文索引实现：纯 JVM 测试无需 Android SQLite/Context。 */
+    private object NoopFtsIndex : MessageFtsIndex {
+        override suspend fun index(
+            serverId: String,
+            sessionId: String,
+            messageId: String,
+            title: String,
+            content: String,
+        ) = Unit
+
+        override suspend fun search(query: String, limit: Int, serverId: String?): List<FtsHit> =
+            emptyList()
+
+        override suspend fun deleteSession(sessionId: String) = Unit
+
+        override suspend fun clear() = Unit
+    }
+
+    private fun reducer(): EventReducer = EventReducer(NoopFtsIndex)
+
+
     @Test
     fun sessionCreated_upsertsWithoutReplacingBusyOrRetryStatus() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val busySession = session("busy", updated = 1)
         val retrySession = session("retry", updated = 1)
         val retry = SessionStatus.Retry(attempt = 2, message = "later", next = 10)
@@ -50,7 +73,7 @@ class EventReducerTest {
 
     @Test
     fun sessionUpdated_promotesMostRecentlyActiveSession() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val older = session("older", updated = 1)
         val newer = session("newer", updated = 2)
         reducer.processEvent(SseEvent.SessionCreated(older), "server")
@@ -67,7 +90,7 @@ class EventReducerTest {
 
     @Test
     fun statusAndIdleEvents_establishOwnershipForServerCleanup() {
-        val reducer = EventReducer()
+        val reducer = reducer()
 
         reducer.processEvent(SseEvent.SessionStatus("busy", SessionStatus.Busy), "server")
         reducer.processEvent(SseEvent.SessionIdle("idle"), "server")
@@ -80,7 +103,7 @@ class EventReducerTest {
 
     @Test
     fun sessionDeleted_removesStateAndOwnership() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val session = session("deleted")
         reducer.processEvent(SseEvent.SessionCreated(session), "server")
 
@@ -93,7 +116,7 @@ class EventReducerTest {
 
     @Test
     fun clearForServer_doesNotClearAnotherServersSessions() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(SseEvent.SessionStatus("first", SessionStatus.Busy), "server-1")
         reducer.processEvent(SseEvent.SessionIdle("second"), "server-2")
 
@@ -106,7 +129,7 @@ class EventReducerTest {
 
     @Test
     fun instanceDisposal_preservesPersistedSessionsAndMessages() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val disposed = session("disposed").copy(directory = "/first")
         val retained = session("retained").copy(directory = "/second")
         reducer.processEvent(SseEvent.SessionCreated(disposed), "server")
@@ -126,7 +149,7 @@ class EventReducerTest {
 
     @Test
     fun transientServerClear_preservesHistoryButResetsBusyStatus() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val session = session("session")
         reducer.processEvent(SseEvent.SessionCreated(session), "server")
         reducer.processEvent(SseEvent.SessionStatus(session.id, SessionStatus.Busy), "server")
@@ -145,7 +168,7 @@ class EventReducerTest {
 
     @Test
     fun directoryScopedEvents_doNotOverwriteAnotherWorkspace() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val first = DirectoryScope("server", "/project", "workspace-1")
         val second = DirectoryScope("server", "/project", "workspace-2")
 
@@ -158,7 +181,7 @@ class EventReducerTest {
 
     @Test
     fun promptLifecycle_tracksAdmissionAndPromotion() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val admitted = SseEvent.PromptAdmitted("session", "message", "queue")
 
         reducer.processEvent(admitted, "server")
@@ -170,7 +193,7 @@ class EventReducerTest {
 
     @Test
     fun nextStream_projectsPromptAssistantTextAndToolLifecycle() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val prompt = buildJsonObject { put("text", "hello") }
         reducer.processEvent(SseEvent.Prompted("session", "user", "steer", prompt, 1), "server")
         reducer.processEvent(SseEvent.NextStepStarted(
@@ -195,6 +218,7 @@ class EventReducerTest {
             6,
         ), "server")
 
+        reducer.flushAccumulatedDeltasForTest()
         assertEquals(listOf("user", "assistant"), reducer.messages.value["session"]?.map { it.id })
         assertEquals("answer", reducer.parts.value["assistant"]?.filterIsInstance<Part.Text>()?.single()?.text)
         val tool = reducer.parts.value["assistant"]?.filterIsInstance<Part.Tool>()?.single()
@@ -203,7 +227,7 @@ class EventReducerTest {
 
     @Test
     fun lateToolCalled_preservesRunningSubagentSessionMetadata() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val metadata = buildJsonObject { put("sessionId", "child") }
         reducer.processEvent(
             SseEvent.MessagePartUpdated(Part.Tool(
@@ -237,7 +261,7 @@ class EventReducerTest {
 
     @Test
     fun lateToolInputEvents_preserveRunningSubagentSessionMetadata() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val metadata = buildJsonObject { put("sessionId", "child") }
         reducer.processEvent(
             SseEvent.MessagePartUpdated(Part.Tool(
@@ -270,7 +294,7 @@ class EventReducerTest {
 
     @Test
     fun pendingRequests_areUpsertedByRequestId() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val first = SseEvent.PermissionAsked("permission", "session", "read")
         val updated = first.copy(permission = "write")
 
@@ -282,7 +306,7 @@ class EventReducerTest {
 
     @Test
     fun pendingRequests_preserveInterleavedOrderAndUpdateInPlace() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val permission = SseEvent.PermissionAsked("permission", "session", "read")
         val question = question("question", "session", "Original")
         val updated = question("question", "session", "Updated")
@@ -299,7 +323,7 @@ class EventReducerTest {
 
     @Test
     fun pendingRequests_withSameIdAndDifferentTypesRemainDistinct() {
-        val reducer = EventReducer()
+        val reducer = reducer()
 
         reducer.processEvent(SseEvent.PermissionAsked("request", "session", "read"), "server")
         reducer.processEvent(question("request", "session", "Question"), "server")
@@ -311,7 +335,7 @@ class EventReducerTest {
 
     @Test
     fun stalePendingSnapshot_doesNotResurrectRepliedRequest() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(SseEvent.SessionCreated(session("session")), "server")
         val request = SseEvent.PermissionAsked("permission", "session", "read")
         reducer.processEvent(request, "server")
@@ -331,7 +355,7 @@ class EventReducerTest {
 
     @Test
     fun pendingSnapshot_preservesKnownOrderAndAppendsRestOnlyRequestsDeterministically() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(question("existing-question", "session", "Existing"), "server")
         reducer.processEvent(SseEvent.PermissionAsked("existing-permission", "session", "read"), "server")
         val revision = reducer.pendingSnapshotRevision()
@@ -356,7 +380,7 @@ class EventReducerTest {
 
     @Test
     fun optimisticQuestionRemoval_invalidatesOlderSnapshot() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val request = question("question", "session", "Question")
         reducer.processEvent(request, "server")
         val revision = reducer.pendingSnapshotRevision()
@@ -376,7 +400,7 @@ class EventReducerTest {
 
     @Test
     fun sessionDeletion_removesPendingAndInvalidatesOlderSnapshot() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val session = session("session")
         val request = question("question", session.id, "Question")
         reducer.processEvent(SseEvent.SessionCreated(session), "server")
@@ -398,7 +422,7 @@ class EventReducerTest {
 
     @Test
     fun clearForServer_removesPendingButKeepsOtherServersQueue() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val first = question("first", "first-session", "First")
         val second = question("second", "second-session", "Second")
         reducer.processEvent(first, "first-server")
@@ -411,7 +435,7 @@ class EventReducerTest {
 
     @Test
     fun sessionDeleted_removesMessagesPartsTodosAndErrors() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val session = session("session")
         val message = Message.User("message", session.id, time = TimeInfo(1))
         val part = Part.Text("part", session.id, message.id, text = "text")
@@ -437,7 +461,7 @@ class EventReducerTest {
 
     @Test
     fun deltaBeforePart_isReplayedOnceInArrivalOrder() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(SseEvent.MessagePartDelta("session", "message", "part", "text", "one"), "server")
         reducer.processEvent(SseEvent.MessagePartDelta("session", "message", "part", "text", " two"), "server")
 
@@ -452,7 +476,7 @@ class EventReducerTest {
 
     @Test
     fun restMerge_doesNotReplaceLongerStreamingTextWithStaleSnapshot() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val message = Message.Assistant("message", "session", time = TimeInfo(1), parentId = "user")
         reducer.processEvent(SseEvent.MessageUpdated(message), "server")
         reducer.processEvent(
@@ -470,7 +494,7 @@ class EventReducerTest {
 
     @Test
     fun removedMessage_isNotRestoredByLateSseOrRestSnapshot() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val message = Message.User("message", "session", time = TimeInfo(1))
         val part = Part.Text("part", "session", message.id, text = "original")
         reducer.processEvent(SseEvent.MessageUpdated(message), "server")
@@ -488,7 +512,7 @@ class EventReducerTest {
 
     @Test
     fun clearingSessionHistory_allowsAuthoritativeReloadAfterRemoval() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val message = Message.User("message", "session", time = TimeInfo(1))
         reducer.processEvent(SseEvent.MessageRemoved("session", message.id), "server")
 
@@ -500,7 +524,7 @@ class EventReducerTest {
 
     @Test
     fun upsertSession_ignoresOlderStateAfterAuthoritativeRevert() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val reverted = session("session", updated = 2).copy(revert = Session.Revert("message"))
         reducer.upsertSession("server", reverted)
 
@@ -511,7 +535,7 @@ class EventReducerTest {
 
     @Test
     fun clearSessionHistory_preservesOtherSessionsAndMetadata() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val first = session("first")
         val second = session("second")
         reducer.setSessions("server", listOf(first, second))
@@ -541,7 +565,7 @@ class EventReducerTest {
 
     @Test
     fun unknownDeltaField_doesNotMutateText() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(
             SseEvent.MessagePartUpdated(Part.Text("part", "session", "message", text = "original")),
             "server",
@@ -555,7 +579,7 @@ class EventReducerTest {
 
     @Test
     fun statusSnapshot_keepsOmittedSessionsWhileConnected() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(SseEvent.SessionStatus("busy", SessionStatus.Busy), "server")
         reducer.processEvent(SseEvent.SessionStatus("retry", SessionStatus.Retry(1, "later", 2)), "server")
 
@@ -573,7 +597,7 @@ class EventReducerTest {
 
     @Test
     fun statusSnapshot_clearsOmittedSessionsWhileDisconnected() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         reducer.processEvent(SseEvent.SessionStatus("busy", SessionStatus.Busy), "server")
         reducer.processEvent(SseEvent.SessionStatus("retry", SessionStatus.Retry(1, "later", 2)), "server")
 
@@ -592,7 +616,7 @@ class EventReducerTest {
 
     @Test
     fun sessionError_isRetainedAndEndsBusyState() {
-        val reducer = EventReducer()
+        val reducer = reducer()
         val error = Message.Assistant.ErrorInfo(name = "ProviderError")
         reducer.processEvent(SseEvent.SessionStatus("session", SessionStatus.Busy), "server")
 

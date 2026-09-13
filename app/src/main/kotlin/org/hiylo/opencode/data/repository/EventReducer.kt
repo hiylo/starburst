@@ -762,6 +762,11 @@ class EventReducer @Inject constructor(
         }
     }
 
+    /** 供单元测试同步 flush 累积 delta（生产走 50ms 定时 flush，测试无协程推进）。 */
+    internal fun flushAccumulatedDeltasForTest() {
+        flushAccumulatedDeltas()
+    }
+
     /** 把累积的 delta 一次性合并进 _parts（每次合并只复制一次整段文本）。 */
     private fun flushAccumulatedDeltas() {
         val snapshot = synchronized(deltaLock) {
