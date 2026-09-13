@@ -51,11 +51,11 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Message actions (edit & resend, regenerate, stop)
 - [x] In-session search
 
-## Now — 1.2.0
+## Now — 1.3.0 (Released ✅)
 
-> Everything below is a **pure client** change — the opencode server is untouched.
-> Exceptions: voice input (relies on an on-device ASR model) and image understanding (relies on the
-> model supporting vision); neither involves server-side code.
+> Released 2026-09-13. Everything below is a **pure client** change — the opencode server is untouched.
+> Exceptions: voice input (relies on an on-device ASR model or the opencode-backend engine) and image
+> understanding (relies on the model supporting vision); neither involves opencode server-side code.
 
 ### Sessions & project management
 
@@ -102,9 +102,10 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Global search: title / directory / time (across sessions and projects)
 - [x] Session export (Markdown / JSON)
 
-## 1.3.0 (In progress 🚧)
+## 1.3.0 (Released ✅)
 
-> Pure client features — no backend dependency, opencode server untouched.
+> Released 2026-09-13. Includes optional opencode-backend integration (task center, archives,
+> server-side ASR fallback, backend-first suggestions, one-click backend install).
 
 ### Notifications & background
 
@@ -113,9 +114,20 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### Content & search
 
-- [x] Full-text message search (local SQLite, cross-session message body; FTS5 unavailable on device → plain table + LIKE)
+- [x] Full-text message search (local SQLite, cross-session message body; FTS5 unavailable on device → plain table + LIKE), scoped to the current server
 - [x] Message bookmarks: mark key messages, jump across sessions
 - [x] Shared-session read-only viewer (server already exposes `share`)
+
+### Theme & appearance
+
+- [x] Theme schemes: Candy / Ocean / Sunset full color schemes + 5 extra accent colors
+
+### Backend integration (opencode-backend, optional)
+
+- [x] Task Center: background tasks / batch runs / archives with real API; AI plan breakdown, scheduling, dependency blocking
+- [x] Backend-first next-step suggestions (`/api/llm/generate`) with source label
+- [x] Server-side ASR streaming fallback (5-min availability cache)
+- [x] Backend health probe + one-click install over SSH (install.sh)
 
 ### Security & privacy
 
@@ -129,13 +141,15 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 ### Engineering quality
 
 - [x] Large-message memory / streaming-render optimization (delta StringBuilder accumulation, 50ms throttle sampling)
+- [x] Removed unconditional MNN model preload (native heap ~790MB → ~21MB)
+- [x] SSE stall self-healing (busy-period REST fallback polling)
 - [ ] Accessibility (TalkBack)
 
 ## Later — Backlog
 
-- [x] Backend integration — task center with real API (tasks + batch + archives; zero-config: auto-derive `:18880` + default token `ocb_default`), WS realtime status, one-click backend install
-- [x] Task arrangement — structured fields (name/prompt/directory/session/dependency), scheduling (delay / at-time / recurring cron via `scheduled` status + scheduler), multi-step plans (auto `dependsOn` chain), conversational AI breakdown (`POST /api/tasks/generate`)
-- [x] Session archive to backend — long-press in session list / chat overflow menu → snapshot to backend archives; fixed upstream message-shape parsing so archives carry real transcript content
+- [x] Backend integration — task center with real API (tasks + batch + archives; zero-config: auto-derive `:18880` + default token `ocb_default`), WS realtime status, one-click backend install *(released 1.3.0)*
+- [x] Task arrangement — structured fields (name/prompt/directory/session/dependency), scheduling (delay / at-time / recurring cron via `scheduled` status + scheduler), multi-step plans (auto `dependsOn` chain), conversational AI breakdown (`POST /api/tasks/generate`) *(released 1.3.0)*
+- [x] Session archive to backend — long-press in session list / chat overflow menu → snapshot to backend archives; fixed upstream message-shape parsing so archives carry real transcript content *(released 1.3.0)*
 - [ ] Backend integration — stats / rules (needs Web-Session login flow on the client)
-- [ ] Voice input via backend / sherpa-onnx (ASR JNI vs split-MNN conflict pending)
+- [x] Voice input via backend streaming engine *(released 1.3.0 as server-side ASR fallback)*
 - [ ] Remaining engineering quality (unit tests, performance testing)

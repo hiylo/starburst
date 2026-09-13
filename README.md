@@ -32,7 +32,8 @@ manage sessions — all from a mobile-first UI.
 - **On-device suggestions** — next-step prompts are generated **fully offline** via an on-device
   MNN model (Qwen3.5-0.8B). The model is bundled with the APK and auto-extracts on first use; when
   a build ships without the weights, it is downloaded from **ModelScope** (fast inside mainland
-  China) with per-file SHA-256 verification
+  China) with per-file SHA-256 verification. With a backend configured, suggestions prefer the
+  **backend LLM first**, then the external provider, then on-device — each showing its source label
 - **On-device voice input** — hold-to-talk speech recognition powered by an on-device **MNN
   sherpa-mnn streaming Zipformer (bilingual zh/en)** model downloaded from ModelScope (per-file
   SHA-256 verified). Hold to talk, release to fill the input, slide up to cancel, with a live
@@ -46,7 +47,14 @@ manage sessions — all from a mobile-first UI.
 - **Server & provider management** — server info (version/active sessions), CPU/memory/disk, config view/edit, restart, and custom provider management (add/edit/remove providers and models)
 - **File editing** — edit and save workspace files in-app
 - **Conversation summaries** — per-message or whole-session summaries via the cloud LLM (with on-device fallback), streamed live
-- **Accent color** — six brand accent palettes, applied app-wide (light/dark/AMOLED) and synced
+- **Accent color & theme schemes** — six brand accent palettes plus three full cartoon theme schemes
+  (**Candy / Ocean / Sunset**) that recolor the whole app, applied app-wide (light/dark/AMOLED) and
+  synced
+- **Bookmarks & full-text search** — bookmark key messages and full-text search across a server's
+  messages (both scoped to the current server)
+- **Task Center (opencode-backend)** — background tasks, batch runs and archives, with AI plan
+  breakdown, scheduling and dependency blocking; the backend is detected automatically with a
+  one-click install over SSH when missing
 - **Workspace files** — browse project folders, preview highlighted text, Markdown and images, and
   download files
 - **Attachments** — send images, PDFs, text, source code and config files from device storage
@@ -57,6 +65,8 @@ manage sessions — all from a mobile-first UI.
 - **Model & agent control** — search providers/models, cycle agents, view token usage and context
 - **Multi-server** — connect to several OpenCode servers at once, with stable reconnection and
   one-tap switching from the session list
+- **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links, plus
+  long-press shortcuts (new session / global search / task center)
 - **SSH tunnel** — optionally connect and restart the OpenCode service over an SSH tunnel, with
   connection health (latency/heartbeat/status) monitoring
 - **Custom Slash commands** — define `/name` commands that insert a prompt, persisted and manageable

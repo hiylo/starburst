@@ -9,6 +9,29 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-09-13
+
+### Added
+- **Theme schemes** — three full cartoon color schemes (Candy / Ocean / Sunset) covering surface/container/secondary/tertiary tones, plus five extra accent colors (pink/orange/lime/sky/mint) in a wrap-around palette; non-default schemes replace the accent entirely for a complete look.
+- **Backend-first suggestions** — next-step suggestions now prefer the backend-configured LLM (`/api/llm/generate`), then the app's external provider, then the on-device MNN model; the suggestion area labels its source (server / cloud / on-device / fallback).
+- **Task Center** — background tasks, batch runs and archives via opencode-backend; AI plan breakdown (fresh + refine streaming), scheduling (immediate / delayed / at-time / cron), dependency blocking/unblocking, finished-task purge.
+- **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links (open session / connect server / new session / search / task center), plus long-press shortcuts.
+- **Server-side ASR** — streaming speech recognition via the backend engine as a fallback when the on-device model isn't available, with a 5-minute per-server availability cache.
+- **Bookmarks & full-text search** — message bookmarks and cross-session full-text search, both scoped to the current server (entry moved from Settings to the session-list top bar).
+- **Backend detection & one-click install** — the server settings page probes `/api/health`; when the backend is absent and SSH is configured, a one-click installer runs `install.sh` over SSH and re-verifies.
+- **Shared-session read-only viewer**.
+
+### Changed
+- Session-list top bar: "group by project" merged into the filter menu to reduce icon clutter.
+- Full-text search results and bookmarks are now filtered by server instead of mixed across servers.
+
+### Fixed
+- **Native memory blow-up (~790MB)** — removed the unconditional MNN model preload on chat open; the model now loads on demand, dropping native heap from ~790MB to ~21MB.
+- Voice-input echo duplication and late correction writes after send.
+- Multi-line input height and fixed-size send button.
+- SSE stall self-healing (busy-period REST fallback polling).
+- Skills page SKILL.md font sizing.
+
 ## [1.2.0] - 2026-09-10
 
 ### Added
