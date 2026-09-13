@@ -54,6 +54,7 @@ import org.hiylo.opencode.domain.model.Session
 import org.hiylo.opencode.domain.model.SessionCategory
 import org.hiylo.opencode.ui.screens.chat.ChatScreen
 import org.hiylo.opencode.ui.screens.files.WorkspaceFilesScreen
+import org.hiylo.opencode.ui.screens.files.AgentsMdScreen
 import org.hiylo.opencode.ui.screens.git.GitScreen
 import org.hiylo.opencode.ui.screens.home.HomeScreen
 import org.hiylo.opencode.ui.screens.about.AboutScreen
@@ -75,6 +76,9 @@ import org.hiylo.opencode.ui.screens.server.ServerProvidersScreen
 import org.hiylo.opencode.ui.screens.server.ServerSettingsScreen
 import org.hiylo.opencode.ui.screens.server.ServerManagementScreen
 import org.hiylo.opencode.ui.screens.server.SkillsScreen
+import org.hiylo.opencode.ui.screens.server.ServerRulesScreen
+import org.hiylo.opencode.ui.screens.server.ServerTokensScreen
+import org.hiylo.opencode.ui.screens.server.ServerAuditScreen
 import org.hiylo.opencode.ui.screens.tasks.TaskListScreen
 import org.hiylo.opencode.ui.screens.webview.WebViewScreen
 import org.hiylo.opencode.service.OpenCodeConnectionService
@@ -730,6 +734,39 @@ fun NavGraph(
                             serverId = serverId,
                         )
                     )
+                },
+                onOpenRules = {
+                    navController.navigate(
+                        Screen.ServerRules.createRoute(
+                            serverUrl = serverUrl,
+                            username = username,
+                            password = password,
+                            serverName = serverName,
+                            serverId = serverId,
+                        )
+                    )
+                },
+                onOpenTokens = {
+                    navController.navigate(
+                        Screen.ServerTokens.createRoute(
+                            serverUrl = serverUrl,
+                            username = username,
+                            password = password,
+                            serverName = serverName,
+                            serverId = serverId,
+                        )
+                    )
+                },
+                onOpenAudit = {
+                    navController.navigate(
+                        Screen.ServerAudit.createRoute(
+                            serverUrl = serverUrl,
+                            username = username,
+                            password = password,
+                            serverName = serverName,
+                            serverId = serverId,
+                        )
+                    )
                 }
             )
         }
@@ -758,6 +795,45 @@ fun NavGraph(
             )
         ) {
             SkillsScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "server_rules?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}",
+            arguments = listOf(
+                navArgument("serverUrl") { type = NavType.StringType },
+                navArgument("username") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType },
+                navArgument("serverName") { type = NavType.StringType },
+                navArgument("serverId") { type = NavType.StringType },
+            )
+        ) {
+            ServerRulesScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "server_tokens?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}",
+            arguments = listOf(
+                navArgument("serverUrl") { type = NavType.StringType },
+                navArgument("username") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType },
+                navArgument("serverName") { type = NavType.StringType },
+                navArgument("serverId") { type = NavType.StringType },
+            )
+        ) {
+            ServerTokensScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "server_audit?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}",
+            arguments = listOf(
+                navArgument("serverUrl") { type = NavType.StringType },
+                navArgument("username") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType },
+                navArgument("serverName") { type = NavType.StringType },
+                navArgument("serverId") { type = NavType.StringType },
+            )
+        ) {
+            ServerAuditScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(
@@ -1189,6 +1265,18 @@ fun NavGraph(
                         ),
                     )
                 },
+                onOpenAgentsMd = { directory ->
+                    navController.navigate(
+                        Screen.AgentsMd.createRoute(
+                            serverUrl = serverUrl,
+                            username = username,
+                            password = password,
+                            serverName = serverName,
+                            serverId = serverId,
+                            directory = directory,
+                        ),
+                    )
+                },
                 onOpenGit = {
                     val directory = eventReducer.sessions.value
                         .find { it.id == sessionId }
@@ -1264,6 +1352,20 @@ fun NavGraph(
             ),
         ) {
             GitScreen(onNavigateBack = { navController.popBackStack() })
+        }
+
+        composable(
+            route = "agents_md?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&directory={directory}",
+            arguments = listOf(
+                navArgument("serverUrl") { type = NavType.StringType },
+                navArgument("username") { type = NavType.StringType },
+                navArgument("password") { type = NavType.StringType },
+                navArgument("serverName") { type = NavType.StringType },
+                navArgument("serverId") { type = NavType.StringType },
+                navArgument("directory") { type = NavType.StringType },
+            ),
+        ) {
+            AgentsMdScreen(onNavigateBack = { navController.popBackStack() })
         }
     }
 }

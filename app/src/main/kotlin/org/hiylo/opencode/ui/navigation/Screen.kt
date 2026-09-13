@@ -135,6 +135,17 @@ sealed class Screen(val route: String) {
         ): String = serverRoute("git", serverUrl, username, password, serverName, serverId, "directory" to directory)
     }
 
+    data object AgentsMd : Screen("agents_md") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+            directory: String,
+        ): String = serverRoute("agents_md", serverUrl, username, password, serverName, serverId, "directory" to directory)
+    }
+
     data object ServerSettings : Screen("server_settings") {
         fun createRoute(
             serverUrl: String,
@@ -204,6 +215,36 @@ sealed class Screen(val route: String) {
             serverName: String,
             serverId: String,
         ): String = serverRoute("skills", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object ServerRules : Screen("server_rules") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("server_rules", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object ServerTokens : Screen("server_tokens") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("server_tokens", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object ServerAudit : Screen("server_audit") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("server_audit", serverUrl, username, password, serverName, serverId)
     }
 
     data object Settings : Screen("settings")

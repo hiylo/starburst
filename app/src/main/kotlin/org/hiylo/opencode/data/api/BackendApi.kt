@@ -387,4 +387,202 @@ class BackendApi @Inject constructor(
         }.body()
         return resp.suggestions
     }
+
+    /** `GET /api/rules` 的响应包装。 */
+    @Serializable
+    internal data class BackendRulesResponse(val rules: List<BackendRule> = emptyList())
+
+    /** `POST /api/rules` 的请求体。 */
+    @Serializable
+    data class BackendCreateRuleRequest(
+        val name: String = "",
+        val kind: String = "",
+        val schedule: String = "",
+        val directory: String = "",
+        val prompt: String = "",
+        val enabled: Boolean = true,
+    )
+
+    /** 列出自动化规则（最新启用优先）。 */
+    suspend fun listRules(backendUrl: String, token: String): List<BackendRule> {
+        val resp: BackendRulesResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/rules") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.rules
+    }
+
+    /** 新建自动化规则，返回持久化后的规则对象。 */
+    suspend fun createRule(backendUrl: String, token: String, rule: BackendCreateRuleRequest): BackendRule =
+        httpClient.post("${backendUrl.trimEnd('/')}/api/rules") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(rule)
+        }.body()
+
+    /** 删除自动化规则。 */
+    suspend fun deleteRule(backendUrl: String, token: String, id: String): Boolean {
+        val resp: HttpResponse = httpClient.delete("${backendUrl.trimEnd('/')}/api/rules/$id") {
+            header("Authorization", "Bearer $token")
+        }
+        return resp.status.value in 200..299
+    }
+
+    /** `GET /api/rules/{id}/executions` 的响应包装。 */
+    @Serializable
+    data class BackendRuleExecutionsResponse(
+        val executions: List<BackendRuleExecution> = emptyList(),
+        val total: Int = 0,
+    )
+
+    /** 列出某规则的执行记录（最多 50 条）与总数。 */
+    suspend fun listRuleExecutions(
+        backendUrl: String,
+        token: String,
+        id: String,
+    ): BackendRuleExecutionsResponse =
+        httpClient.get("${backendUrl.trimEnd('/')}/api/rules/$id/executions") {
+            header("Authorization", "Bearer $token")
+        }.body()
+
+    /** `POST /api/rules/generate` 的请求体与响应包装。 */
+    @Serializable
+    internal data class BackendRuleGenerateRequest(val description: String = "")
+
+    @Serializable
+    internal data class BackendRuleGenerateResponse(val draft: BackendRuleDraft = BackendRuleDraft())
+
+    /** 用自然语言描述生成规则草稿（需后端已配置编排 LLM）。 */
+    suspend fun generateRule(backendUrl: String, token: String, description: String): BackendRuleDraft {
+        val resp: BackendRuleGenerateResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/rules/generate") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(BackendRuleGenerateRequest(description))
+            timeout { requestTimeoutMillis = 120_000L }
+        }.body()
+        return resp.draft
+    }
+
+    /** 列出所有 APP token（token 明文不序列化，仅元信息）。 */
+    suspend fun listTokens(backendUrl: String, token: String): List<BackendToken> =
+        httpClient.get("${backendUrl.trimEnd('/')}/api/tokens") {
+            header("Authorization", "Bearer $token")
+        }.body()
+
+    /** `POST /api/tokens` 的请求体与响应包装。 */
+    @Serializable
+    internal data class BackendCreateTokenRequest(val name: String = "")
+
+    @Serializable
+    internal data class BackendCreateTokenResponse(val token: String = "")
+
+    /** 新建 APP token，返回明文 token（仅此一次可见）。 */
+    suspend fun createToken(backendUrl: String, token: String, name: String): String {
+        val resp: BackendCreateTokenResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/tokens") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(BackendCreateTokenRequest(name))
+        }.body()
+        return resp.token
+    }
+
+    /** 吊销 APP token。 */
+    suspend fun revokeToken(backendUrl: String, token: String, id: String): Boolean {
+        val resp: HttpResponse = httpClient.delete("${backendUrl.trimEnd('/')}/api/tokens/$id") {
+            header("Authorization", "Bearer $token")
+        }
+        return resp.status.value in 200..299
+    }
+
+    /** `GET /api/audit` 的响应包装。 */
+    @Serializable
+    internal data class BackendAuditResponse(val audit: List<BackendAuditEntry> = emptyList())
+
+    /** 列出审计日志（最新在前）。 */
+    suspend fun listAudit(backendUrl: String, token: String, limit: Int = 100): List<BackendAuditEntry> {
+        val resp: BackendAuditResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/audit") {
+            header("Authorization", "Bearer $token")
+            parameter("limit", limit)
+        }.body()
+        return resp.audit
+    }
+
+    /** `POST /api/llm/complete` 的请求体与响应包装。 */
+    @Serializable
+    internal data class BackendLlmCompleteRequest(
+        val system: String = "",
+        val user: String = "",
+    )
+
+    @Serializable
+    internal data class BackendLlmCompleteResponse(val text: String = "")
+
+    /**
+     * 用后端编排 LLM 生成自由文本（如 AGENTS.md 草稿）。
+     * [system] 为生成指令，[user] 为项目上下文；返回模型原文。
+     */
+    suspend fun completeText(backendUrl: String, token: String, system: String, user: String): String {
+        val resp: BackendLlmCompleteResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/llm/complete") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(BackendLlmCompleteRequest(system, user))
+            timeout { requestTimeoutMillis = 120_000L }
+        }.body()
+        return resp.text
+    }
 }
+
+/** 自动化规则（后端 /api/rules）。kind：cron | git | http。 */
+@Serializable
+data class BackendRule(
+    val id: String = "",
+    val name: String = "",
+    val kind: String = "",
+    val schedule: String = "",
+    val directory: String = "",
+    val prompt: String = "",
+    val enabled: Boolean = true,
+    val lastFiredAt: String? = null,
+    val createdAt: String = "",
+)
+
+/** 规则执行记录（后端 /api/rules/{id}/executions）。 */
+@Serializable
+data class BackendRuleExecution(
+    val id: Long = 0,
+    val ruleId: String = "",
+    val taskId: String = "",
+    val triggeredAt: String = "",
+)
+
+/** AI 生成的规则草稿（后端 /api/rules/generate）。 */
+@Serializable
+data class BackendRuleDraft(
+    val name: String = "",
+    val kind: String = "",
+    val schedule: String = "",
+    val directory: String = "",
+    val prompt: String = "",
+    val enabled: Boolean = true,
+)
+
+/** APP token 元信息（后端 /api/tokens，明文不序列化）。 */
+@Serializable
+data class BackendToken(
+    val id: String = "",
+    val name: String = "",
+    val createdAt: String = "",
+    val revokedAt: String? = null,
+    val lastUsed: String? = null,
+)
+
+/** 审计日志条目（后端 /api/audit）。 */
+@Serializable
+data class BackendAuditEntry(
+    val id: Long = 0,
+    val tokenId: String = "",
+    val tokenName: String = "",
+    val method: String = "",
+    val path: String = "",
+    val status: Int = 0,
+    val createdAt: String = "",
+)
