@@ -1130,6 +1130,7 @@ fun ChatScreen(
     onNavigateToChildSession: (sessionId: String) -> Unit = {},
     onOpenInWebView: () -> Unit = {},
     onOpenWorkspace: (directory: String) -> Unit = {},
+    onOpenAgentsMd: (directory: String) -> Unit = {},
     onOpenGit: () -> Unit = {},
     onManageModels: () -> Unit = {},
     initialSharedAttachments: List<Uri> = emptyList(),
@@ -1967,6 +1968,16 @@ fun ChatScreen(
                                 },
                                 leadingIcon = {
                                     Icon(Icons.Default.FolderOpen, contentDescription = null)
+                                },
+                            )
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_agents_md)) },
+                                onClick = {
+                                    showMenu = false
+                                    onOpenAgentsMd(viewModel.getSessionDirectory().orEmpty())
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
                                 },
                             )
                             DropdownMenuItem(
@@ -3215,6 +3226,17 @@ fun ChatScreen(
                                 onBookmark = {
                                     viewModel.addBookmark(chatMessage.message.id)
                                 },
+                                onContinue = if (chatMessage.isAssistant) {
+                                    {
+                                        viewModel.continueSession { ok ->
+                                            if (!ok) {
+                                                coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_continue_failed))
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else null,
                             )
                             }
                                 }
@@ -5087,6 +5109,7 @@ private fun ChatMessageBubble(
     onQuoteReply: (() -> Unit)? = null,
     onBookmark: (() -> Unit)? = null,
     onNavigateToChildSession: (String) -> Unit = {},
+    onContinue: (() -> Unit)? = null,
 ) {
     val chatMessage = chatMessages.last()
     val isUser = chatMessage.isUser
@@ -5265,6 +5288,7 @@ private fun ChatMessageBubble(
                                         textColor = textColor,
                                         isUser = isUser,
                                         onNavigateToChildSession = onNavigateToChildSession,
+                                        onContinue = onContinue,
                                     )
                                 }
                             }
@@ -5299,6 +5323,7 @@ private fun ChatMessageBubble(
                                 textColor = textColor,
                                 isUser = isUser,
                                 onNavigateToChildSession = onNavigateToChildSession,
+                                onContinue = onContinue,
                             )
                             renderedContent = true
                         }
@@ -5804,6 +5829,7 @@ private fun PartContent(
     textColor: Color,
     isUser: Boolean = false,
     onNavigateToChildSession: (String) -> Unit = {},
+    onContinue: (() -> Unit)? = null,
 ) {
     when (part) {
         is Part.Text -> {
@@ -5884,22 +5910,42 @@ private fun PartContent(
             )
         }
         is Part.Abort -> {
-            Text(
-                text = stringResource(R.string.chat_aborted, part.reason),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.chat_aborted, part.reason),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                ContinueInlineAction(onContinue)
+            }
         }
         is Part.Retry -> {
-            Text(
-                text = stringResource(R.string.chat_retry, part.attempt, part.errorMessage),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    text = stringResource(R.string.chat_retry, part.attempt, part.errorMessage),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+                ContinueInlineAction(onContinue)
+            }
         }
         // Ignore less relevant parts
         is Part.Snapshot, is Part.Subtask, is Part.Compaction,
         is Part.Agent, is Part.SessionTurn, is Part.Unknown -> { /* skip */ }
+    }
+}
+
+/**
+ * 错误信息里的「继续」按钮：agent 处理失败（中止 / 重试失败）时，
+ * 点击后继续处理当前会话。
+ */
+@Composable
+private fun ContinueInlineAction(onContinue: (() -> Unit)?) {
+    if (onContinue == null) return
+    TextButton(onClick = onContinue) {
+        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.width(4.dp))
+        Text(stringResource(R.string.chat_continue), style = MaterialTheme.typography.labelSmall)
     }
 }
 

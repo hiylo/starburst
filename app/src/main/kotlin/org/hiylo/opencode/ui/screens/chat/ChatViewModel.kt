@@ -1697,6 +1697,16 @@ class ChatViewModel @Inject constructor(
     }
 
     /**
+     * 继续处理会话：当 agent 因错误 / 中止而停止时，发送一条继续指令让 agent 接着处理。
+     *
+     * @param onResult 发送是否成功（会话可接收 prompt 且未在发送中）
+     */
+    fun continueSession(onResult: (Boolean) -> Unit = {}) {
+        val ok = sendMessage("请继续处理之前中断的任务")
+        onResult(ok)
+    }
+
+    /**
      * Reply to a question request.
      * @param requestId The question request ID
      * @param answers Answers for each question (list of selected labels per question)
