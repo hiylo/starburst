@@ -15,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
@@ -82,6 +83,7 @@ import org.hiylo.opencode.ui.components.SessionCategoryIconKeys
 import org.hiylo.opencode.ui.components.sessionCategoryColor
 import org.hiylo.opencode.ui.components.sessionCategoryIcon
 import org.hiylo.opencode.ui.theme.OpenCodeAccents
+import org.hiylo.opencode.ui.theme.OpenCodeSchemes
 import java.util.Locale
 import kotlin.math.roundToInt
 
@@ -111,6 +113,7 @@ fun SettingsScreen(
     val confirmBeforeSend by viewModel.confirmBeforeSend.collectAsState()
     val amoledDark by viewModel.amoledDark.collectAsState()
     val accentColor by viewModel.accentColor.collectAsState()
+    val themeScheme by viewModel.themeScheme.collectAsState()
     val compactMessages by viewModel.compactMessages.collectAsState()
     val collapseTools by viewModel.collapseTools.collectAsState()
     val expandReasoning by viewModel.expandReasoning.collectAsState()
@@ -140,6 +143,7 @@ fun SettingsScreen(
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showSchemeDialog by remember { mutableStateOf(false) }
     var showAccentDialog by remember { mutableStateOf(false) }
     var showFontSizeDialog by remember { mutableStateOf(false) }
     var showLineHeightDialog by remember { mutableStateOf(false) }
@@ -402,6 +406,23 @@ fun SettingsScreen(
                     Icon(Icons.Default.Palette, contentDescription = null)
                 },
                 modifier = Modifier.clickable { showThemeDialog = true }
+            )
+
+            // Theme scheme (full color schemes, e.g. cartoon)
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_theme_scheme)) },
+                supportingContent = { Text(stringResource(themeSchemeNameRes(themeScheme))) },
+                leadingContent = {
+                    Icon(Icons.Default.ColorLens, contentDescription = null)
+                },
+                trailingContent = {
+                    Icon(
+                        Icons.Default.ChevronRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                },
+                modifier = Modifier.clickable { showSchemeDialog = true }
             )
 
             // Accent color
@@ -790,6 +811,17 @@ fun SettingsScreen(
                     showThemeDialog = false
                 },
                 onDismiss = { showThemeDialog = false }
+            )
+        }
+
+        if (showSchemeDialog) {
+            ThemeSchemeDialog(
+                currentScheme = themeScheme,
+                onSchemeSelected = { scheme ->
+                    viewModel.setThemeScheme(scheme)
+                    showSchemeDialog = false
+                },
+                onDismiss = { showSchemeDialog = false }
             )
         }
 
@@ -1297,6 +1329,116 @@ private fun ThemePickerDialog(
     )
 }
 
+/** 主题方案显示名对应的字符串资源 id。 */
+private fun themeSchemeNameRes(scheme: String): Int = when (scheme) {
+    "candy" -> R.string.settings_theme_scheme_candy
+    "ocean" -> R.string.settings_theme_scheme_ocean
+    "sunset" -> R.string.settings_theme_scheme_sunset
+    else -> R.string.settings_theme_scheme_default
+}
+
+/** 主题方案在设置行/对话框里的预览主色（取该方案 light 模式的 primary）。 */
+private fun themeSchemePreviewColor(scheme: String): Color {
+    return OpenCodeSchemes[scheme]?.light?.primary
+        ?: Color(0xFF6366F1) // default 方案主色（indigo）
+}
+
+/** 主题方案选择对话框：展示各方案的表面色 + 强调色 + 次级色三色条预览。 */
+@Composable
+private fun ThemeSchemeDialog(
+    currentScheme: String,
+    onSchemeSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val schemeIds = listOf("default", "candy", "ocean", "sunset")
+    AppDialog(onDismissRequest = onDismiss) {
+        Column(
+            modifier = Modifier.padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = stringResource(R.string.settings_theme_scheme),
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                text = stringResource(R.string.settings_theme_scheme_desc),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                schemeIds.forEach { id ->
+                    val selected = id == currentScheme
+                    val primary = themeSchemePreviewColor(id)
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = if (selected) {
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        },
+                        border = BorderStroke(
+                            width = if (selected) 2.dp else 1.dp,
+                            color = if (selected) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            },
+                        ),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onSchemeSelected(id) },
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        ) {
+                            // 预览色条：surface → primary → secondary
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                val light = OpenCodeSchemes[id]?.light
+                                Box(
+                                    Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(light?.surface ?: Color(0xFFFCF8FF)),
+                                )
+                                Box(
+                                    Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(primary),
+                                )
+                                Box(
+                                    Modifier
+                                        .size(26.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(
+                                            light?.secondary ?: Color(0xFF8B5CF6)
+                                        ),
+                                )
+                            }
+                            Text(
+                                text = stringResource(themeSchemeNameRes(id)),
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (selected) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(20.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun AccentColorDialog(
     currentAccent: String,
@@ -1312,9 +1454,10 @@ private fun AccentColorDialog(
                 text = stringResource(R.string.settings_accent_color),
                 style = MaterialTheme.typography.titleMedium
             )
-            Row(
+            FlowRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 OpenCodeAccents.keys.forEach { accent ->
                     val selected = accent == currentAccent

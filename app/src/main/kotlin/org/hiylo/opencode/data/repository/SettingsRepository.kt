@@ -49,6 +49,7 @@ class SettingsRepository @Inject constructor(
     companion object {
         const val DEFAULT_DYNAMIC_COLOR = false
         const val DEFAULT_ACCENT_COLOR = "indigo"
+        const val DEFAULT_THEME_SCHEME = "default"
 
         private val LANGUAGE_KEY = stringPreferencesKey("app_language")
         private val THEME_KEY = stringPreferencesKey("app_theme")
@@ -64,6 +65,7 @@ class SettingsRepository @Inject constructor(
         private val CONFIRM_BEFORE_SEND_KEY = booleanPreferencesKey("confirm_before_send")
         private val AMOLED_DARK_KEY = booleanPreferencesKey("amoled_dark")
         private val ACCENT_COLOR_KEY = stringPreferencesKey("accent_color")
+        private val THEME_SCHEME_KEY = stringPreferencesKey("theme_scheme")
         private val COMPACT_MESSAGES_KEY = booleanPreferencesKey("compact_messages")
         private val COLLAPSE_TOOLS_KEY = booleanPreferencesKey("collapse_tools")
         private val EXPAND_REASONING_KEY = booleanPreferencesKey("expand_reasoning")
@@ -620,6 +622,20 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /**
+     * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset".
+     * Default: "default".
+     */
+    val themeScheme: Flow<String> = dataStore.data.map { preferences ->
+        preferences[THEME_SCHEME_KEY] ?: DEFAULT_THEME_SCHEME
+    }
+
+    suspend fun setThemeScheme(scheme: String) {
+        dataStore.edit { preferences ->
+            preferences[THEME_SCHEME_KEY] = scheme
+        }
+    }
+
+    /**
      * Whether compact message spacing is enabled. Default: false.
      */
     val compactMessages: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -860,6 +876,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
             appTheme = preferences[THEME_KEY] ?: "system",
             dynamicColor = dynamicColorEnabled(preferences),
             accentColor = preferences[ACCENT_COLOR_KEY] ?: DEFAULT_ACCENT_COLOR,
+            themeScheme = preferences[THEME_SCHEME_KEY] ?: DEFAULT_THEME_SCHEME,
             chatFontSize = preferences[FONT_SIZE_KEY] ?: "medium",
             notificationsEnabled = preferences[NOTIFICATIONS_KEY] ?: true,
             initialMessageCount = preferences[INITIAL_MESSAGE_COUNT_KEY] ?: 50,
@@ -986,6 +1003,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         preferences[THEME_KEY] = settings.appTheme
         preferences[DYNAMIC_COLOR_KEY] = settings.dynamicColor
         preferences[ACCENT_COLOR_KEY] = settings.accentColor
+        preferences[THEME_SCHEME_KEY] = settings.themeScheme
         preferences[FONT_SIZE_KEY] = settings.chatFontSize
         preferences[NOTIFICATIONS_KEY] = settings.notificationsEnabled
         preferences[INITIAL_MESSAGE_COUNT_KEY] = settings.initialMessageCount

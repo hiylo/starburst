@@ -246,6 +246,12 @@
     <string name="settings_dynamic_color_desc">使用壁纸颜色（Material You）</string>
     <string name="settings_accent_color">强调色</string>
     <string name="settings_accent_color_desc">应用内使用的品牌强调色（开启 Material You 时无效）</string>
+    <string name="settings_theme_scheme">主题方案</string>
+    <string name="settings_theme_scheme_desc">整套配色方案，整体改变 App 观感；非默认方案会替代强调色。</string>
+    <string name="settings_theme_scheme_default">默认</string>
+    <string name="settings_theme_scheme_candy">糖果</string>
+    <string name="settings_theme_scheme_ocean">海洋</string>
+    <string name="settings_theme_scheme_sunset">日落</string>
 
     <!-- LLM provider settings -->
     <string name="llm_provider_title">建议生成服务</string>

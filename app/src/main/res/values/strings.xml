@@ -373,6 +373,12 @@
     <string name="settings_dynamic_color_desc">Use colors from wallpaper (Material You)</string>
     <string name="settings_accent_color">Accent color</string>
     <string name="settings_accent_color_desc">Brand accent used across the app (disabled with Material You)</string>
+    <string name="settings_theme_scheme">Theme scheme</string>
+    <string name="settings_theme_scheme_desc">Full color schemes that change the whole app look. Non-default schemes replace the accent color.</string>
+    <string name="settings_theme_scheme_default">Default</string>
+    <string name="settings_theme_scheme_candy">Candy</string>
+    <string name="settings_theme_scheme_ocean">Ocean</string>
+    <string name="settings_theme_scheme_sunset">Sunset</string>
 
     <!-- LLM provider settings -->
     <string name="llm_provider_title">Suggestion service</string>

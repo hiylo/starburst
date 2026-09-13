@@ -132,6 +132,27 @@ internal val OpenCodeAccents: Map<String, AccentPalette> = mapOf(
         light = AccentRoles(Color(0xFFDC2626), Color(0xFFFFFFFF), Color(0xFFFEE2E2), Color(0xFF7F1D1D)),
         dark = AccentRoles(Color(0xFFFCA5A5), Color(0xFF7F1D1D), Color(0xFFB91C1C), Color(0xFFFEE2E2)),
     ),
+    // ---- 卡通亮色（Cartoon）----
+    "pink" to AccentPalette(
+        light = AccentRoles(Color(0xFFEC4899), Color(0xFFFFFFFF), Color(0xFFFCE7F3), Color(0xFF831843)),
+        dark = AccentRoles(Color(0xFFF9A8D4), Color(0xFF831843), Color(0xFFBE185D), Color(0xFFFCE7F3)),
+    ),
+    "orange" to AccentPalette(
+        light = AccentRoles(Color(0xFFF97316), Color(0xFFFFFFFF), Color(0xFFFFEDD5), Color(0xFF7C2D12)),
+        dark = AccentRoles(Color(0xFFFDBA74), Color(0xFF7C2D12), Color(0xFFC2410C), Color(0xFFFFEDD5)),
+    ),
+    "lime" to AccentPalette(
+        light = AccentRoles(Color(0xFF84CC16), Color(0xFF1A2E05), Color(0xFFECFCCB), Color(0xFF365314)),
+        dark = AccentRoles(Color(0xFFBEF264), Color(0xFF1A2E05), Color(0xFF3F6212), Color(0xFFECFCCB)),
+    ),
+    "sky" to AccentPalette(
+        light = AccentRoles(Color(0xFF0EA5E9), Color(0xFFFFFFFF), Color(0xFFE0F2FE), Color(0xFF0C4A6E)),
+        dark = AccentRoles(Color(0xFF7DD3FC), Color(0xFF0C4A6E), Color(0xFF0284C7), Color(0xFFE0F2FE)),
+    ),
+    "mint" to AccentPalette(
+        light = AccentRoles(Color(0xFF14B8A6), Color(0xFFFFFFFF), Color(0xFFCCFBF1), Color(0xFF134E4A)),
+        dark = AccentRoles(Color(0xFF5EEAD4), Color(0xFF134E4A), Color(0xFF0F766E), Color(0xFFCCFBF1)),
+    ),
 )
 
 private fun darkSchemeFor(accent: AccentPalette): ColorScheme {
@@ -155,6 +176,204 @@ private fun lightSchemeFor(accent: AccentPalette): ColorScheme {
 }
 
 /**
+ * 完整主题方案：一套开箱即用的整机配色（含 surface/surfaceVariant/次级色等），
+ * 与强调色不同——它整体改变 App 观感，而不仅是 primary 色系。
+ * "default" 走强调色体系（见 [OpenCodeAccents]），其余为卡通风格完整方案。
+ */
+internal data class ThemeScheme(
+    val id: String,
+    val light: ColorScheme,
+    val dark: ColorScheme,
+)
+
+/** 主题方案注册表。id 与 DataStore 中 theme_scheme 的取值一一对应。 */
+internal val OpenCodeSchemes: Map<String, ThemeScheme> = mapOf(
+    "candy" to ThemeScheme(
+        id = "candy",
+        light = lightColorScheme(
+            primary = Color(0xFFFF5C8A),
+            onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFFFD9E4),
+            onPrimaryContainer = Color(0xFF590024),
+            secondary = Color(0xFF00A89A),
+            onSecondary = Color(0xFFFFFFFF),
+            secondaryContainer = Color(0xFFA7F2E7),
+            onSecondaryContainer = Color(0xFF00382D),
+            tertiary = Color(0xFFFFB547),
+            onTertiary = Color(0xFF3E2800),
+            tertiaryContainer = Color(0xFFFFDE9E),
+            onTertiaryContainer = Color(0xFF2C1B00),
+            background = Color(0xFFFFF8F9),
+            onBackground = Color(0xFF2D2225),
+            surface = Color(0xFFFFF8F9),
+            onSurface = Color(0xFF2D2225),
+            surfaceVariant = Color(0xFFF4E8EB),
+            onSurfaceVariant = Color(0xFF5A454B),
+            surfaceContainer = Color(0xFFFFF0F3),
+            surfaceContainerLow = Color(0xFFFFF3F5),
+            surfaceContainerLowest = Color(0xFFFFFFFF),
+            surfaceContainerHigh = Color(0xFFF9E8ED),
+            surfaceContainerHighest = Color(0xFFF3E2E7),
+            outline = Color(0xFF8F747C),
+            outlineVariant = Color(0xFFD6C0C7),
+            error = Color(0xFFBA1A1A),
+            onError = Color(0xFFFFFFFF),
+        ),
+        dark = darkColorScheme(
+            primary = Color(0xFFFF9DC4),
+            onPrimary = Color(0xFF590024),
+            primaryContainer = Color(0xFF8A1B4B),
+            onPrimaryContainer = Color(0xFFFFD9E4),
+            secondary = Color(0xFF6ED9CB),
+            onSecondary = Color(0xFF00382D),
+            secondaryContainer = Color(0xFF005049),
+            onSecondaryContainer = Color(0xFFA7F2E7),
+            tertiary = Color(0xFFF0BD6D),
+            onTertiary = Color(0xFF3E2800),
+            tertiaryContainer = Color(0xFF5A3C00),
+            onTertiaryContainer = Color(0xFFFFDE9E),
+            background = Color(0xFF1E1418),
+            onBackground = Color(0xFFEBDFE3),
+            surface = Color(0xFF1E1418),
+            onSurface = Color(0xFFEBDFE3),
+            surfaceVariant = Color(0xFF4D3940),
+            onSurfaceVariant = Color(0xFFD1BAC1),
+            surfaceContainer = Color(0xFF2A1E23),
+            surfaceContainerLow = Color(0xFF161014),
+            surfaceContainerLowest = Color(0xFF120B0F),
+            surfaceContainerHigh = Color(0xFF35282D),
+            surfaceContainerHighest = Color(0xFF403338),
+            outline = Color(0xFF9B858C),
+            outlineVariant = Color(0xFF4D3940),
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005),
+        ),
+    ),
+    "ocean" to ThemeScheme(
+        id = "ocean",
+        light = lightColorScheme(
+            primary = Color(0xFF00AEEF),
+            onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFBDF0FF),
+            onPrimaryContainer = Color(0xFF00313F),
+            secondary = Color(0xFF00B5A4),
+            onSecondary = Color(0xFFFFFFFF),
+            secondaryContainer = Color(0xFF98EDE1),
+            onSecondaryContainer = Color(0xFF003A34),
+            tertiary = Color(0xFF7E6BFF),
+            onTertiary = Color(0xFFFFFFFF),
+            tertiaryContainer = Color(0xFFE4DEFF),
+            onTertiaryContainer = Color(0xFF1A0065),
+            background = Color(0xFFF3FAFE),
+            onBackground = Color(0xFF1B2026),
+            surface = Color(0xFFF3FAFE),
+            onSurface = Color(0xFF1B2026),
+            surfaceVariant = Color(0xFFDFE9EE),
+            onSurfaceVariant = Color(0xFF45535B),
+            surfaceContainer = Color(0xFFE8F3F8),
+            surfaceContainerLow = Color(0xFFECF6FB),
+            surfaceContainerLowest = Color(0xFFFFFFFF),
+            surfaceContainerHigh = Color(0xFFE2EEF3),
+            surfaceContainerHighest = Color(0xFFDCE8ED),
+            outline = Color(0xFF7C8A93),
+            outlineVariant = Color(0xFFBFCBD2),
+            error = Color(0xFFBA1A1A),
+            onError = Color(0xFFFFFFFF),
+        ),
+        dark = darkColorScheme(
+            primary = Color(0xFF5ED4FF),
+            onPrimary = Color(0xFF003C4E),
+            primaryContainer = Color(0xFF00586F),
+            onPrimaryContainer = Color(0xFFBDF0FF),
+            secondary = Color(0xFF69DFCE),
+            onSecondary = Color(0xFF003C35),
+            secondaryContainer = Color(0xFF00544A),
+            onSecondaryContainer = Color(0xFF98EDE1),
+            tertiary = Color(0xFFC2B5FF),
+            onTertiary = Color(0xFF2B00A0),
+            tertiaryContainer = Color(0xFF4D32CF),
+            onTertiaryContainer = Color(0xFFE4DEFF),
+            background = Color(0xFF111418),
+            onBackground = Color(0xFFE1E6EB),
+            surface = Color(0xFF111418),
+            onSurface = Color(0xFFE1E6EB),
+            surfaceVariant = Color(0xFF3A454B),
+            onSurfaceVariant = Color(0xFFBCC9D1),
+            surfaceContainer = Color(0xFF1B2026),
+            surfaceContainerLow = Color(0xFF0B0E12),
+            surfaceContainerLowest = Color(0xFF06090D),
+            surfaceContainerHigh = Color(0xFF252A30),
+            surfaceContainerHighest = Color(0xFF30353B),
+            outline = Color(0xFF85939C),
+            outlineVariant = Color(0xFF3A454B),
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005),
+        ),
+    ),
+    "sunset" to ThemeScheme(
+        id = "sunset",
+        light = lightColorScheme(
+            primary = Color(0xFFFF6D4A),
+            onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFFFDBCE),
+            onPrimaryContainer = Color(0xFF4B1900),
+            secondary = Color(0xFFE94D8E),
+            onSecondary = Color(0xFFFFFFFF),
+            secondaryContainer = Color(0xFFFFD8E3),
+            onSecondaryContainer = Color(0xFF58002E),
+            tertiary = Color(0xFFB050FF),
+            onTertiary = Color(0xFFFFFFFF),
+            tertiaryContainer = Color(0xFFF1DCFF),
+            onTertiaryContainer = Color(0xFF36005E),
+            background = Color(0xFFFFF8F5),
+            onBackground = Color(0xFF241A12),
+            surface = Color(0xFFFFF8F5),
+            onSurface = Color(0xFF241A12),
+            surfaceVariant = Color(0xFFF7E7DE),
+            onSurfaceVariant = Color(0xFF58463C),
+            surfaceContainer = Color(0xFFFFF0E7),
+            surfaceContainerLow = Color(0xFFFFF4EC),
+            surfaceContainerLowest = Color(0xFFFFFFFF),
+            surfaceContainerHigh = Color(0xFFFAE5D9),
+            surfaceContainerHighest = Color(0xFFF4DFD3),
+            outline = Color(0xFF8F7A6F),
+            outlineVariant = Color(0xFFD7C2B5),
+            error = Color(0xFFBA1A1A),
+            onError = Color(0xFFFFFFFF),
+        ),
+        dark = darkColorScheme(
+            primary = Color(0xFFFFB59F),
+            onPrimary = Color(0xFF561A00),
+            primaryContainer = Color(0xFF7F2F12),
+            onPrimaryContainer = Color(0xFFFFDBCE),
+            secondary = Color(0xFFFFB1CC),
+            onSecondary = Color(0xFF670036),
+            secondaryContainer = Color(0xFF8F1B50),
+            onSecondaryContainer = Color(0xFFFFD8E3),
+            tertiary = Color(0xFFD9BBFF),
+            onTertiary = Color(0xFF46006B),
+            tertiaryContainer = Color(0xFF6A2AA0),
+            onTertiaryContainer = Color(0xFFF1DCFF),
+            background = Color(0xFF1F1712),
+            onBackground = Color(0xFFF3E3D8),
+            surface = Color(0xFF1F1712),
+            onSurface = Color(0xFFF3E3D8),
+            surfaceVariant = Color(0xFF53433A),
+            onSurfaceVariant = Color(0xFFD8C2B5),
+            surfaceContainer = Color(0xFF2B2119),
+            surfaceContainerLow = Color(0xFF17110D),
+            surfaceContainerLowest = Color(0xFF120D09),
+            surfaceContainerHigh = Color(0xFF362B23),
+            surfaceContainerHighest = Color(0xFF41352D),
+            outline = Color(0xFFA99588),
+            outlineVariant = Color(0xFF53433A),
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005),
+        ),
+    ),
+)
+
+/**
  * OpenCode Material 3 Theme
  * 
  * Supports:
@@ -170,14 +389,21 @@ fun OpenCodeTheme(
     dynamicColor: Boolean = false,
     amoledDark: Boolean = false,
     accentColor: String = "indigo",
+    themeScheme: String = "default",
     content: @Composable () -> Unit
 ) {
     val accent = OpenCodeAccents[accentColor] ?: OpenCodeAccents.getValue("indigo")
+    val scheme = OpenCodeSchemes[themeScheme]
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
-            val scheme = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-            if (darkTheme && amoledDark) scheme.withAmoledSurfaces() else scheme
+            val base = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            if (darkTheme && amoledDark) base.withAmoledSurfaces() else base
+        }
+        scheme != null -> {
+            // 完整主题方案：整套配色，忽略强调色（强调色仅用于 default 方案）。
+            val base = if (darkTheme) scheme.dark else scheme.light
+            if (darkTheme && amoledDark) base.withAmoledSurfaces() else base
         }
         darkTheme && amoledDark -> darkSchemeFor(accent).withAmoledSurfaces()
         darkTheme -> darkSchemeFor(accent)

@@ -188,6 +188,9 @@ class MainActivity : ComponentActivity() {
             val accentColor by settingsRepository.accentColor.collectAsState(
                 initial = SettingsRepository.DEFAULT_ACCENT_COLOR,
             )
+            val themeScheme by settingsRepository.themeScheme.collectAsState(
+                initial = SettingsRepository.DEFAULT_THEME_SCHEME,
+            )
             val connectedServerIds by serverConnectionStateRepository.connectedServerIds.collectAsState()
             
             // Determine if dark theme should be used
@@ -203,6 +206,7 @@ class MainActivity : ComponentActivity() {
                 dynamicColor = dynamicColor,
                 amoledDark = amoledDark,
                 accentColor = accentColor,
+                themeScheme = themeScheme,
             ) {
                 
                 // Set status bar color based on theme

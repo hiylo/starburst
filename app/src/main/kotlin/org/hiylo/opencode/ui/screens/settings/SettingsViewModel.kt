@@ -241,6 +241,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val themeScheme = settingsRepository.themeScheme.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SettingsRepository.DEFAULT_THEME_SCHEME
+    )
+
+    fun setThemeScheme(scheme: String) {
+        viewModelScope.launch {
+            settingsRepository.setThemeScheme(scheme)
+        }
+    }
+
     val compactMessages = settingsRepository.compactMessages.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
