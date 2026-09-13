@@ -102,6 +102,10 @@
     <string name="chat_suggestions_generate">生成建议</string>
     <string name="chat_suggestions_download_model">下载端侧模型</string>
     <string name="chat_suggestions_model_downloading">正在下载模型… %1$d%%</string>
+    <string name="chat_suggestions_source_server">来自服务器 LLM</string>
+    <string name="chat_suggestions_source_cloud">来自云端 LLM</string>
+    <string name="chat_suggestions_source_on_device">来自端侧模型</string>
+    <string name="chat_suggestions_source_fallback">来自本地兜底</string>
     <string name="chat_share_failed">会话分享失败</string>
     <string name="chat_copied_clipboard">已复制到剪贴板</string>
     <string name="chat_no_message_copy">没有可复制的助手消息</string>
@@ -256,7 +260,7 @@
     <!-- LLM provider settings -->
     <string name="llm_provider_title">建议生成服务</string>
     <string name="llm_provider_back">返回</string>
-    <string name="llm_provider_desc">配置后，生成建议将优先调用云端 LLM，未配置或失败时自动使用端侧模型。</string>
+    <string name="llm_provider_desc">生成建议优先级：服务器配置的 LLM &gt; 本云端服务 &gt; 端侧模型。仅当服务器未配置 LLM 或不可达时，才使用本云端服务。</string>
     <string name="llm_provider_base_url">Base URL</string>
     <string name="llm_provider_base_url_hint">https://api.openai.com/v1</string>
     <string name="llm_provider_model">模型</string>
@@ -630,7 +634,7 @@
     <string name="server_mcp_status_unknown">未知状态</string>
     <string name="sync_title">设置同步</string>
     <string name="llm_provider_settings_title">建议生成服务</string>
-    <string name="llm_provider_settings_desc">配置外部 LLM 用于生成下一步建议</string>
+    <string name="llm_provider_settings_desc">用于生成下一步建议的外部 LLM（服务器 LLM 不可用时生效）</string>
     <string name="settings_on_device_model_title">端侧模型</string>
     <string name="settings_on_device_model_desc">用于离线生成下一步建议的端侧模型（约 522 MB）</string>
     <string name="settings_on_device_model_ready">已就绪</string>

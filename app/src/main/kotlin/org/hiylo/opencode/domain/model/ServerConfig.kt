@@ -28,6 +28,9 @@ data class ServerConfig(
     val sshPort: Int = 22,
     val sshUsername: String = "",
     val sshPassword: String? = null,
+    // OpenCode Backend 扩展（可选）：配置后解锁任务中心 / 归档等扩展能力。
+    val backendUrl: String? = null,
+    val backendToken: String? = null,
 ) {
     val displayName: String
         get() = name ?: url
@@ -35,6 +38,18 @@ data class ServerConfig(
     /** 是否启用 SSH 隧道（以是否填写了 SSH 用户名判定）。 */
     val useSsh: Boolean
         get() = sshUsername.isNotBlank()
+
+    /** 是否配置了 OpenCode Backend 扩展（地址自动推导、token 有默认，故始终可用）。 */
+    val useBackend: Boolean
+        get() = true
+
+    /** 解析后的 Backend 地址：优先用显式 [backendUrl]，否则推导为 opencode 同主机的 18880 端口。 */
+    val backendResolvedUrl: String
+        get() = backendUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: "http://$host:18880"
+
+    /** 解析后的 Backend token：优先用显式 [backendToken]，否则用默认 token。 */
+    val backendResolvedToken: String
+        get() = backendToken?.takeIf { it.isNotBlank() } ?: "ocb_default"
 
     /** OpenCode 服务端口（显式端口，否则回退 http/https 默认端口）。 */
     val openCodePort: Int

@@ -12,12 +12,16 @@ package org.hiylo.opencode.ui.screens.chat
 import org.hiylo.opencode.logging.AppLogger as Log
 import org.hiylo.opencode.BuildConfig
 import org.hiylo.opencode.R
+import org.hiylo.opencode.ml.AsrSession
 import org.hiylo.opencode.ml.MnnLlm
 import org.hiylo.opencode.ml.MnnAsr
 import org.hiylo.opencode.ml.MnnAsrRecorder
+import org.hiylo.opencode.ml.ServerAsrApi
+import org.hiylo.opencode.ml.ServerAsrRecorder
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.opencode.data.api.AgentInfo
 import org.hiylo.opencode.data.api.CommandInfo
@@ -37,6 +41,9 @@ import org.hiylo.opencode.data.repository.PendingPromptRecord
 import org.hiylo.opencode.data.repository.PromptDeliveryInfo
 import org.hiylo.opencode.data.repository.PromptDeliveryState
 import org.hiylo.opencode.data.repository.PendingPromptRepository
+import org.hiylo.opencode.data.repository.BookmarkRepository
+import org.hiylo.opencode.data.repository.BackendRepository
+import org.hiylo.opencode.data.repository.ServerRepository
 import org.hiylo.opencode.data.repository.SettingsRepository
 import org.hiylo.opencode.domain.model.*
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -92,6 +99,10 @@ internal fun descendantSessionIds(sessions: List<Session>, rootSessionId: String
     return result
 }
 
+@Immutable
+/** 建议生成来源，用于在建议区显示小标签。 */
+enum class SuggestionSource { BACKEND, CLOUD, ON_DEVICE, FALLBACK }
+
 data class ChatUiState(
     val sessionTitle: String = "",
     val sessionLoaded: Boolean = false,
@@ -136,6 +147,8 @@ data class ChatUiState(
     val suggestionsStreamText: String = "",
     /** Suggested next prompts for the current conversation (up to 3). */
     val suggestions: List<String> = emptyList(),
+    /** 生成成功的建议的来源（后端 / 云端 / 端侧），用于 UI 显示来源标签。 */
+    val suggestionsSource: SuggestionSource? = null,
     /** Whether the on-device model still needs to be downloaded (shown as a download prompt). */
     val modelNeedsDownload: Boolean = false,
     /** Whether the on-device model is being downloaded right now. */
@@ -280,6 +293,10 @@ class ChatViewModel @Inject constructor(
     private val pendingPromptRepository: PendingPromptRepository,
     private val suggestionProvider: SuggestionProvider,
     private val secretStore: LocalSyncSecretStore,
+    private val bookmarkRepository: BookmarkRepository,
+    private val backendRepository: BackendRepository,
+    private val serverRepository: ServerRepository,
+    private val serverAsrApi: ServerAsrApi,
 ) : ViewModel() {
 
     @Volatile
@@ -299,6 +316,7 @@ class ChatViewModel @Inject constructor(
     private val _isSending = MutableStateFlow(false)
     private val _pendingPrompts = MutableStateFlow<List<PendingPromptRecord>>(emptyList())
     private val _suggestions = MutableStateFlow<List<String>>(emptyList())
+    private val _suggestionsSource = MutableStateFlow<SuggestionSource?>(null)
     private val _isGeneratingSuggestions = MutableStateFlow(false)
     private val _suggestionsError = MutableStateFlow<String?>(null)
     /** Incremental text streamed while suggestions are being generated (for UI feedback). */
@@ -503,6 +521,7 @@ class ChatViewModel @Inject constructor(
         _pendingPrompts,
         eventReducer.promptDeliveries,
         _suggestions,
+        _suggestionsSource,
         _isGeneratingSuggestions,
         _suggestionsError,
         _suggestionsStreamText,
@@ -536,12 +555,13 @@ class ChatViewModel @Inject constructor(
         val pendingPrompts = args[19] as List<PendingPromptRecord>
         val promptDeliveries = args[20] as Map<String, PromptDeliveryInfo>
         val suggestions = args[21] as List<String>
-        val isGeneratingSuggestions = args[22] as Boolean
-        val suggestionsError = args[23] as String?
-        val suggestionsStreamText = args[24] as String
-        val modelNeedsDownload = args[25] as Boolean
-        val modelDownloading = args[26] as Boolean
-        val modelDownloadProgress = args[27] as Int
+        val suggestionsSource = args[22] as SuggestionSource?
+        val isGeneratingSuggestions = args[23] as Boolean
+        val suggestionsError = args[24] as String?
+        val suggestionsStreamText = args[25] as String
+        val modelNeedsDownload = args[26] as Boolean
+        val modelDownloading = args[27] as Boolean
+        val modelDownloadProgress = args[28] as Int
         fun deliveryFor(messageId: String) = when (promptDeliveries[messageId]?.state) {
             PromptDeliveryState.PROMOTED -> MessageDelivery.PROMOTED
             else -> MessageDelivery.QUEUED
@@ -690,6 +710,7 @@ class ChatViewModel @Inject constructor(
             lastContextTokens = lastContextTokens,
             contextUsage = contextUsage,
             suggestions = suggestions,
+            suggestionsSource = suggestionsSource,
             isGeneratingSuggestions = isGeneratingSuggestions,
             suggestionsError = suggestionsError,
             suggestionsStreamText = suggestionsStreamText,
@@ -706,6 +727,12 @@ class ChatViewModel @Inject constructor(
     init {
         eventReducer.confirmSession(sessionId)
         _pendingPrompts.value = pendingPromptRepository.getForSession(sessionId)
+        // 探测后端流式识别引擎是否可用：端侧 MNN 模型不可用的设备靠它提供语音输入。
+        viewModelScope.launch {
+            backendAsrEndpoint()?.let { endpoint ->
+                _backendAsrAvailable.value = serverAsrApi.isAvailable(endpoint.first, endpoint.second)
+            }
+        }
         // 高频 parts/messages 的节流采样：每 ~STREAM_THROTTLE_MS 把最新值同步到节流状态，
         // 供 uiState 的 combine 使用，降低流式输出时 combine 全量重算 + 全量 recompose 的频率。
         viewModelScope.launch {
@@ -2064,8 +2091,20 @@ class ChatViewModel @Inject constructor(
             _isGeneratingSuggestions.value = true
             _suggestionsError.value = null
             _suggestionsStreamText.value = ""
+            _suggestionsSource.value = null
             try {
-                // 1) Prefer an externally configured LLM provider (cloud), if set.
+                val prompt = buildSuggestionPrompt()
+
+                // 1) Prefer the backend-configured LLM (opencode-backend /api/llm/generate),
+                //    which the admin configures once (usually the shared cloud model).
+                val backendParsed = runCatching { generateViaBackendLlm(prompt) }.getOrNull()
+                if (!backendParsed.isNullOrEmpty() && generation == suggestionsGeneration) {
+                    _suggestions.value = backendParsed
+                    _suggestionsSource.value = SuggestionSource.BACKEND
+                    return@launch
+                }
+
+                // 2) Prefer an externally configured LLM provider (cloud), if set.
                 val llmBaseUrl = settingsRepository.llmProviderBaseUrl.first()
                 val llmModel = settingsRepository.llmProviderModel.first()
                 val apiKey = secretStore.get(LocalSyncSecretStore.SecretKey.LLM_PROVIDER_API_KEY)
@@ -2073,19 +2112,19 @@ class ChatViewModel @Inject constructor(
                     SuggestionProvider.Config(baseUrl = llmBaseUrl, apiKey = apiKey.orEmpty(), model = llmModel)
                 } else null
                 if (providerCfg != null) {
-                    val prompt = buildSuggestionPrompt()
                     val parsed = runCatching {
                         suggestionProvider.suggest(providerCfg, SUGGESTION_API_SYSTEM, prompt)
                     }.getOrNull()
                     if (!parsed.isNullOrEmpty() && generation == suggestionsGeneration) {
                         _suggestions.value = parsed
+                        _suggestionsSource.value = SuggestionSource.CLOUD
                         return@launch
                     }
                     // External provider failed/returned nothing → silently fall back to on-device.
                     Log.w(TAG, "External LLM provider unavailable, falling back to on-device MNN")
                 }
 
-                // 2) On-device suggestion generation via MNN (no server round-trip, fully offline).
+                // 3) On-device suggestion generation via MNN (no server round-trip, fully offline).
                 // ensureLoaded() auto-extracts the bundled model when present; only prompt for a
                 // download when no model is bundled and none exists on disk.
                 val loaded = MnnLlm.ensureLoaded(context)
@@ -2095,7 +2134,6 @@ class ChatViewModel @Inject constructor(
                     return@launch
                 }
                 MnnLlm.reset()
-                val prompt = buildSuggestionPrompt()
                 // Throttle UI refreshes so per-token streaming doesn't trigger a recomposition
                 // on every single token (keeps the list/UI responsive on slower devices).
                 var lastFlush = 0L
@@ -2123,14 +2161,19 @@ class ChatViewModel @Inject constructor(
                 if (generation != suggestionsGeneration) return@launch
                 val parsed = text.let(::parseSuggestionList)
                 _suggestions.value = parsed
+                if (parsed.isNotEmpty()) {
+                    _suggestionsSource.value = SuggestionSource.ON_DEVICE
+                }
                 if (parsed.isEmpty() && text.isNotBlank()) {
                     _suggestionsError.value = "未能解析建议: ${text.take(200)}"
                 }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Suggestions generation failed, using fallback", e)
                 _suggestions.value = fallbackSuggestions()
+                _suggestionsSource.value = SuggestionSource.FALLBACK
             } finally {
                 _isGeneratingSuggestions.value = false
                 _suggestionsStreamText.value = ""
@@ -2138,9 +2181,37 @@ class ChatViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 通过 OpenCode Backend 已配置的编排 LLM 生成下一步建议。
+     * 后端未配置 LLM（503）或请求失败时抛异常，由调用方回退到 App 设置 provider / MNN。
+     */
+    private suspend fun generateViaBackendLlm(prompt: String): List<String>? {
+        val servers = serverRepository.servers.first()
+        val backend = servers.firstOrNull { it.id == serverId }
+        val host = runCatching { java.net.URL(serverUrl).host }.getOrNull()
+            ?: serverUrl.substringAfter("://").substringBefore(":")
+        if (host.isBlank()) return null
+        val backendUrl = (backend?.backendResolvedUrl ?: "http://$host:18880").trimEnd('/')
+        if (backendUrl.isBlank()) return null
+        val token = backend?.backendResolvedToken ?: "ocb_default"
+        val parsed = try {
+            backendRepository.generateSuggestions(backendUrl, token, SUGGESTION_API_SYSTEM, prompt)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            e.rethrowCancellation()
+            Log.w(TAG, "Backend LLM unavailable, falling back (url=$backendUrl)", e)
+            null
+        }
+        if (!parsed.isNullOrEmpty()) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "Suggestions generated via backend LLM")
+            return parsed
+        }
+        return null
+    }
+
     /** Localized fallback suggestions used when the on-device model is unavailable or fails. */
-    private fun fallbackSuggestions(): List<String> {
-        val isZh = context.resources.configuration.locales[0].language == "zh"
+    private fun fallbackSuggestions(): List<String> {        val isZh = context.resources.configuration.locales[0].language == "zh"
         return if (isZh) {
             listOf("继续当前任务", "总结一下刚才的改动", "测试一下刚才的功能")
         } else {
@@ -2167,13 +2238,22 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             _modelDownloading.value = true
             _modelDownloadProgress.value = 0
-            val ok = MnnLlm.downloadModel(context) { percent ->
-                _modelDownloadProgress.value = percent
-            }
-            _modelDownloading.value = false
-            if (ok) {
-                _modelNeedsDownload.value = false
-                _suggestionsError.value = null
+            try {
+                val ok = MnnLlm.downloadModel(context) { percent ->
+                    if (isActive) _modelDownloadProgress.value = percent
+                }
+                if (ok) {
+                    _modelNeedsDownload.value = false
+                    _suggestionsError.value = null
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                e.rethrowCancellation()
+                Log.e(TAG, "Failed to download model", e)
+                _suggestionsError.value = context.getString(R.string.settings_on_device_model_download_failed)
+            } finally {
+                _modelDownloading.value = false
             }
         }
     }
@@ -2233,6 +2313,7 @@ class ChatViewModel @Inject constructor(
         suggestionsGeneration++
         _suggestions.value = emptyList()
         _suggestionsError.value = null
+        _suggestionsSource.value = null
     }
 
     // ============ Message actions ============

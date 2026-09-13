@@ -2483,6 +2483,7 @@ fun ChatScreen(
                 lastContextTokens = uiState.lastContextTokens,
                 contextUsage = uiState.contextUsage,
                 suggestions = uiState.suggestions,
+                suggestionsSource = uiState.suggestionsSource,
                 isGeneratingSuggestions = uiState.isGeneratingSuggestions,
                 suggestionsError = uiState.suggestionsError,
                 suggestionsStreamText = uiState.suggestionsStreamText,
@@ -8671,6 +8672,20 @@ private fun SuggestionRow(
                         modifier = Modifier.weight(1f),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
+                        suggestionsSource?.let { source ->
+                            Text(
+                                text = stringResource(
+                                    when (source) {
+                                        SuggestionSource.BACKEND -> R.string.chat_suggestions_source_server
+                                        SuggestionSource.CLOUD -> R.string.chat_suggestions_source_cloud
+                                        SuggestionSource.ON_DEVICE -> R.string.chat_suggestions_source_on_device
+                                        SuggestionSource.FALLBACK -> R.string.chat_suggestions_source_fallback
+                                    }
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            )
+                        }
                         suggestions.take(3).forEach { suggestion ->
                             Surface(
                                 shape = RoundedCornerShape(12.dp),
@@ -8906,6 +8921,7 @@ private fun ChatInputBar(
     lastContextTokens: Int = 0,
     contextUsage: ContextUsageDetails = ContextUsageDetails(),
     suggestions: List<String> = emptyList(),
+    suggestionsSource: SuggestionSource? = null,
     isGeneratingSuggestions: Boolean = false,
     suggestionsError: String? = null,
     suggestionsStreamText: String = "",
@@ -9524,8 +9540,9 @@ private fun ChatInputBar(
             // Suggestion chips
             if (!isShellMode) {
                 SuggestionRow(
-                    suggestions = suggestions,
-                    isGenerating = isGeneratingSuggestions,
+                suggestions = suggestions,
+                suggestionsSource = suggestionsSource,
+                isGenerating = isGeneratingSuggestions,
                     error = suggestionsError,
                     streamText = suggestionsStreamText,
                     modelNeedsDownload = modelNeedsDownload,
