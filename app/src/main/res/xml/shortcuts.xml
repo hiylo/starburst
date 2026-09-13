@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <shortcut
+        android:shortcutId="new_session"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_new_session"
+        android:shortcutShortLabel="@string/shortcut_new_session"
+        android:shortcutLongLabel="@string/shortcut_new_session">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="org.hiylo.opencode.MainActivity">
+            <extra
+                android:name="action"
+                android:value="shortcut_new_session" />
+        </intent>
+    </shortcut>
+
+    <shortcut
+        android:shortcutId="global_search"
+        android:enabled="true"
+        android:icon="@drawable/ic_shortcut_search"
+        android:shortcutShortLabel="@string/shortcut_search"
+        android:shortcutLongLabel="@string/shortcut_search">
+        <intent
+            android:action="android.intent.action.VIEW"
+            android:targetClass="org.hiylo.opencode.MainActivity">
+            <extra
+                android:name="action"
+                android:value="shortcut_search" />
+        </intent>
+    </shortcut>
+
+</shortcuts>

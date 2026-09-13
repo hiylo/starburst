@@ -60,6 +60,9 @@ import org.hiylo.opencode.ui.screens.about.AboutScreen
 import org.hiylo.opencode.ui.screens.sessions.SessionListScreen
 import org.hiylo.opencode.ui.screens.sessions.GlobalSearchScreen
 import org.hiylo.opencode.ui.screens.sessions.CrossServerSessionsScreen
+import org.hiylo.opencode.ui.screens.bookmarks.BookmarksScreen
+import org.hiylo.opencode.ui.screens.search.FtsSearchScreen
+import org.hiylo.opencode.ui.screens.shared.SharedSessionScreen
 import org.hiylo.opencode.ui.screens.settings.SettingsScreen
 import org.hiylo.opencode.ui.components.isAmoledTheme
 import org.hiylo.opencode.ui.components.AppPrimaryButton
@@ -75,10 +78,12 @@ import org.hiylo.opencode.ui.screens.server.SkillsScreen
 import org.hiylo.opencode.ui.screens.tasks.TaskListScreen
 import org.hiylo.opencode.ui.screens.webview.WebViewScreen
 import org.hiylo.opencode.service.OpenCodeConnectionService
+import org.hiylo.opencode.widget.OpenCodeWidgetProvider
 import androidx.core.content.ContextCompat
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -88,6 +93,20 @@ internal fun connectedShareServers(
     servers: List<ServerConfig>,
     connectedServerIds: Set<String>,
 ): List<ServerConfig> = servers.filter { it.id in connectedServerIds }
+
+/** Widget/快捷方式入口的目标服务器：优先当前已连接、其次最近连接、最后任一台。 */
+internal fun widgetTargetServer(
+    servers: List<ServerConfig>,
+    connectedServerIds: Set<String> = emptySet(),
+): ServerConfig? {
+    if (connectedServerIds.isNotEmpty()) {
+        servers.firstOrNull { it.id in connectedServerIds }?.let { return it }
+    }
+    servers.filter { it.lastConnected != null }
+        .maxByOrNull { it.lastConnected ?: 0L }
+        ?.let { return it }
+    return servers.firstOrNull()
+}
 
 internal data class SharePickerItem(
     val server: ServerConfig,
@@ -168,6 +187,7 @@ internal fun buildSharePickerItems(
 @Composable
 fun NavGraph(
     deepLinkFlow: MutableSharedFlow<SessionDeepLink>,
+    navActionFlow: MutableSharedFlow<String>,
     sharedAttachmentsFlow: SharedFlow<List<Uri>>,
     settingsRepository: SettingsRepository,
     serverRepository: ServerRepository,
@@ -352,7 +372,8 @@ fun NavGraph(
                         password = deepLink.password,
                         serverName = deepLink.serverName,
                         serverId = deepLink.serverId,
-                        sessionId = sessionId
+                        sessionId = sessionId,
+                        retry = deepLink.retry,
                     )
                     val currentSessionId = navController.currentBackStackEntry
                         ?.arguments
@@ -395,6 +416,64 @@ fun NavGraph(
                     )
                     Log.i(TAG, "Deep-link → WebView: $route")
                     navController.navigate(route) { launchSingleTop = true }
+                }
+            }
+        }
+    }
+
+    // Listen for Widget / App Shortcut entry actions
+    LaunchedEffect(Unit) {
+        val servers = serverRepository.servers
+        navActionFlow.collect { action ->
+            navActionFlow.resetReplayCache()
+            when (action) {
+                OpenCodeWidgetProvider.ACTION_SHORTCUT_SEARCH,
+                OpenCodeWidgetProvider.ACTION_WIDGET_SEARCH,
+                -> {
+                    navController.navigate(Screen.GlobalSearch.route) { launchSingleTop = true }
+                }
+                OpenCodeWidgetProvider.ACTION_WIDGET_TASK_CENTER -> {
+                    // 任务中心需要目标服务器：优先当前已连接、其次最近连接、最后任一台。
+                    val target = widgetTargetServer(servers.first(), connectedServerIds)
+                    if (target != null) {
+                        navController.navigate(
+                            Screen.TaskList.createRoute(
+                                serverUrl = target.url,
+                                username = target.username,
+                                password = target.password.orEmpty(),
+                                serverName = target.displayName,
+                                serverId = target.id,
+                            ),
+                        ) { launchSingleTop = true }
+                    } else {
+                        navController.navigate(Screen.Home.route) { launchSingleTop = true }
+                    }
+                }
+                OpenCodeWidgetProvider.ACTION_WIDGET_NEW_SESSION,
+                OpenCodeWidgetProvider.ACTION_SHORTCUT_NEW_SESSION,
+                -> {
+                    // 新建会话需要目标服务器：优先当前已连接、其次最近连接、最后任一台。
+                    val target = widgetTargetServer(servers.first(), connectedServerIds)
+                    if (target != null) {
+                        // 每次「新建会话」都压入全新的 sessions 目的地（不复用栈内旧条目），
+                        // 否则 back stack 里已有的 sessions 条目会因 launchSingleTop 被复用，
+                        // 其 ViewModel 不会重新 init，autoNewSession 也就不会再生效。
+                        navController.navigate(
+                            Screen.SessionList.createRoute(
+                                serverUrl = target.url,
+                                username = target.username,
+                                password = target.password.orEmpty(),
+                                serverName = target.displayName,
+                                serverId = target.id,
+                                autoNewSession = true,
+                            ),
+                        ) {
+                            launchSingleTop = false
+                            popUpTo(Screen.Home.route) { inclusive = false }
+                        }
+                    } else {
+                        navController.navigate(Screen.Home.route) { launchSingleTop = true }
+                    }
                 }
             }
         }
@@ -485,6 +564,53 @@ fun NavGraph(
                 },
             )
         }
+
+        composable(Screen.Bookmarks.route) {
+            val servers by serverRepository.servers.collectAsState(initial = emptyList())
+            BookmarksScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenSession = { serverId, sessionId ->
+                    val server = servers.firstOrNull { it.id == serverId } ?: return@BookmarksScreen
+                    navController.navigate(
+                        Screen.Chat.createRoute(
+                            serverUrl = server.url,
+                            username = server.username,
+                            password = server.password.orEmpty(),
+                            serverName = server.displayName,
+                            serverId = server.id,
+                            sessionId = sessionId,
+                        ),
+                    )
+                },
+            )
+        }
+
+        composable(Screen.FtsSearch.route) {
+            val servers by serverRepository.servers.collectAsState(initial = emptyList())
+            FtsSearchScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenResult = { serverId, sessionId, _ ->
+                    val server = servers.firstOrNull { it.id == serverId } ?: return@FtsSearchScreen
+                    navController.navigate(
+                        Screen.Chat.createRoute(
+                            serverUrl = server.url,
+                            username = server.username,
+                            password = server.password.orEmpty(),
+                            serverName = server.displayName,
+                            serverId = server.id,
+                            sessionId = sessionId,
+                        ),
+                    )
+                },
+            )
+        }
+
+        composable(
+            route = "shared_session?shareId={shareId}",
+            arguments = listOf(navArgument("shareId") { type = NavType.StringType }),
+        ) {
+            SharedSessionScreen(onNavigateBack = { navController.popBackStack() })
+        }
         
         // ============ Settings Screen ============
         composable(Screen.Settings.route) {
@@ -495,6 +621,8 @@ fun NavGraph(
                 onNavigateToDiagnostics = { navController.navigate(Screen.Diagnostics.route) },
                 onNavigateToSync = { navController.navigate(Screen.SyncSettings.route) },
                 onNavigateToLlmProvider = { navController.navigate(Screen.LlmProvider.route) },
+                onNavigateToBookmarks = { navController.navigate(Screen.Bookmarks.route) },
+                onNavigateToFtsSearch = { navController.navigate(Screen.FtsSearch.route) },
             )
         }
 
@@ -728,13 +856,14 @@ fun NavGraph(
         
         // ============ Session List Screen (native) ============
         composable(
-            route = "sessions?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}",
+            route = "sessions?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&autoNewSession={autoNewSession}",
             arguments = listOf(
                 navArgument("serverUrl") { type = NavType.StringType },
                 navArgument("username") { type = NavType.StringType },
                 navArgument("password") { type = NavType.StringType },
                 navArgument("serverName") { type = NavType.StringType },
-                navArgument("serverId") { type = NavType.StringType }
+                navArgument("serverId") { type = NavType.StringType },
+                navArgument("autoNewSession") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
             val serverUrl = backStackEntry.arguments?.getString("serverUrl").orEmpty()
@@ -941,7 +1070,7 @@ fun NavGraph(
         
         // ============ Chat Screen (native) ============
         composable(
-            route = "chat?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&sessionId={sessionId}&openTerminal={openTerminal}",
+            route = "chat?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&sessionId={sessionId}&openTerminal={openTerminal}&retry={retry}",
             arguments = listOf(
                 navArgument("serverUrl") { type = NavType.StringType },
                 navArgument("username") { type = NavType.StringType },
@@ -949,7 +1078,8 @@ fun NavGraph(
                 navArgument("serverName") { type = NavType.StringType },
                 navArgument("serverId") { type = NavType.StringType },
                 navArgument("sessionId") { type = NavType.StringType },
-                navArgument("openTerminal") { type = NavType.BoolType; defaultValue = false }
+                navArgument("openTerminal") { type = NavType.BoolType; defaultValue = false },
+                navArgument("retry") { type = NavType.BoolType; defaultValue = false }
             )
         ) { backStackEntry ->
             val serverUrl = backStackEntry.arguments?.getString("serverUrl").orEmpty()
@@ -982,7 +1112,7 @@ fun NavGraph(
                     )
                     navController.navigate(route) {
                         // Pop current chat so back goes to session list, not old session
-                        popUpTo("sessions?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}") {
+                        popUpTo("sessions?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&autoNewSession={autoNewSession}") {
                             inclusive = false
                         }
                     }
@@ -1016,6 +1146,9 @@ fun NavGraph(
                         initialPath = sessionPath
                     )
                     navController.navigate(route) { launchSingleTop = true }
+                },
+                onOpenSharedSession = { shareId ->
+                    navController.navigate(Screen.SharedSession.createRoute(shareId)) { launchSingleTop = true }
                 },
                 onOpenWorkspace = { directory ->
                     navController.navigate(

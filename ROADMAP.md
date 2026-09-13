@@ -102,7 +102,40 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Global search: title / directory / time (across sessions and projects)
 - [x] Session export (Markdown / JSON)
 
+## 1.3.0 (In progress 🚧)
+
+> Pure client features — no backend dependency, opencode server untouched.
+
+### Notifications & background
+
+- [x] Actionable notifications: "view / retry" actions on task-complete/fail, tap to open session
+- [x] Notification result summary: completion notification body carries result/error excerpt
+
+### Content & search
+
+- [x] Full-text message search (local SQLite, cross-session message body; FTS5 unavailable on device → plain table + LIKE)
+- [x] Message bookmarks: mark key messages, jump across sessions
+- [x] Shared-session read-only viewer (server already exposes `share`)
+
+### Security & privacy
+
+- [x] App lock & sensitive masking — **removed by product decision** (out of scope for this release)
+
+### Mobile experience
+
+- [x] Home-screen Widget + App Shortcuts (long-press new session / global search)
+- [x] Foldable / tablet two-pane adaptation polish
+
+### Engineering quality
+
+- [x] Large-message memory / streaming-render optimization (delta StringBuilder accumulation, 50ms throttle sampling)
+- [ ] Accessibility (TalkBack)
+
 ## Later — Backlog
 
-- [ ] Full-text message search (local FTS, data-size TBD)
-- [ ] Engineering quality (unit tests, performance, accessibility, tablet/foldable adaptation) — [#23](https://github.com/hiylo/opencode/issues/23)
+- [x] Backend integration — task center with real API (tasks + batch + archives; zero-config: auto-derive `:18880` + default token `ocb_default`), WS realtime status, one-click backend install
+- [x] Task arrangement — structured fields (name/prompt/directory/session/dependency), scheduling (delay / at-time / recurring cron via `scheduled` status + scheduler), multi-step plans (auto `dependsOn` chain), conversational AI breakdown (`POST /api/tasks/generate`)
+- [x] Session archive to backend — long-press in session list / chat overflow menu → snapshot to backend archives; fixed upstream message-shape parsing so archives carry real transcript content
+- [ ] Backend integration — stats / rules (needs Web-Session login flow on the client)
+- [ ] Voice input via backend / sherpa-onnx (ASR JNI vs split-MNN conflict pending)
+- [ ] Remaining engineering quality (unit tests, performance testing)

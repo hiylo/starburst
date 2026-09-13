@@ -43,6 +43,7 @@ import org.hiylo.opencode.domain.model.ServerConfig
 import org.hiylo.opencode.service.OpenCodeConnectionService
 import org.hiylo.opencode.ui.navigation.NavGraph
 import org.hiylo.opencode.ui.theme.OpenCodeTheme
+import org.hiylo.opencode.widget.OpenCodeWidgetProvider
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
@@ -74,7 +75,8 @@ data class SessionDeepLink(
     val password: String,
     val serverName: String,
     val sessionPath: String,  // e.g. /L2hvbWUv.../session/abc123
-    val sessionId: String = "" // raw session ID (fallback when sessionPath is empty)
+    val sessionId: String = "", // raw session ID (fallback when sessionPath is empty)
+    val retry: Boolean = false, // whether to auto-regenerate the last message after opening
 )
 
 /**
@@ -86,6 +88,30 @@ class MainActivity : ComponentActivity() {
         override fun onReceive(context: Context?, intent: Intent?) {
             if (intent?.action == OpenCodeConnectionService.ACTION_APP_EXIT) {
                 finishAndRemoveTask()
+            }
+        }
+    }
+
+    private val retrySessionReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action != OpenCodeConnectionService.ACTION_RETRY_SESSION) return
+            val serverId = intent.getStringExtra(OpenCodeConnectionService.EXTRA_SERVER_ID) ?: ""
+            val sessionId = intent.getStringExtra(OpenCodeConnectionService.EXTRA_SESSION_ID) ?: ""
+            if (serverId.isBlank() || sessionId.isBlank()) return
+            lifecycleScope.launch {
+                val savedServer = serverRepository.servers.first().firstOrNull { it.id == serverId } ?: return@launch
+                _deepLinkFlow.emit(
+                    SessionDeepLink(
+                        serverId = savedServer.id,
+                        serverUrl = savedServer.url,
+                        username = savedServer.username,
+                        password = savedServer.password ?: "",
+                        serverName = savedServer.displayName,
+                        sessionPath = "",
+                        sessionId = sessionId,
+                        retry = true,
+                    )
+                )
             }
         }
     }
@@ -101,6 +127,12 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var serverConnectionStateRepository: ServerConnectionStateRepository
+
+    @Inject
+    lateinit var widgetSnapshotWriter: org.hiylo.opencode.widget.WidgetSnapshotWriter
+
+    @Inject
+    lateinit var widgetSnapshotStore: org.hiylo.opencode.widget.WidgetSnapshotStore
     
     /**
      * Shared flow for deep-link events from notification taps.
@@ -108,6 +140,12 @@ class MainActivity : ComponentActivity() {
      * Uses replay=1 so a cold-start deep-link is not lost before NavGraph starts collecting.
      */
     private val _deepLinkFlow = MutableSharedFlow<SessionDeepLink>(replay = 1)
+
+    /**
+     * Shared flow for Widget / App Shortcut actions (e.g. "shortcut_search", "widget_new_session").
+     * NavGraph subscribes and navigates accordingly.
+     */
+    private val _navActionFlow = MutableSharedFlow<String>(replay = 1)
 
     /**
      * Shared flow for attachments received via ACTION_SEND / ACTION_SEND_MULTIPLE.
@@ -162,6 +200,13 @@ class MainActivity : ComponentActivity() {
             ContextCompat.RECEIVER_NOT_EXPORTED,
         )
 
+        ContextCompat.registerReceiver(
+            this,
+            retrySessionReceiver,
+            IntentFilter(OpenCodeConnectionService.ACTION_RETRY_SESSION),
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
+
         // Watch for language changes AFTER initial value — drop(1) skips the
         // current value that attachBaseContext already applied, so we only
         // recreate when the user actually switches language in Settings.
@@ -177,7 +222,11 @@ class MainActivity : ComponentActivity() {
         handleSessionIntent(intent)
         // Handle attachments shared into the activity
         handleShareIntent(intent)
-        
+        // Handle Widget / App Shortcut entry actions
+        handleWidgetAction(intent)
+
+        // 持续同步桌面 Widget 所需的服务器/会话/任务快照
+        widgetSnapshotWriter.start()
         setContent {
             // Collect theme preference
             val appTheme by settingsRepository.appTheme.collectAsState(initial = "system")
@@ -226,6 +275,7 @@ class MainActivity : ComponentActivity() {
                 ) {
                     NavGraph(
                         deepLinkFlow = _deepLinkFlow,
+                        navActionFlow = _navActionFlow,
                         sharedAttachmentsFlow = sharedAttachmentsFlow,
                         settingsRepository = settingsRepository,
                         serverRepository = serverRepository,
@@ -239,6 +289,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onDestroy() {
         unregisterReceiver(appExitReceiver)
+        unregisterReceiver(retrySessionReceiver)
         super.onDestroy()
     }
     
@@ -248,6 +299,96 @@ class MainActivity : ComponentActivity() {
         handleSessionIntent(intent)
         // Handle attachments shared while the activity is already running
         handleShareIntent(intent)
+        // Handle Widget / App Shortcut entry actions when the activity is already running
+        handleWidgetAction(intent)
+    }
+    
+    private fun handleWidgetAction(intent: Intent?) {
+        val action = intent?.getStringExtra(OpenCodeWidgetProvider.EXTRA_ACTION)
+            ?.takeIf { it.isNotBlank() }
+            ?: return
+        when (action) {
+            OpenCodeWidgetProvider.ACTION_WIDGET_OPEN_SESSION -> handleWidgetOpenSession(intent)
+            OpenCodeWidgetProvider.ACTION_WIDGET_CONNECT_SERVER -> handleWidgetConnectServer(intent)
+            else -> _navActionFlow.tryEmit(action)
+        }
+    }
+
+    /** Widget 服务器行：一键直连（复用通知深链的服务启动参数格式）。 */
+    private fun handleWidgetConnectServer(intent: Intent) {
+        val serverId = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SERVER_ID) ?: ""
+        val serverName = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SERVER_NAME) ?: ""
+        val serverUrl = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SERVER_URL) ?: ""
+        if (serverId.isBlank()) return
+        lifecycleScope.launch {
+            val savedServer = findDeepLinkServer(serverRepository.servers.first(), serverId, serverUrl)
+            val resolvedServerId = savedServer?.id ?: serverId
+            if (savedServer != null) {
+                val serviceIntent = Intent(this@MainActivity, OpenCodeConnectionService::class.java).apply {
+                    putExtra("server_id", savedServer.id)
+                    putExtra("server_name", savedServer.name)
+                    putExtra("server_url", savedServer.url)
+                    putExtra("server_username", savedServer.username)
+                    putExtra("server_password", savedServer.password)
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(serviceIntent)
+                } else {
+                    startService(serviceIntent)
+                }
+                Log.i(TAG, "Widget connect server: ${savedServer.displayName} (serverId=$resolvedServerId)")
+                _deepLinkFlow.emit(
+                    SessionDeepLink(
+                        serverId = resolvedServerId,
+                        serverUrl = savedServer.url,
+                        username = savedServer.username,
+                        password = savedServer.password ?: "",
+                        serverName = savedServer.displayName,
+                        sessionPath = "",
+                    )
+                )
+            } else {
+                Log.w(TAG, "Widget connect server: not configured: $serverName")
+            }
+        }
+    }
+
+    /** Widget 最近会话行 → 复用通知深链机制直达对应会话。 */
+    private fun handleWidgetOpenSession(intent: Intent) {
+        val serverId = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SERVER_ID) ?: ""
+        val serverName = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SERVER_NAME) ?: ""
+        val sessionId = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SESSION_ID) ?: return
+        val directory = intent.getStringExtra(OpenCodeWidgetProvider.EXTRA_SESSION_DIRECTORY) ?: ""
+
+        lifecycleScope.launch {
+            val savedServer = findDeepLinkServer(serverRepository.servers.first(), serverId, "")
+            val resolvedServerId = savedServer?.id ?: serverId
+            val sessionPath = if (directory.isNotBlank()) {
+                "/${base64UrlEncode(directory)}/session/$sessionId"
+            } else {
+                ""
+            }
+            Log.i(TAG, "Widget open session deep-link: ${savedServer?.url ?: serverName}$sessionPath")
+            _deepLinkFlow.emit(
+                SessionDeepLink(
+                    serverId = resolvedServerId,
+                    serverUrl = savedServer?.url ?: serverName,
+                    username = savedServer?.username ?: "opencode",
+                    password = savedServer?.password ?: "",
+                    serverName = savedServer?.displayName ?: serverName,
+                    sessionPath = sessionPath,
+                    sessionId = sessionId,
+                )
+            )
+        }
+    }
+
+    private fun base64UrlEncode(value: String): String {
+        val encoded = android.util.Base64.encodeToString(
+            value.toByteArray(Charsets.UTF_8),
+            android.util.Base64.NO_WRAP,
+        )
+        return encoded.replace('+', '-').replace('/', '_').replace("=", "")
     }
     
     private fun handleSessionIntent(intent: Intent?) {

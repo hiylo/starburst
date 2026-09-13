@@ -48,6 +48,13 @@ sealed class Screen(val route: String) {
     data object Home : Screen("home")
     data object CrossServerSessions : Screen("cross_server_sessions")
     data object GlobalSearch : Screen("global_search")
+    data object Bookmarks : Screen("bookmarks")
+    data object FtsSearch : Screen("fts_search")
+
+    data object SharedSession : Screen("shared_session") {
+        fun createRoute(shareId: String): String =
+            "shared_session?shareId=${encodeNavigationArgument(shareId)}"
+    }
     
     data object WebView : Screen("webview") {
         fun createRoute(
@@ -72,8 +79,12 @@ sealed class Screen(val route: String) {
             username: String,
             password: String,
             serverName: String,
-            serverId: String
-        ): String = serverRoute("sessions", serverUrl, username, password, serverName, serverId)
+            serverId: String,
+            autoNewSession: Boolean = false,
+        ): String = serverRoute(
+            "sessions", serverUrl, username, password, serverName, serverId,
+            "autoNewSession" to autoNewSession.toString(),
+        )
     }
     
     data object Chat : Screen("chat") {
@@ -85,9 +96,10 @@ sealed class Screen(val route: String) {
             serverId: String,
             sessionId: String,
             openTerminal: Boolean = false,
+            retry: Boolean = false,
         ): String = serverRoute(
             "chat", serverUrl, username, password, serverName, serverId,
-            "sessionId" to sessionId, "openTerminal" to openTerminal.toString(),
+            "sessionId" to sessionId, "openTerminal" to openTerminal.toString(), "retry" to retry.toString(),
         )
     }
 

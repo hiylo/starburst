@@ -15,7 +15,8 @@ import kotlinx.serialization.Serializable
  * OpenCode Backend 异步任务状态。
  *
  * 对应后端 `/api/tasks` 的状态机：`queued → running → succeeded/failed`，
- * `queued/running → canceled`，失败后进入 `retrying`（带退避）。
+ * `queued/running → canceled`，失败后进入 `retrying`（带退避）；
+ * 依赖任务用 `pending`/`blocked` 表达「等待前置 / 被阻塞」。
  */
 @Serializable
 enum class BackendTaskStatus {
@@ -25,6 +26,9 @@ enum class BackendTaskStatus {
     @SerialName("failed") Failed,
     @SerialName("canceled") Canceled,
     @SerialName("retrying") Retrying,
+    @SerialName("pending") Pending,
+    @SerialName("blocked") Blocked,
+    @SerialName("scheduled") Scheduled,
 }
 
 /**
@@ -35,14 +39,20 @@ data class BackendTask(
     val id: String,
     val sessionId: String? = null,
     val directory: String? = null,
+    val name: String? = null,
     val prompt: String = "",
+    val dependsOn: String? = null,
     val status: BackendTaskStatus = BackendTaskStatus.Queued,
     val error: String? = null,
     val result: String? = null,
     val progress: String? = null,
+    val aiSummary: String? = null,
     val attempts: Int = 0,
     val createdAt: String? = null,
     val updatedAt: String? = null,
     val startedAt: String? = null,
     val finishedAt: String? = null,
+    val scheduledAt: String? = null,
+    val cron: String? = null,
+    val lastFiredAt: String? = null,
 )
