@@ -906,6 +906,12 @@
     <string name="task_purge_confirm">清除</string>
     <string name="server_settings_tasks">任务中心</string>
     <string name="server_settings_tasks_desc">通过后端执行后台任务、批量与归档</string>
+    <string name="backend_checking">正在检测后端…</string>
+    <string name="backend_installing">正在安装后端…</string>
+    <string name="backend_installing_desc">通过 SSH 执行 install.sh 安装 opencode-backend</string>
+    <string name="backend_not_installed">后端未安装</string>
+    <string name="backend_not_installed_desc">该服务器上未部署 opencode-backend。通过 SSH 一键安装后即可解锁任务中心、归档与语音兜底。</string>
+    <string name="backend_install_action">安装后端</string>
     <string name="server_settings_skills">Skills</string>
     <string name="server_settings_skills_desc">浏览该服务器可用的 Skills</string>
     <string name="skills_title">Skills</string>

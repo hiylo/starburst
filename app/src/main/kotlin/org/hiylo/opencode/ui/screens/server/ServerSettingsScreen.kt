@@ -13,6 +13,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,12 +34,21 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.opencode.R
 import org.hiylo.opencode.ui.components.AppCardShape
 import org.hiylo.opencode.ui.components.appAmoledBorder
@@ -47,14 +57,19 @@ import org.hiylo.opencode.ui.components.isAmoledTheme
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ServerSettingsScreen(
+    serverId: String = "",
     onNavigateBack: () -> Unit,
     onOpenProviders: () -> Unit,
     onOpenModels: () -> Unit,
     onOpenMcp: () -> Unit,
     onOpenTasks: () -> Unit,
     onOpenSkills: () -> Unit,
+    viewModel: ServerSettingsViewModel = hiltViewModel(),
 ) {
     val isAmoled = isAmoledTheme()
+    val uiState by viewModel.uiState.collectAsState()
+    val backendAvailable = uiState.backendAvailable
+    val isInstallingBackend = uiState.isInstallingBackend
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -239,45 +254,193 @@ fun ServerSettingsScreen(
                 }
             }
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
+            // 后端可用 → 任务中心；不可用 + SSH → 一键安装；探测中 → loading。
+            BackendStatusCard(
+                backendAvailable = backendAvailable,
+                isInstallingBackend = isInstallingBackend,
+                hasSsh = viewModel.serverConfig?.useSsh == true,
+                installLog = uiState.backendInstallLog,
+                onOpenTasks = onOpenTasks,
+                onInstallBackend = viewModel::installBackend,
+            )
+        }
+    }
+}
+
+/**
+ * 后端状态卡片：探测中显示 loading；可用时显示「任务中心」入口；
+ * 不可用且配置了 SSH 时显示「后端未安装」+ 一键安装按钮；不可用且无 SSH 时隐藏。
+ */
+@Composable
+private fun BackendStatusCard(
+    backendAvailable: Boolean?,
+    isInstallingBackend: Boolean,
+    hasSsh: Boolean,
+    installLog: String?,
+    onOpenTasks: () -> Unit,
+    onInstallBackend: () -> Unit,
+) {
+    val isAmoled = isAmoledTheme()
+    when (backendAvailable) {
+        null -> BackendCard {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onOpenTasks)
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Row(
+                Icon(Icons.Default.DeviceHub, contentDescription = null)
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(1f)
+                        .padding(horizontal = 12.dp),
                 ) {
-                    Icon(Icons.Default.DeviceHub, contentDescription = null)
+                    Text(
+                        text = stringResource(R.string.server_settings_tasks),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.backend_checking),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                }
+                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+            }
+        }
+
+        true -> BackendCard(onClick = onOpenTasks) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 14.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.DeviceHub, contentDescription = null)
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .padding(horizontal = 12.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.server_settings_tasks),
+                        style = MaterialTheme.typography.titleSmall,
+                    )
+                    Text(
+                        text = stringResource(R.string.server_settings_tasks_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+
+        else -> {
+            when {
+                isInstallingBackend -> BackendCard {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.backend_installing),
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                            Text(
+                                text = stringResource(R.string.backend_installing_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                            )
+                        }
+                    }
+                }
+
+                hasSsh -> BackendCard {
                     Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_tasks),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_tasks_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.DeviceHub, contentDescription = null)
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.backend_not_installed),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = stringResource(R.string.backend_not_installed_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                )
+                            }
+                        }
+                        installLog?.let { log ->
+                            Text(
+                                text = log,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.padding(top = 8.dp),
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = onInstallBackend,
+                            modifier = Modifier
+                                .align(Alignment.End)
+                                .padding(top = 8.dp),
+                        ) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.backend_install_action))
+                        }
                     }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
         }
+    }
+}
+
+/** 后端状态卡片的统一外壳。 */
+@Composable
+private fun BackendCard(
+    onClick: (() -> Unit)? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val isAmoled = isAmoledTheme()
+    Card(
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = appAmoledBorder(0.65f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
+    ) {
+        Column(content = content)
     }
 }

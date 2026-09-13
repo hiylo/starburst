@@ -1395,29 +1395,45 @@ private fun ThemeSchemeDialog(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                         ) {
-                            // 预览色条：surface → primary → secondary
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                val light = OpenCodeSchemes[id]?.light
+                            // 迷你 UI 预览：surface 底 + primary 标题条 + secondary 副标题 + 文本占位。
+                            Column(
+                                modifier = Modifier
+                                    .width(72.dp)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(
+                                        OpenCodeSchemes[id]?.light?.surface ?: Color(0xFFFCF8FF)
+                                    )
+                                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+                            ) {
                                 Box(
                                     Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(light?.surface ?: Color(0xFFFCF8FF)),
-                                )
-                                Box(
-                                    Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(6.dp))
+                                        .fillMaxWidth()
+                                        .height(18.dp)
                                         .background(primary),
                                 )
-                                Box(
-                                    Modifier
-                                        .size(26.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(
-                                            light?.secondary ?: Color(0xFF8B5CF6)
-                                        ),
-                                )
+                                Column(Modifier.padding(6.dp)) {
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth(0.7f)
+                                            .height(5.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                OpenCodeSchemes[id]?.light?.onSurface
+                                                    ?: Color(0xFF1C1B1F),
+                                            ),
+                                    )
+                                    Spacer(Modifier.height(4.dp))
+                                    Box(
+                                        Modifier
+                                            .fillMaxWidth(0.5f)
+                                            .height(5.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(
+                                                OpenCodeSchemes[id]?.light?.secondary
+                                                    ?: Color(0xFF8B5CF6),
+                                            ),
+                                    )
+                                }
                             }
                             Text(
                                 text = stringResource(themeSchemeNameRes(id)),

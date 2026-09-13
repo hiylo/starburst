@@ -82,6 +82,12 @@ private const val STREAM_THROTTLE_MS = 50L
 /** SSE 假死（心跳仍在但不再推消息）时，busy 期间通过 REST 拉取最新消息兜底的间隔。 */
 private const val BUSY_MESSAGE_POLL_MS = 10_000L
 
+/** 后端流式 ASR 引擎可用性的进程级缓存（按 serverId）。避免每次打开会话都发一次探测请求。 */
+private val backendAsrAvailableCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Boolean, Long>>()
+
+/** 后端 ASR 可用性缓存有效期（毫秒），过期后重新探测。 */
+private const val BACKEND_ASR_CACHE_TTL_MS = 5 * 60 * 1000L
+
 internal fun fastInitialMessageLimit(configuredLimit: Int): Int =
     configuredLimit.coerceAtLeast(1).coerceAtMost(FAST_INITIAL_MESSAGE_COUNT)
 
@@ -737,10 +743,9 @@ class ChatViewModel @Inject constructor(
         eventReducer.confirmSession(sessionId)
         _pendingPrompts.value = pendingPromptRepository.getForSession(sessionId)
         // 探测后端流式识别引擎是否可用：端侧 MNN 模型不可用的设备靠它提供语音输入。
+        // 结果按 serverId 缓存 5 分钟，避免每次打开会话都发探测请求（后端不可达时尤其拖慢进入）。
         viewModelScope.launch {
-            backendAsrEndpoint()?.let { endpoint ->
-                _backendAsrAvailable.value = serverAsrApi.isAvailable(endpoint.first, endpoint.second)
-            }
+            _backendAsrAvailable.value = cachedBackendAsrAvailable()
         }
         // 高频 parts/messages 的节流采样：每 ~STREAM_THROTTLE_MS 把最新值同步到节流状态，
         // 供 uiState 的 combine 使用，降低流式输出时 combine 全量重算 + 全量 recompose 的频率。
@@ -837,6 +842,19 @@ class ChatViewModel @Inject constructor(
         loadAgents()
         loadCommands()
 
+    }
+
+    /** 读取（或探测并缓存）后端 ASR 引擎是否可用。 */
+    private suspend fun cachedBackendAsrAvailable(): Boolean {
+        val now = System.currentTimeMillis()
+        backendAsrAvailableCache[serverId]?.let { (available, ts) ->
+            if (now - ts < BACKEND_ASR_CACHE_TTL_MS) return available
+        }
+        val available = backendAsrEndpoint()?.let { endpoint ->
+            serverAsrApi.isAvailable(endpoint.first, endpoint.second)
+        } ?: false
+        backendAsrAvailableCache[serverId] = available to now
+        return available
     }
 
     /** 上次通过 REST 拉取最新消息兜底的时间戳（节流，避免 SSE 假死时过于频繁地拉取）。 */

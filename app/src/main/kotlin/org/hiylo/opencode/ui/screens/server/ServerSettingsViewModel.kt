@@ -30,8 +30,12 @@ import org.hiylo.opencode.data.api.ProviderModelDefinition
 import org.hiylo.opencode.data.api.ServerConfigPatch
 import org.hiylo.opencode.data.api.ServerConfigResponse
 import org.hiylo.opencode.data.api.ServerConnection
+import org.hiylo.opencode.data.api.BackendApi
 import org.hiylo.opencode.data.repository.SettingsRepository
 import org.hiylo.opencode.data.repository.DiagnosticLogRepository
+import org.hiylo.opencode.data.repository.ServerRepository
+import org.hiylo.opencode.domain.model.ServerConfig
+import org.hiylo.opencode.service.SshRunner
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -60,6 +64,12 @@ data class ServerSettingsUiState(
     val message: String? = null,
     val oauthProxyHint: Boolean = false,
     val customProviders: List<ProviderConfigEntry> = emptyList(),
+    /** 探测到的 opencode-backend 是否可用（GET /api/health）。null 表示探测中。 */
+    val backendAvailable: Boolean? = null,
+    /** 是否正在通过 SSH 安装 opencode-backend。 */
+    val isInstallingBackend: Boolean = false,
+    /** 最近一次安装输出/错误。 */
+    val backendInstallLog: String? = null,
 )
 
 data class PendingOauth(
@@ -114,6 +124,8 @@ data class ProviderConfigEntry(
 class ServerSettingsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val api: OpenCodeApi,
+    private val backendApi: BackendApi,
+    private val serverRepository: ServerRepository,
     private val settingsRepository: SettingsRepository,
     private val diagnosticLogRepository: DiagnosticLogRepository,
     @ApplicationContext private val context: Context,
@@ -150,7 +162,83 @@ class ServerSettingsViewModel @Inject constructor(
         loadProviderConfig()
         loadAgents()
         loadAuthMethods()
+        probeBackend()
     }
+
+    /**
+     * 探测当前服务器对应的 opencode-backend 是否已部署并存活。
+     * 结果写入 uiState.backendAvailable：null=探测中，true=可用，false=不可用。
+     */
+    fun probeBackend() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(backendAvailable = null) }
+            _serverConfig = serverRepository.getServer(serverId)
+            val server = _serverConfig
+            val backendUrl = server?.backendResolvedUrl
+                ?: "http://${hostFrom(serverUrl)}:18880"
+            val available = backendApi.isHealthy(backendUrl)
+            _uiState.update { it.copy(backendAvailable = available) }
+        }
+    }
+
+    /**
+     * 通过 SSH 在远端一键安装 opencode-backend（install.sh）。
+     * 需要服务器已配置 SSH（[ServerConfig.useSsh]），否则报错提示。
+     */
+    fun installBackend() {
+        if (_uiState.value.isInstallingBackend) return
+        viewModelScope.launch {
+            val server = _serverConfig ?: serverRepository.getServer(serverId)
+            if (server == null) {
+                _uiState.update { it.copy(backendInstallLog = "服务器信息缺失，无法安装") }
+                return@launch
+            }
+            if (!server.useSsh) {
+                _uiState.update {
+                    it.copy(backendInstallLog = "未配置 SSH，无法远程安装。请先在服务器配置里填写 SSH 账号。")
+                }
+                return@launch
+            }
+            _uiState.update { it.copy(isInstallingBackend = true, backendInstallLog = null, error = null) }
+            try {
+                val scriptUrl = "https://raw.githubusercontent.com/hiylo/opencode-backend/main/scripts/install.sh"
+                // 远端以 sudo 执行安装脚本（install.sh 内部需要 root 写 /usr/local/bin、systemd）。
+                // sudo 需可免密（或 SSH 用户本身是 root），否则会返回提示后失败。
+                val command = "curl -fsSL $scriptUrl | sudo bash -- --port 18880 --default-token ocb_default"
+                val output = SshRunner.runCommand(server, command, timeoutMs = 300_000)
+                // 安装完成后再实测 /api/health，避免把「命令成功但服务未起」误判为可用。
+                val available = backendApi.isHealthy(
+                    server.backendResolvedUrl ?: "http://${hostFrom(serverUrl)}:18880"
+                )
+                _uiState.update {
+                    it.copy(
+                        isInstallingBackend = false,
+                        backendInstallLog = output,
+                        backendAvailable = available,
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to install backend via SSH", e)
+                _uiState.update {
+                    it.copy(
+                        isInstallingBackend = false,
+                        backendInstallLog = e.message ?: "安装失败",
+                    )
+                }
+            }
+        }
+    }
+
+    /** 当前服务器的 ServerConfig（含 SSH/后端配置），供 UI 判断是否可一键安装。 */
+    val serverConfig: ServerConfig?
+        get() = _serverConfig
+
+    private var _serverConfig: ServerConfig? = null
+
+    /** 从 opencode 服务地址推导主机名（不含端口），用于默认后端地址。 */
+    private fun hostFrom(rawUrl: String): String =
+        runCatching { java.net.URL(rawUrl).host }.getOrNull()
+            ?: rawUrl.substringAfter("://").substringBefore(":")
 
     fun loadProviders() {
         viewModelScope.launch {

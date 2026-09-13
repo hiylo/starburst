@@ -942,6 +942,12 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_purge_confirm">Clear</string>
     <string name="server_settings_tasks">Task Center</string>
     <string name="server_settings_tasks_desc">Background tasks, batch runs, and archives via the backend</string>
+    <string name="backend_checking">Checking backend…</string>
+    <string name="backend_installing">Installing backend…</string>
+    <string name="backend_installing_desc">Installing opencode-backend over SSH via install.sh</string>
+    <string name="backend_not_installed">Backend not installed</string>
+    <string name="backend_not_installed_desc">opencode-backend is unavailable on this server. Install it over SSH to unlock Task Center, archives and voice fallback.</string>
+    <string name="backend_install_action">Install backend</string>
     <string name="server_settings_skills">Skills</string>
     <string name="server_settings_skills_desc">Browse this server\'s available skills</string>
     <string name="skills_title">Skills</string>

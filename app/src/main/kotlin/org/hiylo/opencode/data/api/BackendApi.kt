@@ -152,6 +152,21 @@ class BackendApi @Inject constructor(
     private val httpClient: HttpClient,
     private val json: Json,
 ) {
+    /**
+     * 探测 opencode-backend 是否已部署并存活（`GET /api/health`）。
+     * 网络不可达或非 2xx 均视为不可用。
+     */
+    suspend fun isHealthy(backendUrl: String): Boolean {
+        val url = "${backendUrl.trimEnd('/')}/api/health"
+        return try {
+            httpClient.get(url) {
+                timeout { requestTimeoutMillis = 8_000L }
+            }.status.value in 200..299
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     /** 列任务（最新在前，最多 50 条）。[status] 可选过滤。 */
     suspend fun listTasks(backendUrl: String, token: String, status: BackendTaskStatus? = null): List<BackendTask> {
         val resp: BackendTasksResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/tasks") {
