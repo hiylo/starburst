@@ -9,6 +9,7 @@
  */
 package org.hiylo.opencode.domain.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -44,12 +45,14 @@ object PartSerializer : JsonContentPolymorphicSerializer<Part>(Part::class) {
  * Message Part - different types of content in a message.
  * Field names use @SerialName to match the OpenCode API convention (uppercase ID suffixes).
  */
+@Immutable
 @Serializable(with = PartSerializer::class)
 sealed class Part {
     abstract val id: String
     abstract val sessionId: String
     abstract val messageId: String
 
+    @Immutable
     @Serializable
     data class Text(
         override val id: String,
@@ -61,10 +64,12 @@ sealed class Part {
         val time: Time? = null,
         val metadata: Map<String, JsonElement>? = null
     ) : Part() {
+        @Immutable
         @Serializable
         data class Time(val start: Long, val end: Long? = null)
     }
 
+    @Immutable
     @Serializable
     data class Reasoning(
         override val id: String,
@@ -74,10 +79,12 @@ sealed class Part {
         val time: Time? = null,
         val metadata: Map<String, JsonElement>? = null
     ) : Part() {
+        @Immutable
         @Serializable
         data class Time(val start: Long, val end: Long? = null)
     }
 
+    @Immutable
     @Serializable
     data class Tool(
         override val id: String,
@@ -89,6 +96,7 @@ sealed class Part {
         val metadata: Map<String, JsonElement>? = null
     ) : Part()
 
+    @Immutable
     @Serializable
     data class StepStart(
         override val id: String,
@@ -97,6 +105,7 @@ sealed class Part {
         val snapshot: String? = null
     ) : Part()
 
+    @Immutable
     @Serializable
     data class StepFinish(
         override val id: String,
@@ -107,6 +116,7 @@ sealed class Part {
         val cost: Double? = null,
         val tokens: Tokens? = null
     ) : Part() {
+        @Immutable
         @Serializable
         data class Tokens(
             val input: Int = 0,
@@ -116,6 +126,7 @@ sealed class Part {
             val cache: Cache? = null
         )
 
+        @Immutable
         @Serializable
         data class Cache(
             val read: Int = 0,
@@ -123,6 +134,7 @@ sealed class Part {
         )
     }
 
+    @Immutable
     @Serializable
     data class File(
         override val id: String,
@@ -134,6 +146,7 @@ sealed class Part {
         val source: JsonElement? = null
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Snapshot(
         override val id: String,
@@ -142,6 +155,7 @@ sealed class Part {
         val snapshot: String = ""
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Patch(
         override val id: String,
@@ -151,6 +165,7 @@ sealed class Part {
         val files: List<String> = emptyList()
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Subtask(
         override val id: String,
@@ -162,6 +177,7 @@ sealed class Part {
         val model: Model? = null,
         val command: String? = null
     ) : Part() {
+        @Immutable
         @Serializable
         data class Model(
             @SerialName("providerID") val providerId: String,
@@ -169,6 +185,7 @@ sealed class Part {
         )
     }
 
+    @Immutable
     @Serializable
     data class Compaction(
         override val id: String,
@@ -177,6 +194,7 @@ sealed class Part {
         val auto: Boolean = false
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Retry(
         override val id: String,
@@ -186,6 +204,7 @@ sealed class Part {
         val error: JsonElement? = null,
         val time: Time? = null
     ) : Part() {
+        @Immutable
         @Serializable
         data class Time(val created: Long)
 
@@ -193,6 +212,7 @@ sealed class Part {
             get() = error?.jsonObject?.get("message")?.jsonPrimitive?.content ?: "Unknown error"
     }
 
+    @Immutable
     @Serializable
     data class Agent(
         override val id: String,
@@ -202,6 +222,7 @@ sealed class Part {
         val source: JsonElement? = null
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Permission(
         override val id: String,
@@ -210,6 +231,7 @@ sealed class Part {
         val message: String = ""
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Question(
         override val id: String,
@@ -218,6 +240,7 @@ sealed class Part {
         val question: String = ""
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Abort(
         override val id: String,
@@ -226,6 +249,7 @@ sealed class Part {
         val reason: String = ""
     ) : Part()
 
+    @Immutable
     @Serializable
     data class SessionTurn(
         override val id: String,
@@ -233,6 +257,7 @@ sealed class Part {
         @SerialName("messageID") override val messageId: String
     ) : Part()
 
+    @Immutable
     @Serializable
     data class Unknown(
         override val id: String,

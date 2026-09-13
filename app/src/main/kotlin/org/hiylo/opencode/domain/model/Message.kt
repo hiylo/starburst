@@ -9,6 +9,7 @@
  */
 package org.hiylo.opencode.domain.model
 
+import androidx.compose.runtime.Immutable
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+@Immutable
 @Serializable
 data class TimeInfo(
     val created: Long,
@@ -43,6 +45,7 @@ object MessageSerializer : JsonContentPolymorphicSerializer<Message>(Message::cl
  * Message - user or assistant message in a session.
  * Field names use @SerialName to match the OpenCode API convention (uppercase ID suffixes).
  */
+@Immutable
 @Serializable(with = MessageSerializer::class)
 sealed class Message {
     abstract val id: String
@@ -50,6 +53,7 @@ sealed class Message {
     abstract val role: String
     abstract val time: TimeInfo
 
+    @Immutable
     @Serializable
     data class User(
         override val id: String,
@@ -85,6 +89,7 @@ sealed class Message {
         )
     }
 
+    @Immutable
     @Serializable
     data class Assistant(
         override val id: String,
@@ -141,6 +146,7 @@ sealed class Message {
     }
 }
 
+@Immutable
 @Serializable
 data class MessageWithParts(
     val info: Message,

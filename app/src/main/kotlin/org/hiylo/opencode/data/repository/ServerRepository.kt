@@ -22,6 +22,7 @@ import org.hiylo.opencode.data.api.ServerConnection
 import org.hiylo.opencode.domain.model.ServerConfig
 import org.hiylo.opencode.domain.model.ServerHealth
 import org.hiylo.opencode.data.sync.SyncServer
+import org.hiylo.opencode.ui.screens.chat.ServerTerminalRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
@@ -130,7 +131,9 @@ class ServerRepository @Inject constructor(
         autoConnect: Boolean = false,
         sshPort: Int = 22,
         sshUsername: String = "",
-        sshPassword: String? = null
+        sshPassword: String? = null,
+        backendUrl: String? = null,
+        backendToken: String? = null,
     ): ServerConfig {
         val server = ServerConfig(
             id = UUID.randomUUID().toString(),
@@ -142,6 +145,8 @@ class ServerRepository @Inject constructor(
             sshPort = sshPort,
             sshUsername = sshUsername,
             sshPassword = sshPassword,
+            backendUrl = backendUrl,
+            backendToken = backendToken,
             lastConnected = null,
             isHealthy = false
         )
@@ -179,6 +184,8 @@ class ServerRepository @Inject constructor(
         dataStore.edit { preferences ->
             preferences[serversKey] = json.encodeToString(readServers(preferences).filter { it.id != serverId })
         }
+        // 释放该服务器对应的终端 workspace（关闭 socket 协程、清理连接凭据），避免泄漏。
+        ServerTerminalRegistry.release(serverId)
     }
     
     /**

@@ -17,11 +17,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 private const val WORKSPACE_TAG = "ServerTerminalWorkspace"
 private val RECONNECT_BACKOFF_MS = longArrayOf(1_000L, 2_000L, 5_000L, 10_000L, 30_000L)
@@ -94,6 +96,8 @@ internal class ServerTerminalWorkspace(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val tabs = mutableListOf<RuntimeTab>()
     private val lock = Any()
+    /** 关闭标记，保证 [close] 幂等且线程安全。 */
+    private val closed = AtomicBoolean(false)
     private var defaultFontSizeSp: Float = DEFAULT_TERMINAL_FONT_SIZE_SP
 
     private val _tabList = MutableStateFlow<List<TerminalTabUi>>(emptyList())
@@ -404,6 +408,39 @@ internal class ServerTerminalWorkspace(
         publishActiveState()
     }
 
+    /**
+     * 关闭整个工作区：取消作用域、关闭所有活跃的 socket 与协程任务。
+     * 幂等且线程安全，可从任意线程调用；重复调用不会产生副作用。
+     * 关闭后 readLoop / reconnectLoop / resizeLoop 等协程都会正常退出，连接得到释放。
+     */
+    fun close() {
+        if (!closed.compareAndSet(false, true)) return
+        val snapshot = synchronized(lock) {
+            val copy = tabs.toList()
+            tabs.clear()
+            _activeTabId.value = null
+            publishTabsLocked()
+            copy
+        }
+        snapshot.forEach { tab ->
+            tab.readerJob?.cancel()
+            tab.reconnectJob?.cancel()
+            tab.resizeJob?.cancel()
+        }
+        // socket.close() 为挂起函数，需在作用域内执行；关闭全部 socket 后再取消作用域，
+        // 避免作用域提前取消导致连接未被真正关闭。
+        scope.launch {
+            snapshot.forEach { tab ->
+                try {
+                    tab.socket?.close()
+                } catch (_: Exception) {
+                }
+            }
+            scope.cancel()
+        }
+        publishActiveState()
+    }
+
     private fun activeTabLocked(): RuntimeTab? {
         val id = _activeTabId.value ?: return null
         return tabs.firstOrNull { it.id == id }
@@ -562,5 +599,17 @@ internal object ServerTerminalRegistry {
         synchronized(lock) {
             return byServer.getOrPut(serverId) { ServerTerminalWorkspace(api, conn) }
         }
+    }
+
+    /**
+     * 释放指定服务器的终端工作区：调用其 [ServerTerminalWorkspace.close] 关闭连接与协程，
+     * 并从注册表中移除，避免服务器删除或会话关闭后 scope 与连接长期驻留。
+     * 对不存在的 serverId 为安全无操作。
+     */
+    fun release(serverId: String) {
+        val workspace = synchronized(lock) {
+            byServer.remove(serverId)
+        }
+        workspace?.close()
     }
 }

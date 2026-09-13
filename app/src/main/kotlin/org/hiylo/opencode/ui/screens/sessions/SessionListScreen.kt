@@ -273,6 +273,7 @@ fun SessionListScreen(
     val recentDirectoryCount by viewModel.recentDirectoryCount.collectAsState()
     val compactSessions by viewModel.compactSessions.collectAsState()
     val isAmoled = isAmoledTheme()
+    val context = LocalContext.current
     // Navigate to newly created session
     LaunchedEffect(viewModel) {
         viewModel.navigateToSession
@@ -342,6 +343,16 @@ fun SessionListScreen(
             }
         }
         sortDisplayGroups(filtered, sortMode)
+    }
+
+    val recentSessions = remember(visibleGroups, sortMode) {
+        visibleGroups
+            .flatMap { group -> group.sessions.map { group to it } }
+            .sortedWith(
+                compareBy(displaySessionComparator(sortMode)) {
+                    it: Pair<ProjectSessionGroup, SessionItem> -> it.second
+                },
+            )
     }
 
     LaunchedEffect(topSessionId, searchQuery.isNotBlank()) {
@@ -824,14 +835,11 @@ fun SessionListScreen(
                             }
                         }
                         if (!groupByProject) {
-                            val recentSessions = visibleGroups
-                                .flatMap { group -> group.sessions.map { group to it } }
-                                .sortedWith(
-                                    compareBy(displaySessionComparator(sortMode)) {
-                                        it: Pair<ProjectSessionGroup, SessionItem> -> it.second
-                                    },
-                                )
-                            items(recentSessions, key = { (_, item) -> item.session.id }) { (group, item) ->
+                            items(
+                                recentSessions,
+                                key = { (_, item) -> item.session.id },
+                                contentType = { it::class },
+                            ) { (group, item) ->
                                 val untitledLabel = stringResource(R.string.session_untitled)
                                 SessionRow(
                                     item = item,
@@ -2112,7 +2120,7 @@ private fun SessionRow(
     onDeleteCategory: (String) -> Unit,
     onRename: () -> Unit,
     onDelete: () -> Unit,
-    onArchive: () -> Unit
+    onArchive: () -> Unit,
 ) {
     val isAmoled = isAmoledTheme()
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current

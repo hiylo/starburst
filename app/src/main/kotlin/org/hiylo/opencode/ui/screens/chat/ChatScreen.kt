@@ -786,6 +786,16 @@ internal enum class LocalAttachmentValidation { ACCEPTED, UNSUPPORTED, TOO_LARGE
 
 private const val MAX_DOCUMENT_ATTACHMENT_BYTES = 10 * 1024 * 1024
 private const val MAX_TEXT_ATTACHMENT_BYTES = 2 * 1024 * 1024
+
+/**
+ * 单条消息进入 Markdown 渲染器的最大字符数。
+ * 超过该阈值时降级为纯文本预览，避免病态内容（如大量未闭合的 HTML 标签）
+ * 让 mikepenz 解析器长时间占满主线程并耗尽堆内存（曾导致 512MB OOM 闪退）。
+ */
+private const val MAX_MARKDOWN_RENDER_CHARS = 40_000
+
+/** 超长内容降级预览时最多展示的字符数。 */
+private const val MARKDOWN_PREVIEW_CHARS = 8_000
 private val TEXT_FILE_EXTENSIONS = setOf(
     "txt", "md", "markdown", "json", "jsonl", "xml", "yaml", "yml", "toml", "csv", "tsv",
     "kt", "kts", "java", "js", "jsx", "ts", "tsx", "py", "rb", "go", "rs", "c", "h", "cpp", "hpp",
@@ -1127,6 +1137,7 @@ fun ChatScreen(
     isServerConnected: Boolean = true,
     serverBaseUrl: String = "",
     onOpenChatLink: (url: String) -> Unit = {},
+    onOpenSharedSession: (shareId: String) -> Unit = {},
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -1218,6 +1229,9 @@ fun ChatScreen(
         }
     }
     val startVoiceInput = {
+        // 记住按住说话之前输入框里的内容，识别结果只替换它后面的部分。
+        asrSuppressed = false
+        asrPrefix = inputText.text
         val granted = ContextCompat.checkSelfPermission(
             context, Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
@@ -2119,6 +2133,19 @@ fun ChatScreen(
                                     }
                                 )
                             }
+                            if (uiState.shareUrl != null) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_view_share)) },
+                                    onClick = {
+                                        showMenu = false
+                                        val shareId = uiState.shareUrl.orEmpty().trimEnd('/').substringAfterLast('/')
+                                        if (shareId.isNotBlank()) onOpenSharedSession(shareId)
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Visibility, contentDescription = null)
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_export_session)) },
                                 onClick = {
@@ -2169,7 +2196,7 @@ fun ChatScreen(
                                     Icon(Icons.Default.DataObject, contentDescription = null)
                                 }
                             )
-                        }
+                            }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -2268,6 +2295,7 @@ fun ChatScreen(
                                 }
                             }
                             inputText = TextFieldValue("")
+                            asrSuppressed = true
                             if (isShellMode) {
                                 inputMode = ChatInputMode.NORMAL.name
                             }
@@ -2297,6 +2325,7 @@ fun ChatScreen(
                         }
                         if (viewModel.sendMessage(allParts, attachmentParts)) {
                             inputText = TextFieldValue("")
+                            asrSuppressed = true
                             attachments.clear()
                             viewModel.clearConfirmedPaths()
                             viewModel.clearFileSearch()
@@ -3167,6 +3196,9 @@ fun ChatScreen(
                                 } else null,
                                 onQuoteReply = {
                                     viewModel.quoteMessage(chatMessage.message.id)
+                                },
+                                onBookmark = {
+                                    viewModel.addBookmark(chatMessage.message.id)
                                 },
                             )
                             }
@@ -5030,6 +5062,7 @@ private fun ChatMessageBubble(
     onEdit: (() -> Unit)? = null,
     onSummarize: (() -> Unit)? = null,
     onQuoteReply: (() -> Unit)? = null,
+    onBookmark: (() -> Unit)? = null,
     onNavigateToChildSession: (String) -> Unit = {},
 ) {
     val chatMessage = chatMessages.last()
@@ -5310,6 +5343,7 @@ private fun ChatMessageBubble(
                         onEdit = onEdit,
                         onSummarize = onSummarize,
                         onQuoteReply = onQuoteReply,
+                        onBookmark = onBookmark,
                     )
                 }
             }
@@ -5365,6 +5399,16 @@ private fun ChatMessageBubble(
                     },
                 )
             }
+            if (onBookmark != null) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.chat_bookmark)) },
+                    leadingIcon = { Icon(Icons.Default.BookmarkBorder, contentDescription = null) },
+                    onClick = {
+                        longPressMenuExpanded = false
+                        onBookmark()
+                    },
+                )
+            }
         }
     }
 }
@@ -5380,6 +5424,7 @@ private fun MessageMetadataRow(
     onEdit: (() -> Unit)?,
     onSummarize: (() -> Unit)?,
     onQuoteReply: (() -> Unit)? = null,
+    onBookmark: (() -> Unit)? = null,
 ) {
     val hapticView = LocalView.current
     val hapticOn = LocalHapticFeedbackEnabled.current
@@ -5850,6 +5895,19 @@ private fun MarkdownContent(
     val normalizedMarkdown = remember(markdown) {
         normalizeTaskListMarkers(preserveRawHtmlPayload(markdown))
     }
+
+    // 超长内容（含病态 markdown，如大量未闭合 HTML 标签）会让 mikepenz 解析器
+    // 长时间占用主线程并耗尽堆内存。超过阈值时降级为可滚动纯文本预览，
+    // 点击可展开查看全文（纯文本，不走 markdown 解析）。
+    if (normalizedMarkdown.length > MAX_MARKDOWN_RENDER_CHARS) {
+        LargeMarkdownFallback(
+            text = markdown,
+            textColor = textColor,
+            isUser = isUser,
+        )
+        return
+    }
+
     val isAmoled = isAmoledTheme()
 
     // Inline code: keep text styling, but no opaque background so selection remains visible.
@@ -6047,6 +6105,66 @@ private fun MarkdownContent(
                 }
             },
         )
+    }
+}
+
+/**
+ * 超长内容的降级渲染：不走 markdown 解析器，直接展示可滚动、可选择的纯文本。
+ * 默认仅预览前 [MARKDOWN_PREVIEW_CHARS] 个字符，点击「查看全文」后展开完整内容，
+ * 避免病态输入把主线程拖死或触发 OOM。
+ */
+@Composable
+private fun LargeMarkdownFallback(
+    text: String,
+    textColor: Color,
+    isUser: Boolean,
+) {
+    val isAmoled = isAmoledTheme()
+    var showFullText by remember { mutableStateOf(false) }
+    val displayText = if (showFullText) text else text.take(MARKDOWN_PREVIEW_CHARS)
+    val previewTruncated = !showFullText && text.length > MARKDOWN_PREVIEW_CHARS
+
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        if (previewTruncated) {
+            Text(
+                text = stringResource(R.string.chat_large_content_notice, MARKDOWN_PREVIEW_CHARS),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isUser) textColor.copy(alpha = 0.75f) else MaterialTheme.colorScheme.tertiary,
+            )
+        }
+        Surface(
+            shape = RoundedCornerShape(6.dp),
+            color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface,
+            border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)) else null,
+            tonalElevation = if (isAmoled) 0.dp else 1.dp,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(modifier = Modifier.padding(4.dp)) {
+                SelectionContainer {
+                    Text(
+                        text = displayText,
+                        style = CodeTypography.copy(fontSize = 12.sp),
+                        color = textColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = (LocalConfiguration.current.screenHeightDp.dp / 2).coerceAtLeast(200.dp))
+                            .verticalScroll(rememberScrollState()),
+                    )
+                }
+                if (text.length > MARKDOWN_PREVIEW_CHARS) {
+                    TextButton(
+                        onClick = { showFullText = !showFullText },
+                        modifier = Modifier.align(Alignment.End),
+                    ) {
+                        Text(
+                            text = stringResource(
+                                if (showFullText) R.string.chat_collapse else R.string.chat_show_full_text,
+                            ),
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -8584,6 +8702,7 @@ internal fun retryDelaySeconds(nextAtMillis: Long, nowMillis: Long): Long =
 @Composable
 private fun SuggestionRow(
     suggestions: List<String>,
+    suggestionsSource: SuggestionSource? = null,
     isGenerating: Boolean,
     error: String?,
     streamText: String = "",

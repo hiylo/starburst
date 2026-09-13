@@ -83,6 +83,8 @@ private const val SSE_STALL_TIMEOUT_MS = 30_000L
 private const val SSE_STALL_CHECK_INTERVAL_MS = 15_000L
 /** 会话完成兜底轮询间隔：SSE 假死收不到 session.idle 时，靠轮询 /session/status 检测 busy→idle。 */
 private const val COMPLETION_POLL_INTERVAL_MS = 15_000L
+/** 通知正文结果摘要的最大字符数（约 80 字）。 */
+private const val NOTIFICATION_SUMMARY_MAX_CHARS = 80
 
 internal fun hasFailedConnectionTimedOut(failureStartedAt: Long, now: Long): Boolean {
     return now - failureStartedAt >= FAILED_CONNECTION_TIMEOUT_MS
@@ -782,6 +784,15 @@ class OpenCodeConnectionService : Service() {
     private suspend fun pollSessionCompletions() {
         for ((serverId, state) in connections) {
             if (!state.isConnected) continue
+            val localStatuses = eventReducer.sessionStatuses.value
+            val serverSessionIds = eventReducer.serverSessions.value[serverId].orEmpty()
+            // 耗电优化：本地 SSE 状态无任何 busy/retry 会话、且上一轮也未发现活跃会话时，
+            // 直接跳过网络轮询（/session/status 每 15s 无条件请求在空闲时白耗电）。
+            // SSE 假死时会话停留在旧 busy 状态，lastBusy 兜底保证仍会继续轮询，不会丢完成通知。
+            val hasLocalActive = serverSessionIds.any { sid ->
+                localStatuses[sid] is SessionStatus.Busy || localStatuses[sid] is SessionStatus.Retry
+            }
+            if (!hasLocalActive && lastBusySessions[serverId].orEmpty().isEmpty()) continue
             val statuses = try {
                 api.listSessionStatuses(state.conn)
             } catch (e: CancellationException) {
@@ -800,7 +811,7 @@ class OpenCodeConnectionService : Service() {
                 // 补齐假死期间漏掉的消息，否则 latestNotifiableAssistantMessageId 找不到最新 assistant 消息。
                 try {
                     val messages = api.listMessages(state.conn, sessionId, limit = 50)
-                    eventReducer.mergeMessages(sessionId, messages)
+                    eventReducer.mergeMessages(sessionId, messages, serverId)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -964,6 +975,7 @@ class OpenCodeConnectionService : Service() {
                     eventReducer.mergeMessages(
                         session.id,
                         api.listMessages(conn, session.id, limit = 50, directory = session.directory),
+                        server.id,
                     )
                 } catch (e: CancellationException) {
                     throw e
@@ -1201,6 +1213,24 @@ class OpenCodeConnectionService : Service() {
         return if (hasTextOutput) latestAssistant.id else null
     }
 
+    /**
+     * 取会话最后一条 assistant 消息的文本摘要（仅 Part.Text），用于通知正文。
+     * 截断到 [NOTIFICATION_SUMMARY_MAX_CHARS] 字；无文本时返回 null。
+     */
+    private fun buildAssistantMessageSummary(sessionId: String): String? {
+        val sessionMessages = eventReducer.messages.value[sessionId] ?: return null
+        val latestAssistant = sessionMessages
+            .asReversed()
+            .firstOrNull { it is Message.Assistant } as? Message.Assistant ?: return null
+        val parts = eventReducer.parts.value[latestAssistant.id] ?: return null
+        val text = parts.filterIsInstance<Part.Text>()
+            .map { it.text.trim() }
+            .filter { it.isNotEmpty() }
+            .joinToString(" ")
+        if (text.isEmpty()) return null
+        return text.take(NOTIFICATION_SUMMARY_MAX_CHARS)
+    }
+
     private fun getProjectName(directory: String?): String? {
         if (directory.isNullOrBlank()) return null
         return directory.trimEnd('/').substringAfterLast('/')
@@ -1250,11 +1280,35 @@ class OpenCodeConnectionService : Service() {
         )
     }
 
+    /**
+     * 构造「重试」按钮的广播 PendingIntent：携带 serverId/sessionId，由后续的
+     * BroadcastReceiver 监听 [ACTION_RETRY_SESSION] 触发对应会话重试。
+     */
+    private fun createRetrySessionPendingIntent(
+        server: ServerConfig,
+        sessionId: String?,
+        requestCode: Int,
+    ): PendingIntent {
+        val intent = Intent(ACTION_RETRY_SESSION).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_SERVER_ID, server.id)
+            sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
+        }
+        return PendingIntent.getBroadcast(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+
     companion object {
         const val ACTION_OPEN_SESSION = "org.hiylo.opencode.OPEN_SESSION"
         const val ACTION_DISCONNECT = "org.hiylo.opencode.DISCONNECT"
         const val ACTION_EXIT = "org.hiylo.opencode.EXIT"
         const val ACTION_APP_EXIT = "org.hiylo.opencode.APP_EXIT"
+        /** 通知「重试」按钮触发的广播 action，由后续的 BroadcastReceiver 负责实际重试逻辑。 */
+        const val ACTION_RETRY_SESSION = "org.hiylo.opencode.RETRY_SESSION"
         const val EXTRA_SERVER_URL = "server_url"
         const val EXTRA_SERVER_USERNAME = "server_username"
         const val EXTRA_SERVER_PASSWORD = "server_password"
@@ -1421,7 +1475,9 @@ class OpenCodeConnectionService : Service() {
 
     private suspend fun showTaskCompleteNotification(server: ServerConfig, sessionId: String) {
         val (sessionTitle, _) = getSessionInfo(sessionId)
-        val body = sessionTitle?.takeIf { it.isNotBlank() } ?: getString(R.string.notification_new_session)
+        // 标题用会话名，正文用最后一条 assistant 消息的结果摘要；摘要为空时回退到默认文案。
+        val title = sessionTitle?.takeIf { it.isNotBlank() } ?: getString(R.string.notification_new_session)
+        val body = buildAssistantMessageSummary(sessionId) ?: getString(R.string.notification_new_session)
 
         val pendingIntent = createSessionPendingIntent(server, sessionId, sessionId.hashCode())
 
@@ -1430,7 +1486,7 @@ class OpenCodeConnectionService : Service() {
 
         val notifId = eventNotificationId(server.id, sessionId, 0)
         val builder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(getString(R.string.notification_response_ready))
+            .setContentTitle(title)
             .setContentText(body)
             .setSubText(server.displayName)
             .setSmallIcon(R.mipmap.ic_launcher)
@@ -1439,12 +1495,45 @@ class OpenCodeConnectionService : Service() {
             .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setGroup("server_${server.id}")
 
+        // 高优先级事件走「推送式悬浮弹窗」，而不是只在通知栏堆一句内容。
+        if (!silent) {
+            builder.setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
+        }
+
+        // TODO i18n 「查看」文案暂硬编码，后续统一抽取到 strings.xml
+        builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), pendingIntent)
+
         if (!silent) {
             builder.setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setVibrate(longArrayOf(0, 500, 200, 500))
         }
 
         postEventNotification(server, sessionId, notifId, builder.build())
+    }
+
+    /**
+     * 构造「悬浮弹窗」用的 full-screen PendingIntent：点击打开对应会话。
+     * 复用 [createSessionPendingIntent] 的参数格式，但 requestCode 偏移以区分弹窗入口。
+     */
+    private fun popupPendingIntent(server: ServerConfig, sessionId: String?, requestCode: Int): PendingIntent {
+        val sessionPath = sessionId?.let { buildSessionPath(it) }
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = ACTION_OPEN_SESSION
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(EXTRA_SERVER_URL, server.url)
+            putExtra(EXTRA_SERVER_USERNAME, server.username)
+            putExtra(EXTRA_SERVER_PASSWORD, server.password ?: "")
+            putExtra(EXTRA_SERVER_NAME, server.displayName)
+            putExtra(EXTRA_SERVER_ID, server.id)
+            sessionPath?.let { putExtra(EXTRA_SESSION_PATH, it) }
+            sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
+        }
+        return PendingIntent.getActivity(
+            this,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
     }
 
     private fun showPermissionNotification(server: ServerConfig, sessionId: String, permission: String) {
@@ -1470,6 +1559,7 @@ class OpenCodeConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(longArrayOf(0, 300, 100, 300))
+            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
             .setGroup("server_${server.id}")
             .build()
 
@@ -1499,6 +1589,7 @@ class OpenCodeConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(longArrayOf(0, 300, 100, 300))
+            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
             .setGroup("server_${server.id}")
             .build()
 
@@ -1506,29 +1597,32 @@ class OpenCodeConnectionService : Service() {
     }
 
     private fun showErrorNotification(server: ServerConfig, sessionId: String?, error: String) {
-        val body = if (sessionId != null) {
-            val (sessionTitle, _) = getSessionInfo(sessionId)
-            sessionTitle ?: error.ifBlank { getString(R.string.error_unknown) }
-        } else {
-            error.ifBlank { getString(R.string.error_unknown) }
-        }
+        // 正文直接显示错误摘要
+        val body = error.ifBlank { getString(R.string.error_unknown) }
 
         val notifId = eventNotificationId(server.id, sessionId ?: "error", 3000)
-        val pendingIntent = createSessionPendingIntent(server, sessionId, notifId)
+        val viewPendingIntent = createSessionPendingIntent(server, sessionId, notifId)
 
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
             .setContentTitle(getString(R.string.notification_session_error))
             .setContentText(body)
             .setSubText(server.displayName)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(pendingIntent)
+            .setContentIntent(viewPendingIntent)
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
             .setGroup("server_${server.id}")
-            .build()
 
-        postEventNotification(server, sessionId, notifId, notification)
+        // TODO i18n 「查看」「重试」文案暂硬编码，后续统一抽取到 strings.xml
+        builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), viewPendingIntent)
+        if (sessionId != null) {
+            val retryPendingIntent = createRetrySessionPendingIntent(server, sessionId, notifId + 1)
+            builder.addAction(android.R.drawable.ic_menu_revert, getString(R.string.notification_action_retry), retryPendingIntent)
+        }
+
+        postEventNotification(server, sessionId, notifId, builder.build())
     }
 
     private fun postEventNotification(

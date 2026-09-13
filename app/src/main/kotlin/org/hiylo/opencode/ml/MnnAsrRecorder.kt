@@ -31,7 +31,7 @@ import kotlinx.coroutines.withContext
  * 使用系统 [AudioRecord] 采集 16kHz 单声道 PCM，分块喂给 [MnnAsr] 的识别流，
  * 每次解码后回调当前累积识别文本（实时上屏）；松手调用 [stop] 收尾。
  */
-class MnnAsrRecorder(private val context: Context) {
+class MnnAsrRecorder(private val context: Context) : AsrSession {
 
     /** 采样率，必须与模型 FeatureConfig 一致。 */
     private val sampleRate = 16000
@@ -39,24 +39,10 @@ class MnnAsrRecorder(private val context: Context) {
     /** 每次读取的样本数（约 100ms 一块）。 */
     private val chunkSamples = 1600
 
-    interface Listener {
-        /** 开始录音。 */
-        fun onStart()
-
-        /** 实时识别文本（当前累积的全部内容）。 */
-        fun onPartialResult(text: String)
-
-        /** 识别出错。 */
-        fun onError(message: String)
-
-        /** 结束（含松手正常结束与取消）。 */
-        fun onStopped()
-    }
-
     private var record: AudioRecord? = null
     private var stream: OnlineStream? = null
     private var job: Job? = null
-    private var listener: Listener? = null
+    private var listener: AsrSession.Listener? = null
     private val scope = kotlinx.coroutines.CoroutineScope(Dispatchers.IO)
 
     @Volatile
@@ -65,8 +51,13 @@ class MnnAsrRecorder(private val context: Context) {
     /**
      * 开始录音识别。需已持有 RECORD_AUDIO 权限且模型已加载。
      */
-    suspend fun start(listener: Listener): Boolean = withContext(Dispatchers.IO) {
+    /** 松手为 true（需要 finish 收尾并上屏），上滑取消为 false。 */
+    @Volatile
+    private var stopRequested = false
+
+    override suspend fun start(listener: AsrSession.Listener): Boolean = withContext(Dispatchers.IO) {
         if (running) return@withContext false
+        stopRequested = false
         if (!MnnAsr.ensureLoaded(context)) {
             listener.onError("ASR model not loaded")
             return@withContext false
@@ -98,14 +89,16 @@ class MnnAsrRecorder(private val context: Context) {
     }
 
     /** 停止录音，等待最终结果并回调。 */
-    suspend fun stop() {
+    override suspend fun stop() {
+        stopRequested = true
         running = false
         job?.join()
         job = null
     }
 
     /** 取消录音，不产生结果。 */
-    suspend fun cancel() {
+    override suspend fun cancel() {
+        stopRequested = false
         running = false
         job?.join()
         job = null
@@ -122,28 +115,32 @@ class MnnAsrRecorder(private val context: Context) {
             rec.startRecording()
             val buffer = FloatArray(chunkSamples)
             var emptyRuns = 0
-            while (running && currentCoroutineContext().isActive) {
+            while (currentCoroutineContext().isActive) {
                 val read = rec.read(buffer, 0, buffer.size, AudioRecord.READ_BLOCKING)
                 if (read <= 0) {
                     emptyRuns++
-                    if (emptyRuns > 10) break
+                    if (emptyRuns > 10 || !running) break
                     delay(10)
                     continue
                 }
                 emptyRuns = 0
                 val samples = if (read == buffer.size) buffer else buffer.copyOf(read)
                 val text = MnnAsr.acceptWaveform(stream, samples)
-                if (text != null) {
+                // 松手之后不再回传中间结果，避免松手后输入框继续蹦字。
+                if (running && text != null) {
                     withContext(Dispatchers.Main) { l.onPartialResult(text) }
                 }
+                if (!running) break
             }
-            // 松手：收尾并取最终结果。
-            val final = MnnAsr.finish(stream)
+            // 松手：收尾并取最终结果；上滑取消则丢弃，不上屏。
+            if (stopRequested) {
+                val final = MnnAsr.finish(stream)
+                withContext(Dispatchers.Main) {
+                    if (final.isNotBlank()) l.onPartialResult(final)
+                }
+            }
             this@MnnAsrRecorder.stream = null
-            withContext(Dispatchers.Main) {
-                if (final.isNotBlank()) l.onPartialResult(final)
-                l.onStopped()
-            }
+            withContext(Dispatchers.Main) { l.onStopped() }
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

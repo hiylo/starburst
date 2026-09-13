@@ -168,6 +168,14 @@ fun ServerManagementScreen(
                     label = stringResource(R.string.server_mgmt_load),
                     value = uiState.loadAverage ?: stringResource(R.string.server_mgmt_unknown),
                 )
+                InfoRow(
+                    label = stringResource(R.string.server_mgmt_process_cpu),
+                    value = uiState.processCpu ?: stringResource(R.string.server_mgmt_unknown),
+                )
+                InfoRow(
+                    label = stringResource(R.string.server_mgmt_process_memory),
+                    value = uiState.processMemory ?: stringResource(R.string.server_mgmt_unknown),
+                )
             }
 
             // 服务配置

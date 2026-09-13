@@ -11,11 +11,18 @@ package org.hiylo.opencode.data.repository
 
 import org.hiylo.opencode.logging.AppLogger as Log
 import org.hiylo.opencode.BuildConfig
+import org.hiylo.opencode.data.search.MessageFtsIndex
 import org.hiylo.opencode.domain.model.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -24,12 +31,16 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
+import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "EventReducer"
 private const val MAX_PENDING_DELTA_KEYS = 128
 private const val MAX_PENDING_DELTA_CHARS = 65_536
+
+/** 流式 delta 累积 flush 间隔（毫秒），与 UI 的节流采样对齐。 */
+private const val DELTA_FLUSH_INTERVAL_MS = 50L
 
 internal fun compactSessionForCache(session: Session): Session = session.copy(
     summary = session.summary?.copy(diffs = null),
@@ -61,7 +72,25 @@ data class WorkspaceScope(val serverId: String, val workspaceId: String)
  * Similar to the event-reducer.ts in the WebUI.
  */
 @Singleton
-class EventReducer @Inject constructor() {
+class EventReducer @Inject constructor(
+    private val messageFtsIndex: MessageFtsIndex,
+) {
+    /** 用于异步写入全文索引，避免阻塞事件处理。 */
+    private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    /** 流式 delta 累积缓冲：把高频 text delta 合并后定期 flush，避免每个 delta 都复制整段已累计文本（O(n²)）。 */
+    private val deltaAccumulator = ConcurrentHashMap<PendingDeltaKey, StringBuilder>()
+
+    init {
+        // 定期 flush 累积的 delta（与 UI 的 50ms 节流采样对齐）。
+        indexScope.launch {
+            while (isActive) {
+                delay(DELTA_FLUSH_INTERVAL_MS)
+                flushAccumulatedDeltas()
+            }
+        }
+    }
+
     private val pendingLock = Any()
     private var pendingRevision = 0L
     private val deltaLock = Any()
@@ -690,7 +719,11 @@ class EventReducer @Inject constructor() {
         val messageId = event.part.messageId
         if (isMessageRemoved(messageId)) return
         val key = PendingDeltaKey(event.part.sessionId, messageId, event.part.id)
-        val buffered = synchronized(deltaLock) { pendingDeltas.remove(key)?.toString().orEmpty() }
+        val buffered = synchronized(deltaLock) {
+            val pending = pendingDeltas.remove(key)?.toString().orEmpty()
+            val accumulated = deltaAccumulator.remove(key)?.toString().orEmpty()
+            pending + accumulated
+        }
         val updatedPart = if (buffered.isNotEmpty()) {
             applyTextDelta(event.part, buffered)
         } else {
@@ -716,22 +749,38 @@ class EventReducer @Inject constructor() {
             if (BuildConfig.DEBUG) Log.d(TAG, "Ignoring unsupported delta field=${event.field} part=${event.partId}")
             return
         }
-        var applied = false
-        _parts.update { current ->
-            val messageParts = current[event.messageId]?.toMutableList() ?: return@update current
-            val partIndex = messageParts.indexOfFirst { it.id == event.partId }
-            
-            if (partIndex < 0) return@update current
-            
-            val part = messageParts[partIndex]
-            val updatedPart = applyTextDelta(part, event.delta)
-            if (updatedPart === part) return@update current
-
-            messageParts[partIndex] = updatedPart
-            applied = true
-            current + (event.messageId to messageParts)
+        val key = PendingDeltaKey(event.sessionId, event.messageId, event.partId)
+        // part 尚不存在时走旧缓冲（等 part.updated 事件到达再合并）。
+        val partExists = _parts.value[event.messageId]?.any { it.id == event.partId } == true
+        if (!partExists) {
+            bufferDelta(event)
+            return
         }
-        if (!applied) bufferDelta(event)
+        // part 已存在：delta 累积到 buffer，由定时 flush 一次性合并，避免每次 delta 复制整段已累计文本（O(n²)）。
+        synchronized(deltaLock) {
+            deltaAccumulator.getOrPut(key) { StringBuilder() }.append(event.delta)
+        }
+    }
+
+    /** 把累积的 delta 一次性合并进 _parts（每次合并只复制一次整段文本）。 */
+    private fun flushAccumulatedDeltas() {
+        val snapshot = synchronized(deltaLock) {
+            if (deltaAccumulator.isEmpty()) return
+            deltaAccumulator.entries.map { it.key to it.value.toString() }.also { deltaAccumulator.clear() }
+        }
+        if (snapshot.isEmpty()) return
+        _parts.update { current ->
+            var updated = current
+            for ((key, text) in snapshot) {
+                val messageParts = updated[key.messageId]?.toMutableList() ?: continue
+                val idx = messageParts.indexOfFirst { it.id == key.partId }
+                if (idx < 0) continue
+                val part = messageParts[idx]
+                messageParts[idx] = applyTextDelta(part, text)
+                updated = updated + (key.messageId to messageParts)
+            }
+            updated
+        }
     }
     
     private fun handleMessagePartRemoved(event: SseEvent.MessagePartRemoved) {
@@ -1023,7 +1072,7 @@ class EventReducer @Inject constructor() {
     /**
      * Load messages for a session
      */
-    fun mergeMessages(sessionId: String, messages: List<MessageWithParts>) {
+    fun mergeMessages(sessionId: String, messages: List<MessageWithParts>, serverId: String = "") {
         val visibleMessages = messages.filterNot { isMessageRemoved(it.info.id) }
         visibleMessages.forEach { recordLastUserMessage(it.info) }
         _messages.update { current ->
@@ -1040,6 +1089,21 @@ class EventReducer @Inject constructor() {
         _parts.update { current ->
             current + partsMap.mapValues { (messageId, loadedParts) ->
                 mergeLoadedParts(current[messageId].orEmpty(), loadedParts)
+            }
+        }
+        indexMessages(serverId, sessionId, visibleMessages)
+    }
+
+    /** 异步把消息文本写入全文索引（用于全文消息搜索）。 */
+    private fun indexMessages(serverId: String, sessionId: String, messages: List<MessageWithParts>) {
+        if (serverId.isBlank() || sessionId.isBlank()) return
+        val title = _sessions.value.firstOrNull { it.id == sessionId }?.title ?: ""
+        indexScope.launch {
+            messages.forEach { msg ->
+                val text = msg.parts.filterIsInstance<Part.Text>().joinToString("\n") { it.text }
+                if (text.isNotBlank()) {
+                    messageFtsIndex.index(serverId, sessionId, msg.info.id, title, text)
+                }
             }
         }
     }

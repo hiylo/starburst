@@ -57,6 +57,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -213,6 +214,7 @@ data class RevertedDraftPayload(
  * A flattened chat message for the UI.
  * Combines Message info with its parts.
  */
+@Immutable
 data class ChatMessage(
     val message: Message,
     val parts: List<Part>,
@@ -224,6 +226,7 @@ data class ChatMessage(
 
 enum class MessageDelivery { QUEUED, PROMOTED }
 
+@Immutable
 data class ChatTurn(val messages: List<ChatMessage>) {
     val isUser: Boolean get() = messages.singleOrNull()?.isUser == true
     val key: String get() = if (isUser) "u_${messages.single().message.id}" else "t_${messages.first().message.id}"
@@ -308,6 +311,7 @@ class ChatViewModel @Inject constructor(
     val serverName: String = savedStateHandle.get<String>("serverName").orEmpty()
     val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
     val sessionId: String = savedStateHandle.get<String>("sessionId").orEmpty()
+    private val retryOnOpen: Boolean = savedStateHandle.get<Boolean>("retry") ?: false
 
     private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
@@ -406,7 +410,12 @@ class ChatViewModel @Inject constructor(
     private val _speechError = MutableStateFlow<Int?>(null)
     val speechError: StateFlow<Int?> = _speechError
     private var speechRecognition: SpeechRecognition? = null
-    private var asrRecorder: MnnAsrRecorder? = null
+    /** 端侧 MNN 模型不可用时回退到后端代理的流式引擎，两者共用同一套回调。 */
+    private var asrRecorder: AsrSession? = null
+
+    /** 后端流式识别引擎是否可用（启动时探测一次），决定麦克风按钮是否显示。 */
+    private val _backendAsrAvailable = MutableStateFlow(false)
+    val backendAsrAvailable: StateFlow<Boolean> = _backendAsrAvailable
 
     /** 用户自定义 Slash 命令。 */
     val customCommands: StateFlow<List<CustomSlashCommand>> =
@@ -744,10 +753,17 @@ class ChatViewModel @Inject constructor(
                 delay(STREAM_THROTTLE_MS)
             }
         }
-        // Preload the on-device MNN model in the background so that tapping
-        // "Generate suggestions" later starts inference immediately.
-        viewModelScope.launch {
-            runCatching { MnnLlm.preload(context) }
+        // 通知「重试」按钮触发的自动重试：等消息加载完成后，重新生成最后一条 assistant 消息。
+        if (retryOnOpen) {
+            viewModelScope.launch {
+                delay(1500)
+                val lastAssistantId = eventReducer.messages.value[sessionId]
+                    .orEmpty()
+                    .lastOrNull { it is Message.Assistant }?.id
+                if (lastAssistantId != null) {
+                    regenerateMessage(lastAssistantId)
+                }
+            }
         }
         viewModelScope.launch {
             eventReducer.messages.collect { messagesBySession ->
@@ -763,19 +779,21 @@ class ChatViewModel @Inject constructor(
             }
         }
 
-        // Restore draft from disk
-        val draft = draftRepository.getDraft(sessionId)
-        if (draft != null) {
-            _draftText.value = draft.text
-            _draftAttachmentUris.value = draft.imageUris
-            if (draft.confirmedFilePaths.isNotEmpty()) {
-                _confirmedFilePaths.value = draft.confirmedFilePaths.toSet()
-            }
-            if (!draft.selectedAgent.isNullOrBlank()) {
-                _selectedAgent.value = draft.selectedAgent to true
-            }
-            if (!draft.selectedVariant.isNullOrBlank()) {
-                _selectedVariant.value = draft.selectedVariant
+        // Restore draft from disk（异步读盘，避免阻塞主线程导致进入聊天卡顿）
+        viewModelScope.launch(Dispatchers.IO) {
+            val draft = draftRepository.getDraft(sessionId)
+            if (draft != null) {
+                _draftText.value = draft.text
+                _draftAttachmentUris.value = draft.imageUris
+                if (draft.confirmedFilePaths.isNotEmpty()) {
+                    _confirmedFilePaths.value = draft.confirmedFilePaths.toSet()
+                }
+                if (!draft.selectedAgent.isNullOrBlank()) {
+                    _selectedAgent.value = draft.selectedAgent to true
+                }
+                if (!draft.selectedVariant.isNullOrBlank()) {
+                    _selectedVariant.value = draft.selectedVariant
+                }
             }
         }
 
@@ -845,7 +863,7 @@ class ChatViewModel @Inject constructor(
                     (remoteStatus is SessionStatus.Idle && wasBusy)
             if (shouldPollMessages) {
                 val messages = api.listMessages(conn, sessionId, limit = 50, directory = sessionDirectory)
-                eventReducer.mergeMessages(sessionId, messages)
+                eventReducer.mergeMessages(sessionId, messages, serverId)
                 lastMessagePollAt = now
             }
             eventReducer.updateSessionStatus(sessionId, remoteStatus)
@@ -911,7 +929,7 @@ class ChatViewModel @Inject constructor(
                 var recoveryPages = 0
 
                 olderMessagesCursor = nextCursor
-                eventReducer.mergeMessages(sessionId, messages)
+                eventReducer.mergeMessages(sessionId, messages, serverId)
                 reconcilePendingPrompts(
                     authoritative = messages,
                     minimumAgeMs = 10_000L,
@@ -958,7 +976,7 @@ class ChatViewModel @Inject constructor(
                     }
                     messages += olderPage.messages
                     knownIds += olderPage.messages.map { it.info.id }
-                    eventReducer.mergeMessages(sessionId, olderPage.messages)
+                    eventReducer.mergeMessages(sessionId, olderPage.messages, serverId)
                     if (needsRevertHistory) recoveryPages++
                     nextCursor = olderPage.nextCursor?.takeUnless { it == requestedCursor }
                     olderMessagesCursor = nextCursor
@@ -990,7 +1008,7 @@ class ChatViewModel @Inject constructor(
                         )
                         val messages = page.messages
                         olderMessagesCursor = page.nextCursor
-                        eventReducer.mergeMessages(sessionId, messages)
+                        eventReducer.mergeMessages(sessionId, messages, serverId)
                         _hasOlderMessages.value = page.nextCursor != null
                         if (BuildConfig.DEBUG) Log.d(TAG, "Retry succeeded: loaded ${messages.size} messages (limit=$currentMessageLimit)")
                     } catch (retryEx: Exception) {
@@ -1056,7 +1074,7 @@ class ChatViewModel @Inject constructor(
                     recoveryPages < MAX_REVERT_RECOVERY_PAGES &&
                     needsOlderHistoryForRevert(knownIds, revertMessageId)
                 )
-                eventReducer.mergeMessages(sessionId, messages)
+                eventReducer.mergeMessages(sessionId, messages, serverId)
                 olderMessagesCursor = nextCursor
                 _hasOlderMessages.value = nextCursor != null
                 if (BuildConfig.DEBUG) {
@@ -1238,6 +1256,7 @@ class ChatViewModel @Inject constructor(
                     )
                     _fileSearchResults.value = results
                 } catch (e: Exception) {
+                    e.rethrowCancellation()
                     Log.e(TAG, "File search failed", e)
                     _fileSearchResults.value = emptyList()
                 }
@@ -1256,6 +1275,7 @@ class ChatViewModel @Inject constructor(
                 )
                 _fileSearchResults.value = results
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "File search failed", e)
                 _fileSearchResults.value = emptyList()
             }
@@ -1329,6 +1349,9 @@ class ChatViewModel @Inject constructor(
         cancelListening()
         super.onCleared()
         saveDraft()
+        // 释放本会话在 EventReducer 中的消息/parts 缓存，避免所有打开过的会话常驻内存
+        // （老会话累积会无界吃内存，让 app 内存水涨船高）。重新进入会话时会从服务器重新拉取。
+        eventReducer.clearSessionHistory(sessionId)
     }
 
     // ============ Voice input (ASR) ============
@@ -1336,12 +1359,18 @@ class ChatViewModel @Inject constructor(
     /** 开始语音识别（按住说话）。调用方需已确保 RECORD_AUDIO 权限。 */
     fun startListening() {
         if (_isListening.value) return
-        val recorder = MnnAsrRecorder(context)
         _isListening.value = true
         _voiceLevel.value = 0f
-        asrRecorder = recorder
         viewModelScope.launch {
-            val ok = recorder.start(object : MnnAsrRecorder.Listener {
+            val session = createAsrSession()
+            if (session == null) {
+                _isListening.value = false
+                _voiceLevel.value = 0f
+                _speechError.value = R.string.chat_voice_input_error
+                return@launch
+            }
+            asrRecorder = session
+            val ok = session.start(object : AsrSession.Listener {
                 override fun onStart() {
                     _isListening.value = true
                 }
@@ -1357,15 +1386,37 @@ class ChatViewModel @Inject constructor(
                 override fun onStopped() {
                     _isListening.value = false
                     _voiceLevel.value = 0f
-                    if (asrRecorder === recorder) asrRecorder = null
+                    if (asrRecorder === session) asrRecorder = null
                 }
             })
             if (!ok) {
                 _isListening.value = false
                 _voiceLevel.value = 0f
-                if (asrRecorder === recorder) asrRecorder = null
+                if (asrRecorder === session) asrRecorder = null
             }
         }
+    }
+
+    /**
+     * 创建一次录音识别会话：端侧 MNN 模型可用时走端侧；不可用时（模型未下载、
+     * ABI 不匹配）回退到后端代理的流式引擎。两者都不可用返回 null。
+     */
+    private suspend fun createAsrSession(): AsrSession? {
+        if (MnnAsr.ensureLoaded(context)) return MnnAsrRecorder(context)
+        val endpoint = backendAsrEndpoint() ?: return null
+        return ServerAsrRecorder(serverAsrApi, endpoint.first, endpoint.second)
+    }
+
+    /** 解析当前 server 对应的后端地址与 token，用于服务端语音识别。 */
+    private suspend fun backendAsrEndpoint(): Pair<String, String>? {
+        val servers = serverRepository.servers.first()
+        val backend = servers.firstOrNull { it.id == serverId }
+        val host = runCatching { java.net.URL(serverUrl).host }.getOrNull()
+            ?: serverUrl.substringAfter("://").substringBefore(":")
+        if (host.isBlank()) return null
+        val url = (backend?.backendResolvedUrl ?: "http://$host:18880").trimEnd('/')
+        if (url.isBlank()) return null
+        return url to (backend?.backendResolvedToken ?: "ocb_default")
     }
 
     /** 停止语音识别（松手上屏）。 */
@@ -1492,6 +1543,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Sent prompt to session $sessionId (${parts.size} parts)")
                 reconcilePendingMessage(messageId)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to send message", e)
                 _error.value = e.message ?: "Failed to send message"
                 val definiteHttpFailure = e is RuntimeException && e.message?.startsWith("prompt_async failed:") == true
@@ -1519,9 +1571,10 @@ class ChatViewModel @Inject constructor(
             try {
                 val messages = api.listMessages(conn, sessionId, limit = 20)
                 latestMessages = messages
-                eventReducer.mergeMessages(sessionId, messages)
+                eventReducer.mergeMessages(sessionId, messages, serverId)
                 if (messages.any { it.info.id == messageId }) return
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to reconcile pending message $messageId", e)
             }
         }
@@ -1599,6 +1652,7 @@ class ChatViewModel @Inject constructor(
                 onResult(success)
                 if (BuildConfig.DEBUG) Log.d(TAG, "Replied to permission $requestId with $reply: $success")
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to reply to permission", e)
                 onResult(false)
             }
@@ -1613,6 +1667,7 @@ class ChatViewModel @Inject constructor(
                 // Optimistically update session status to Idle so UI reflects change immediately
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Idle)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to abort session", e)
             }
         }
@@ -1643,6 +1698,7 @@ class ChatViewModel @Inject constructor(
                 }
                 onResult(success)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to reply to question $requestId: ${e.javaClass.simpleName}: ${e.message}", e)
                 onResult(false)
             }
@@ -1670,6 +1726,7 @@ class ChatViewModel @Inject constructor(
                 }
                 onResult(success)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to reject question $requestId: ${e.javaClass.simpleName}: ${e.message}", e)
                 onResult(false)
             }
@@ -1693,6 +1750,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Session share completed")
                 onResult(url)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to share session", e)
                 onResult(null)
             }
@@ -1706,6 +1764,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Unshared session $sessionId")
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to unshare session", e)
                 onResult(false)
             }
@@ -1728,6 +1787,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Compacted session $sessionId")
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to compact session", e)
                 onResult(false)
             }
@@ -1789,6 +1849,7 @@ class ChatViewModel @Inject constructor(
                     onResult(true)
                 }
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to export session", e)
                 notificationManager.cancel(notificationId)
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -1818,6 +1879,7 @@ class ChatViewModel @Inject constructor(
                 restoreRevertedDraft(extractRevertedDraft(lastUser))
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to revert session", e)
                 onResult(false)
             }
@@ -1839,6 +1901,7 @@ class ChatViewModel @Inject constructor(
                 restoreRevertedDraft(targetMessage?.let { extractRevertedDraft(it) } ?: fallbackPayload)
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to revert to message $messageId", e)
                 onResult(false)
             }
@@ -1878,6 +1941,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Unreverted session $sessionId")
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to unrevert session", e)
                 onResult(false)
             }
@@ -1892,6 +1956,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Forked session $sessionId -> ${session.id}")
                 onResult(session)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to fork session", e)
                 onResult(null)
             }
@@ -1906,6 +1971,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Renamed session $sessionId to $title")
                 onResult(true)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to rename session", e)
                 onResult(false)
             }
@@ -1955,6 +2021,7 @@ class ChatViewModel @Inject constructor(
                 }
                 onResult(ok)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to execute command", e)
                 onResult(false)
             }
@@ -1991,6 +2058,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Executed shell command in session $sessionId: $ok")
                 onResult(ok)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to execute shell command", e)
                 onResult(false)
             }
@@ -2056,6 +2124,7 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Created new session: ${session.id}")
                 onResult(session)
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Failed to create session", e)
                 onResult(null)
             }
@@ -2389,6 +2458,29 @@ class ChatViewModel @Inject constructor(
         updateDraftText(merged)
     }
 
+    /** 收藏一条消息到书签。 */
+    fun addBookmark(messageId: String) {
+        val message = uiState.value.messages.lastOrNull { it.message.id == messageId } ?: return
+        val text = message.parts
+            .filterIsInstance<Part.Text>()
+            .filterNot { it.ignored == true }
+            .joinToString("\n") { it.text }
+            .trim()
+        if (text.isBlank()) return
+        viewModelScope.launch {
+            bookmarkRepository.add(
+                MessageBookmark(
+                    id = MessageBookmark.buildId(serverId, sessionId, messageId),
+                    serverId = serverId,
+                    sessionId = sessionId,
+                    messageId = messageId,
+                    messageText = text,
+                    createdAt = System.currentTimeMillis(),
+                )
+            )
+        }
+    }
+
     /**
      * 总结一条消息：优先调用云端 LLM，失败或未配置时回退端侧 MNN 模型。
      *
@@ -2502,6 +2594,7 @@ class ChatViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
+                e.rethrowCancellation()
                 Log.e(TAG, "Summary generation failed", e)
                 _summaryError.value = context.getString(R.string.chat_summary_failed)
             } finally {
@@ -2521,7 +2614,8 @@ class ChatViewModel @Inject constructor(
                 "decisions, and open items.\nOutput ONLY the summary — no explanation, no markdown.\n\nContent:\n$text"
         }
     }
-}
+
+    }
 
 /** Prompt asking the model to produce exactly three next-step suggestions as a JSON array. */
 internal const val SUGGESTION_PROMPT =

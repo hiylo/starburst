@@ -34,6 +34,8 @@ import org.hiylo.opencode.service.ServerConnectionStatus
 import org.hiylo.opencode.service.SshRunner
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -54,6 +56,8 @@ data class ServerManagementUiState(
     val memory: String? = null,
     val disk: String? = null,
     val loadAverage: String? = null,
+    val processCpu: String? = null,
+    val processMemory: String? = null,
     val config: ServerConfigResponse = ServerConfigResponse(),
     val connectionHealth: ServerConnectionHealthUi? = null,
     val isLoading: Boolean = true,
@@ -124,6 +128,13 @@ class ServerManagementViewModel @Inject constructor(
     init {
         refresh()
         bindToService()
+        // 定时刷新系统资源信息（内存/磁盘/负载/opencode 进程占用），便于观察卡死时的瞬时占用。
+        viewModelScope.launch {
+            while (isActive) {
+                delay(SYSTEM_INFO_REFRESH_INTERVAL_MS)
+                loadSystemInfo()
+            }
+        }
     }
 
     override fun onCleared() {
@@ -225,6 +236,22 @@ class ServerManagementViewModel @Inject constructor(
                 _uiState.update { it.copy(loadAverage = parseLoadAverage(output)) }
             }
             .onFailure { e -> Log.w(TAG, "Failed to read load average", e) }
+
+        runCatching {
+            shell.runCommand(
+                "ps -eo pcpu,pmem,rss,args | grep -i opencode | grep -v grep | head -1",
+                timeoutMs = 20_000,
+            )
+        }
+            .onSuccess { output ->
+                _uiState.update {
+                    it.copy(
+                        processCpu = parseProcessCpu(output),
+                        processMemory = parseProcessMemory(output),
+                    )
+                }
+            }
+            .onFailure { e -> Log.w(TAG, "Failed to read opencode process", e) }
     }
 
     /** 加载服务配置（GET /config）。 */
@@ -320,8 +347,30 @@ class ServerManagementViewModel @Inject constructor(
         return "${fields[0]} ${fields[1]} ${fields[2]}"
     }
 
+    /** 解析 `ps` 输出中 opencode 进程的 CPU 占用百分比。 */
+    private fun parseProcessCpu(output: String): String? {
+        val fields = output.trim().split(Regex("\\s+"))
+        if (fields.size < 2) return null
+        return "${fields[0]}%"
+    }
+
+    /** 解析 `ps` 输出中 opencode 进程的常驻内存（RSS，单位自适应 KB/MB/GB）。 */
+    private fun parseProcessMemory(output: String): String? {
+        val fields = output.trim().split(Regex("\\s+"))
+        if (fields.size < 3) return null
+        val rssKb = fields[2].toLongOrNull() ?: return null
+        return when {
+            rssKb >= 1024 * 1024 -> String.format("%.2f GB", rssKb / 1024.0 / 1024.0)
+            rssKb >= 1024 -> String.format("%.1f MB", rssKb / 1024.0)
+            else -> "$rssKb KB"
+        }
+    }
+
     private companion object {
         /** 服务重启命令；可按部署方式调整（如 `sudo systemctl restart opencode`）。 */
         const val RESTART_COMMAND: String = "systemctl restart opencode"
+
+        /** 系统资源信息自动刷新间隔（毫秒）。 */
+        const val SYSTEM_INFO_REFRESH_INTERVAL_MS = 5_000L
     }
 }

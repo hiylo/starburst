@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.opencode.data.api.FileNode
 import org.hiylo.opencode.data.api.OpenCodeApi
 import org.hiylo.opencode.data.api.ServerConnection
+import org.hiylo.opencode.data.repository.BackendRepository
 import org.hiylo.opencode.data.repository.EventReducer
 import org.hiylo.opencode.data.repository.DirectoryScope
 import org.hiylo.opencode.data.repository.SettingsRepository
@@ -37,6 +38,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
@@ -198,6 +200,7 @@ class SessionListViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val connectionStateRepository: ServerConnectionStateRepository,
     private val serverRepository: ServerRepository,
+    private val backendRepository: BackendRepository,
 ) : ViewModel() {
 
     val serverUrl: String = savedStateHandle.get<String>("serverUrl").orEmpty()
@@ -205,6 +208,8 @@ class SessionListViewModel @Inject constructor(
     private val password: String = savedStateHandle.get<String>("password").orEmpty()
     val serverName: String = savedStateHandle.get<String>("serverName").orEmpty()
     val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
+    /** 进入即自动新建会话（来自 Widget / 快捷方式「新建会话」入口）。 */
+    private val autoNewSession: Boolean = savedStateHandle.get<Boolean>("autoNewSession") ?: false
 
     private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
@@ -371,6 +376,9 @@ class SessionListViewModel @Inject constructor(
     init {
         loadHomeDir()
         loadSessions()
+        if (autoNewSession) {
+            createNewSession()
+        }
         viewModelScope.launch {
             // Poll statuses periodically. When the SSE stream is connected the server pushes
             // status changes in real-time, so polling is only a fallback and runs infrequently.

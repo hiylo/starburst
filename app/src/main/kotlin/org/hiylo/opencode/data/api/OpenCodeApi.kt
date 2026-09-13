@@ -39,6 +39,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.decodeFromStream
@@ -99,6 +100,9 @@ class OpenCodeApi @Inject constructor(
     companion object {
         private const val TAG = "OpenCodeApi"
         private const val BYTES_PER_MEGABYTE = 1024L * 1024L
+
+        /** 会话分享内容的只读后端基础地址；分享数据的读取与本地 opencode 服务器无关。 */
+        private const val SHARE_BASE_URL = "https://opncd.ai"
     }
 
     // ============ Global ============
@@ -308,6 +312,62 @@ class OpenCodeApi @Inject constructor(
         return httpClient.delete("${conn.baseUrl}/session/$sessionId/share") {
             conn.authHeader?.let { header("Authorization", it) }
         }.body()
+    }
+
+    /**
+     * 通过分享 ID 加载只读会话（标题 + 消息列表）。
+     *
+     * 分享内容托管在公开的分享后端（`https://opncd.ai`），读取接口无需鉴权：
+     * `GET https://opncd.ai/api/share/{shareId}/data`，返回一组按类型区分的条目
+     * （`session` / `message` / `part` / `session_diff` / `model`），本方法将其重组成 [SharedSession]。
+     *
+     * @param conn 服务器连接（分享读取不走本地服务器，此处仅保留以与其它 API 签名保持一致）
+     * @param shareId 分享 ID（分享链接 `https://opncd.ai/s/{shareId}` 的末段）
+     * @return 重组后的只读会话
+     */
+    suspend fun getSharedSession(conn: ServerConnection, shareId: String): SharedSession {
+        val items: List<ShareDataItem> = httpClient.get("$SHARE_BASE_URL/api/share/$shareId/data").body()
+        return assembleSharedSession(items)
+    }
+
+    /** 将分享后端返回的条目流重组成只读会话（session + message + text part）。 */
+    private fun assembleSharedSession(items: List<ShareDataItem>): SharedSession {
+        val sessionObj = items.firstOrNull { it.type == "session" }?.data?.jsonObject
+        val sessionId = sessionObj?.get("id")?.jsonPrimitive?.contentOrNull.orEmpty()
+        val title = sessionObj?.get("title")?.jsonPrimitive?.contentOrNull
+        val createdAt = sessionObj?.get("time")?.jsonObject?.get("created")?.jsonPrimitive?.longOrNull
+
+        val textByMessage = items.asSequence()
+            .filter { it.type == "part" }
+            .mapNotNull { it.data.jsonObject }
+            .filter { part ->
+                part["type"]?.jsonPrimitive?.contentOrNull == "text" &&
+                    part["synthetic"]?.jsonPrimitive?.contentOrNull != "true" &&
+                    part["ignored"]?.jsonPrimitive?.contentOrNull != "true"
+            }
+            .groupBy { it["messageID"]?.jsonPrimitive?.contentOrNull.orEmpty() }
+            .mapValues { (_, parts) ->
+                parts.mapNotNull { it["text"]?.jsonPrimitive?.contentOrNull }.joinToString("\n")
+            }
+
+        val messages = items.asSequence()
+            .filter { it.type == "message" }
+            .mapNotNull { it.data.jsonObject }
+            .mapNotNull { message ->
+                val messageId = message["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val time = message["time"]?.jsonObject
+                SharedMessage(
+                    id = messageId,
+                    role = message["role"]?.jsonPrimitive?.contentOrNull ?: "user",
+                    text = textByMessage[messageId].orEmpty(),
+                    createdAt = time?.get("created")?.jsonPrimitive?.longOrNull,
+                    completedAt = time?.get("completed")?.jsonPrimitive?.longOrNull,
+                )
+            }
+            .sortedBy { it.createdAt }
+            .toList()
+
+        return SharedSession(id = sessionId, title = title, createdAt = createdAt, messages = messages)
     }
 
     /**
@@ -1337,6 +1397,13 @@ data class V2AdmittedPrompt(
 data class MessagePage(
     val messages: List<MessageWithParts>,
     val nextCursor: String?,
+)
+
+/** 分享后端 `/api/share/{shareId}/data` 返回的条目；按 `type` 区分 session/message/part 等。 */
+@Serializable
+data class ShareDataItem(
+    val type: String,
+    val data: JsonElement,
 )
 
 @Serializable
