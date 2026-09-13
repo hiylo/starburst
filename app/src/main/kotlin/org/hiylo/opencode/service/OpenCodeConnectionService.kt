@@ -1500,7 +1500,6 @@ class OpenCodeConnectionService : Service() {
             builder.setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
         }
 
-        // TODO i18n 「查看」文案暂硬编码，后续统一抽取到 strings.xml
         builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), pendingIntent)
 
         if (!silent) {
@@ -1615,7 +1614,6 @@ class OpenCodeConnectionService : Service() {
             .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
             .setGroup("server_${server.id}")
 
-        // TODO i18n 「查看」「重试」文案暂硬编码，后续统一抽取到 strings.xml
         builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), viewPendingIntent)
         if (sessionId != null) {
             val retryPendingIntent = createRetrySessionPendingIntent(server, sessionId, notifId + 1)

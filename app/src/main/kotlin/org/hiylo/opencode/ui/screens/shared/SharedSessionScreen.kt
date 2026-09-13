@@ -45,9 +45,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import org.hiylo.opencode.R
 import org.hiylo.opencode.domain.model.SharedMessage
 import org.hiylo.opencode.ui.components.AppCardShape
 import org.hiylo.opencode.ui.components.appAmoledBorder
@@ -79,14 +81,14 @@ fun SharedSessionScreen(
                         ?.session
                         ?.title
                         ?.takeIf { it.isNotBlank() }
-                        ?: "分享会话" // TODO i18n
+                        ?: stringResource(R.string.shared_session_title)
                     Text(title)
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "返回", // TODO i18n
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -143,7 +145,7 @@ private fun ErrorContent(
         )
         Spacer(Modifier.height(12.dp))
         TextButton(onClick = onRetry) {
-            Text("重试") // TODO i18n
+            Text(stringResource(R.string.retry))
         }
     }
 }
@@ -184,7 +186,11 @@ private fun MessageBubble(message: SharedMessage) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        text = if (isUser) "用户" else "助手", // TODO i18n
+                        text = if (isUser) {
+                            stringResource(R.string.shared_session_role_user)
+                        } else {
+                            stringResource(R.string.shared_session_role_assistant)
+                        },
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.SemiBold,
                         color = MaterialTheme.colorScheme.primary,
