@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import org.hiylo.opencode.data.api.BackendPlanDraft
 import org.hiylo.opencode.data.api.BackendPlanStepDraft
+import org.hiylo.opencode.data.api.BackendStats
 import org.hiylo.opencode.data.api.BackendTaskTarget
 import org.hiylo.opencode.data.repository.BackendRepository
 import org.hiylo.opencode.data.repository.ServerRepository
@@ -59,6 +60,15 @@ class TaskListViewModel @Inject constructor(
 
     private val _archiveError = MutableStateFlow<String?>(null)
     val archiveError: StateFlow<String?> = _archiveError.asStateFlow()
+
+    private val _stats = MutableStateFlow<BackendStats?>(null)
+    val stats: StateFlow<BackendStats?> = _stats.asStateFlow()
+
+    private val _statsLoading = MutableStateFlow(false)
+    val statsLoading: StateFlow<Boolean> = _statsLoading.asStateFlow()
+
+    private val _statsError = MutableStateFlow<String?>(null)
+    val statsError: StateFlow<String?> = _statsError.asStateFlow()
 
     private val _clarifyStreamText = MutableStateFlow("")
     val clarifyStreamText: StateFlow<String> = _clarifyStreamText.asStateFlow()
@@ -233,6 +243,22 @@ class TaskListViewModel @Inject constructor(
                 _archiveError.value = e.message ?: "加载归档失败"
             } finally {
                 _archiveLoading.value = false
+            }
+        }
+    }
+
+    /** 加载后端用量统计（任务计数 + token 调用量 + 归档数）。 */
+    fun loadStats() {
+        viewModelScope.launch {
+            _statsLoading.value = true
+            _statsError.value = null
+            try {
+                _stats.value = backendRepository.getStats(backendUrl, backendToken)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load stats", e)
+                _statsError.value = e.message ?: "加载统计失败"
+            } finally {
+                _statsLoading.value = false
             }
         }
     }

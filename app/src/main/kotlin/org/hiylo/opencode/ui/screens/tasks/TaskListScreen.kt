@@ -80,7 +80,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import android.widget.Toast
 import org.hiylo.opencode.R
+import org.hiylo.opencode.data.api.BackendStats
+import org.hiylo.opencode.data.api.BackendTaskStats
 import org.hiylo.opencode.data.api.BackendTaskTarget
+import org.hiylo.opencode.data.api.BackendTokenUsage
 import org.hiylo.opencode.domain.model.BackendArchive
 import org.hiylo.opencode.domain.model.BackendTask
 import org.hiylo.opencode.domain.model.BackendTaskStatus
@@ -143,6 +146,9 @@ fun TaskListScreen(
     val archives by viewModel.archives.collectAsState()
     val archiveLoading by viewModel.archiveLoading.collectAsState()
     val archiveError by viewModel.archiveError.collectAsState()
+    val stats by viewModel.stats.collectAsState()
+    val statsLoading by viewModel.statsLoading.collectAsState()
+    val statsError by viewModel.statsError.collectAsState()
 
     var filter by remember { mutableStateOf<BackendTaskStatus?>(null) }
     var showBatchDialog by remember { mutableStateOf(false) }
@@ -182,7 +188,13 @@ fun TaskListScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { if (selectedTab == 0) viewModel.refresh() else viewModel.loadArchives() }) {
+                    IconButton(onClick = {
+                        when (selectedTab) {
+                            0 -> viewModel.refresh()
+                            1 -> viewModel.loadArchives()
+                            else -> viewModel.loadStats()
+                        }
+                    }) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.skills_refresh))
                     }
                 },
@@ -207,10 +219,15 @@ fun TaskListScreen(
                     onClick = { selectedTab = 1; viewModel.loadArchives() },
                     text = { Text(stringResource(R.string.tasks_tab_archives)) },
                 )
+                Tab(
+                    selected = selectedTab == 2,
+                    onClick = { selectedTab = 2; viewModel.loadStats() },
+                    text = { Text(stringResource(R.string.tasks_tab_stats)) },
+                )
             }
 
-            if (selectedTab == 0) {
-                TasksContent(
+            when (selectedTab) {
+                0 -> TasksContent(
                     tasks = tasks,
                     visibleTasks = visibleTasks,
                     loading = loading,
@@ -223,13 +240,18 @@ fun TaskListScreen(
                     onCancelTask = viewModel::cancelTask,
                     onUnblockTask = viewModel::unblockTask,
                 )
-            } else {
-                ArchivesContent(
+                1 -> ArchivesContent(
                     archives = archives,
                     loading = archiveLoading,
                     error = archiveError,
                     onRefresh = viewModel::loadArchives,
                     onDelete = viewModel::deleteArchive,
+                )
+                else -> StatsContent(
+                    stats = stats,
+                    loading = statsLoading,
+                    error = statsError,
+                    onRefresh = viewModel::loadStats,
                 )
             }
         }
@@ -427,6 +449,190 @@ private fun ArchivesContent(
                 ) {
                     items(archives, key = { it.id }) { archive ->
                         ArchiveCard(archive = archive, onDelete = { onDelete(archive.id) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatsContent(
+    stats: BackendStats?,
+    loading: Boolean,
+    error: String?,
+    onRefresh: () -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        when {
+            loading && stats == null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { CircularProgressIndicator() }
+            }
+            error != null && stats == null -> {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Text(text = error.orEmpty(), color = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.height(12.dp))
+                    TextButton(onClick = onRefresh) { Text(stringResource(R.string.skills_retry)) }
+                }
+            }
+            stats == null -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text(
+                        text = stringResource(R.string.tasks_stats_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    )
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    item { TaskStatsCard(stats!!.tasks) }
+                    item {
+                        TokenUsageCard(
+                            usages = stats!!.tokenUsage,
+                            archiveCount = stats!!.archives,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskStatsCard(tasks: BackendTaskStats) {
+    val isAmoled = isAmoledTheme()
+    Card(
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = appAmoledBorder(0.65f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.tasks_stats_task_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.tasks_stats_task_total, tasks.total),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                StatCell(stringResource(R.string.tasks_stat_succeeded), tasks.succeeded, MaterialTheme.colorScheme.primary)
+                StatCell(stringResource(R.string.tasks_stat_running), tasks.running, Color(0xFF0288D1))
+                StatCell(stringResource(R.string.tasks_stat_failed), tasks.failed, MaterialTheme.colorScheme.error)
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                StatCell(stringResource(R.string.tasks_stat_queued), tasks.queued, MaterialTheme.colorScheme.onSurfaceVariant)
+                StatCell(stringResource(R.string.tasks_stat_pending), tasks.pending, Color(0xFFF9A825))
+                StatCell(stringResource(R.string.tasks_stat_blocked), tasks.blocked, Color(0xFF8D6E63))
+            }
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+            ) {
+                StatCell(stringResource(R.string.tasks_stat_canceled), tasks.canceled, MaterialTheme.colorScheme.onSurfaceVariant)
+                StatCell(stringResource(R.string.tasks_stat_retried), tasks.retried, Color(0xFF7B1FA2))
+            }
+        }
+    }
+}
+
+@Composable
+private fun StatCell(label: String, value: Int, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold,
+            color = color,
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}
+
+@Composable
+private fun TokenUsageCard(usages: List<BackendTokenUsage>, archiveCount: Int) {
+    val isAmoled = isAmoledTheme()
+    Card(
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = appAmoledBorder(0.65f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = stringResource(R.string.tasks_stats_token_title),
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = stringResource(R.string.tasks_stats_archive_count, archiveCount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            if (usages.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.tasks_stats_token_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                usages.forEach { usage ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = usage.tokenName.ifBlank { usage.tokenId },
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            if (usage.tokenName.isNotBlank()) {
+                                Text(
+                                    text = usage.tokenId,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        Text(
+                            text = stringResource(R.string.tasks_stats_token_calls, usage.calls),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
                     }
                 }
             }

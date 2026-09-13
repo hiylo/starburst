@@ -30,6 +30,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.hiylo.opencode.data.api.BackendApi
 import org.hiylo.opencode.data.api.BackendPlanDraft
 import org.hiylo.opencode.data.api.BackendPlanStepDraft
+import org.hiylo.opencode.data.api.BackendStats
 import org.hiylo.opencode.data.api.BackendTaskTarget
 import org.hiylo.opencode.domain.model.BackendArchive
 import org.hiylo.opencode.domain.model.BackendTask
@@ -208,6 +209,10 @@ class BackendRepository @Inject constructor(
     /** 查询单个归档的完整内容。 */
     suspend fun getArchive(backendUrl: String, token: String, id: String): BackendArchive =
         api.getArchive(backendUrl, token, id)
+
+    /** 读取后端用量统计（任务计数 + token 调用量 + 归档数）。 */
+    suspend fun getStats(backendUrl: String, token: String): BackendStats =
+        api.getStats(backendUrl, token)
 
     /** 删除归档并刷新归档列表。 */
     suspend fun deleteArchive(serverId: String, backendUrl: String, token: String, id: String) {

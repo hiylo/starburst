@@ -36,6 +36,36 @@ import javax.inject.Singleton
 @Serializable
 internal data class BackendTasksResponse(val tasks: List<BackendTask> = emptyList())
 
+/** `GET /api/stats` 的任务计数统计。 */
+@Serializable
+data class BackendTaskStats(
+    val queued: Int = 0,
+    val running: Int = 0,
+    val succeeded: Int = 0,
+    val failed: Int = 0,
+    val canceled: Int = 0,
+    val pending: Int = 0,
+    val blocked: Int = 0,
+    val retried: Int = 0,
+    val total: Int = 0,
+)
+
+/** `GET /api/stats` 的 token 调用量条目。 */
+@Serializable
+data class BackendTokenUsage(
+    val tokenId: String = "",
+    val tokenName: String = "",
+    val calls: Int = 0,
+)
+
+/** `GET /api/stats` 的响应包装。 */
+@Serializable
+data class BackendStats(
+    val tasks: BackendTaskStats = BackendTaskStats(),
+    val tokenUsage: List<BackendTokenUsage> = emptyList(),
+    val archives: Int = 0,
+)
+
 /** `POST /api/tasks` 的请求体。 */
 @Serializable
 internal data class BackendCreateTaskRequest(
@@ -165,6 +195,13 @@ class BackendApi @Inject constructor(
         } catch (e: Exception) {
             false
         }
+    }
+
+    /** 读取用量统计（`GET /api/stats`）：任务计数 + token 调用量 + 归档数。 */
+    suspend fun getStats(backendUrl: String, token: String): BackendStats {
+        return httpClient.get("${backendUrl.trimEnd('/')}/api/stats") {
+            header("Authorization", "Bearer $token")
+        }.body()
     }
 
     /** 列任务（最新在前，最多 50 条）。[status] 可选过滤。 */
