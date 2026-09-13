@@ -250,6 +250,11 @@
     <string name="shared_session_role_user">用户</string>
     <string name="shared_session_role_assistant">助手</string>
     <string name="menu_rename_session">重命名会话</string>
+    <string name="menu_view_changes">查看变更（%1$d）</string>
+    <string name="session_changes_title">会话变更</string>
+    <string name="session_changes_empty">本次会话没有文件变更</string>
+    <string name="session_changes_before">修改前</string>
+    <string name="session_changes_after">修改后</string>
     <string name="chat_context_format">%1$d%% 上下文</string>
     <string name="settings_dynamic_color">动态配色</string>
     <string name="settings_dynamic_color_desc">使用壁纸颜色（Material You）</string>

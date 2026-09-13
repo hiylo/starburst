@@ -219,6 +219,7 @@ import org.hiylo.opencode.ui.components.AppLoadingEdge
 import org.hiylo.opencode.ui.components.AppPickerItemShape
 import org.hiylo.opencode.ui.components.AppPrimaryButton
 import org.hiylo.opencode.ui.components.AppSecondaryButton
+import org.hiylo.opencode.ui.components.AppCardShape
 import org.hiylo.opencode.ml.MnnAsr
 import org.hiylo.opencode.ui.components.appAmoledBorder
 import org.hiylo.opencode.ui.components.appSelectedItemColor
@@ -1167,6 +1168,7 @@ fun ChatScreen(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showCustomCommandsDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showSessionDiffDialog by remember { mutableStateOf(false) }
     var showAttachmentOptions by remember { mutableStateOf(false) }
     var showSubagentContextDetails by remember { mutableStateOf(false) }
     var isTerminalMode by rememberSaveable { mutableStateOf(startInTerminalMode) }
@@ -1184,6 +1186,7 @@ fun ChatScreen(
     val voiceLevel by viewModel.voiceLevel.collectAsState()
     // 麦克风按钮：端侧 MNN 模型已下载，或后端流式识别引擎可用（服务端回退）。
     val backendAsrAvailable by viewModel.backendAsrAvailable.collectAsState()
+    val sessionDiffs by viewModel.sessionDiffs.collectAsState()
     val voiceEnabled = remember { MnnAsr.modelDirectory(context) != null } || backendAsrAvailable
 
     // 录音开始前输入框里已有的文字。识别引擎返回的是「累积全文」而不是增量片段，
@@ -2012,6 +2015,18 @@ fun ChatScreen(
                                     Icon(Icons.Default.Edit, contentDescription = null)
                                 }
                             )
+                            if (sessionDiffs.isNotEmpty()) {
+                                DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.menu_view_changes, sessionDiffs.size)) },
+                                    onClick = {
+                                        showMenu = false
+                                        showSessionDiffDialog = true
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Difference, contentDescription = null)
+                                    },
+                                )
+                            }
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_new_session)) },
                                 onClick = {
@@ -3526,6 +3541,14 @@ fun ChatScreen(
                 }
             }
         }
+    }
+
+    // Session changes (file diff) dialog
+    if (showSessionDiffDialog) {
+        SessionDiffDialog(
+            diffs = sessionDiffs,
+            onDismiss = { showSessionDiffDialog = false },
+        )
     }
 
     // Send confirmation dialog
@@ -10401,4 +10424,170 @@ private fun cleanSessionTitle(title: String?): String? {
     t = t.replace(Regex("^(agent|subagent|sub_agent)[-_]", RegexOption.IGNORE_CASE), "")
     t = t.replace(Regex("[-_][0-9a-f]{6,32}$", RegexOption.IGNORE_CASE), "")
     return t.ifBlank { null }
+}
+
+/**
+ * 会话变更面板：展示 agent 在本次会话中改动过的文件列表（文件名 + 增删行数 + 状态），
+ * 点击单个文件展开 before/after 对比。
+ */
+@Composable
+private fun SessionDiffDialog(
+    diffs: List<FileDiff>,
+    onDismiss: () -> Unit,
+) {
+    var expanded by remember { mutableStateOf<String?>(null) }
+    ChatDialog(onDismiss = onDismiss) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Text(
+                text = stringResource(R.string.session_changes_title),
+                style = MaterialTheme.typography.titleLarge,
+            )
+            Spacer(Modifier.height(12.dp))
+            if (diffs.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.session_changes_empty),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(diffs, key = { it.file }) { diff ->
+                        FileDiffCard(
+                            diff = diff,
+                            expanded = expanded == diff.file,
+                            onToggle = {
+                                expanded = if (expanded == diff.file) null else diff.file
+                            },
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                AppSecondaryButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.close))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FileDiffCard(
+    diff: FileDiff,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+) {
+    val isAmoled = isAmoledTheme()
+    val statusColor = when (diff.status) {
+        "added" -> Color(0xFF2E7D32)
+        "deleted" -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+    Card(
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+        ),
+        border = appAmoledBorder(0.65f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = diff.file,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "+${diff.additions}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF2E7D32),
+                        )
+                        Text(
+                            text = "-${diff.deletions}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        diff.status?.let { status ->
+                            Text(
+                                text = status,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = statusColor,
+                            )
+                        }
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) {
+                        Icons.Default.KeyboardArrowUp
+                    } else {
+                        Icons.Default.KeyboardArrowDown
+                    },
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                SessionFileDiffContent(before = diff.before, after = diff.after)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SessionFileDiffContent(before: String, after: String) {
+    val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (before.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x1AEF5350), RoundedCornerShape(6.dp))
+                    .padding(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_changes_before),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = before,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                )
+            }
+        }
+        if (after.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color(0x1A66BB6A), RoundedCornerShape(6.dp))
+                    .padding(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_changes_after),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF2E7D32),
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = after,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                )
+            }
+        }
+    }
 }

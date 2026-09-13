@@ -661,6 +661,11 @@
     <string name="shared_session_role_user">You</string>
     <string name="shared_session_role_assistant">Assistant</string>
     <string name="menu_rename_session">Rename session</string>
+    <string name="menu_view_changes">View changes (%1$d)</string>
+    <string name="session_changes_title">Session changes</string>
+    <string name="session_changes_empty">No file changes in this session</string>
+    <string name="session_changes_before">Before</string>
+    <string name="session_changes_after">After</string>
     <string name="menu_export_session">Export session</string>
     <string name="chat_session_exported">Session exported</string>
     <string name="chat_session_export_failed">Failed to export session</string>

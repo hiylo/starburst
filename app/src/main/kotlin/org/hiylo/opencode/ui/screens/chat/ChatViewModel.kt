@@ -423,6 +423,11 @@ class ChatViewModel @Inject constructor(
     private val _backendAsrAvailable = MutableStateFlow(false)
     val backendAsrAvailable: StateFlow<Boolean> = _backendAsrAvailable
 
+    /** 当前会话的文件变更列表（agent 改动过哪些文件），用于「查看变更」面板。 */
+    val sessionDiffs: StateFlow<List<FileDiff>> =
+        eventReducer.sessionDiffs.map { it[sessionId].orEmpty() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** 用户自定义 Slash 命令。 */
     val customCommands: StateFlow<List<CustomSlashCommand>> =
         settingsRepository.customCommands.map { list ->
