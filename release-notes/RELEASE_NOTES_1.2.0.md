@@ -2,7 +2,7 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# OpenCode v1.2.0 - Release Notes
+# StarBurst v1.2.0 - Release Notes
 
 This release adds on-device voice input, global search, a much richer session list, and SSH
 tunnelling, together with a batch of session-list and archive fixes.

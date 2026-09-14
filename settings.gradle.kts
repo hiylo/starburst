@@ -15,5 +15,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "OpenCode"
+rootProject.name = "StarBurst"
 include(":app")

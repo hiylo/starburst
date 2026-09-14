@@ -1,8 +1,8 @@
 {
-  "versionName": "1.3.0",
-  "versionCode": 5,
-  "releaseUrl": "https://github.com/hiylo/opencode/releases/tag/v1.3.0",
-  "packageName": "org.hiylo.opencode",
-  "apkUrl": "https://github.com/hiylo/opencode/releases/download/v1.3.0/opencode-1.3.0.apk",
-  "sha256": "ad218fd2123a4ef8604c5afceab163f7db42408b4e7b468e87c2b177e6e5807b"
+  "versionName": "1.4.0",
+  "versionCode": 6,
+  "releaseUrl": "https://github.com/hiylo/starburst/releases/tag/v1.4.0",
+  "packageName": "org.hiylo.starburst",
+  "apkUrl": "https://github.com/hiylo/starburst/releases/download/v1.4.0/starburst-1.4.0.apk",
+  "sha256": "bc7bece75d75769158fb6221626e61a9afacd1b91b95bb8db57f392ff691ed4f"
 }

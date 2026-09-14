@@ -4,7 +4,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 <div align="center">
 
-# OpenCode（安卓版）
+# StarBurst（安卓版）
 
 **面向 [OpenCode](https://github.com/anomalyco/opencode) AI 编程代理的原生安卓客户端**
 
@@ -16,7 +16,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 </div>
 
-OpenCode（安卓版）是一款功能丰富的原生 Material 3 客户端，让你在手机或平板上操控自己的
+StarBurst是一款功能丰富的原生 Material 3 客户端，让你在手机或平板上操控自己的
 [OpenCode](https://opencode.ai) AI 编程代理。通过网络连接任意 OpenCode 服务器，与代理聊天、
 浏览工作区文件、运行完整终端、管理会话——一切都在移动端优先的界面中完成。
 
@@ -48,7 +48,7 @@ OpenCode（安卓版）是一款功能丰富的原生 Material 3 客户端，让
 - **对话总结** — 消息级或整个会话的总结（云端 LLM，回退端侧模型），流式展示
 - **自定义强调色与主题方案** — 六种品牌强调色，外加三套完整卡通配色方案（糖果/海洋/日落）整体换肤，全局生效（亮/暗/AMOLED）并支持设置同步
 - **书签与全文搜索** — 收藏关键消息，并按当前服务器跨会话全文搜索（均绑定当前服务器）
-- **任务中心（opencode-backend）** — 后台任务、批量与归档，支持 AI 规划拆解、调度与依赖阻塞；自动探测后端，缺失时可通过 SSH 一键安装
+- **任务中心（starburst-backend）** — 后台任务、批量与归档，支持 AI 规划拆解、调度与依赖阻塞；自动探测后端，缺失时可通过 SSH 一键安装
 - **设置** — 卡片分组式界面，提供语言、主题、动态取色、AMOLED 深色模式、强调色、通知、触感等
 - **安全更新** — 应用内下载 GitHub Release APK，通过 SHA-256、包名、版本和签名证书校验
 
@@ -149,12 +149,12 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 app/src/main/
 ├── cpp/                    # C++ 层
-│   ├── opencode_mnn_jni.cpp  # JNI 封装（加载 / 流式生成 / 重置 / 释放）
+│   ├── starburst_mnn_jni.cpp  # JNI 封装（加载 / 流式生成 / 重置 / 释放）
 │   ├── CMakeLists.txt        # 链接 MNN 原生库
 │   └── include/              # MNN 3.6.1 头文件（与 .so 版本锁定）
 ├── jniLibs/                # 预编译 MNN 运行时（libMNN、libllm 等）
 ├── assets/models/          # 端侧 Qwen3.5-0.8B（MNN）+ 配置 + 分词器
-└── kotlin/org/hiylo/opencode/
+└── kotlin/org/hiylo/starburst/
     ├── data/api/           # OpenCode 服务器 API + SuggestionProvider（外部 LLM）
     ├── data/repository/    # EventReducer、设置、服务器/会话仓库
     ├── data/sync/          # 跨设备同步（gist/webdav）+ Keystore 加密密钥

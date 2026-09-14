@@ -4,9 +4,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ---
 version: alpha
-name: OpenCode-Android-design-system
+name: StarBurst-design-system
 description: |
-  OpenCode Android 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。
+  StarBurst 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。
 
 colors:
   primary: "#6366F1"
@@ -196,14 +196,14 @@ components:
 
 ## Overview
 
-OpenCode Android 是一个以「终端即服务」为核心的移动客户端：用户在本机管理多个 OpenCode 服务器、浏览会话、在真实终端仿真器中执行命令，并查看 AI 生成内容。整套 UI 建立在 **Material 3（Material You）** 之上，用 Jetpack Compose 实现，设计 token 全部来自 `app/src/main/kotlin/org/hiylo/opencode/ui/theme/`（`Color.kt` / `Theme.kt` / `Type.kt`）与 `ui/components/`（`AppSurfaces.kt` 等）。
+StarBurst 是一个以「终端即服务」为核心的移动客户端：用户在本机管理多个 OpenCode 服务器、浏览会话、在真实终端仿真器中执行命令，并查看 AI 生成内容。整套 UI 建立在 **Material 3（Material You）** 之上，用 Jetpack Compose 实现，设计 token 全部来自 `app/src/main/kotlin/org/hiylo/starburst/ui/theme/`（`Color.kt` / `Theme.kt` / `Type.kt`）与 `ui/components/`（`AppSurfaces.kt` 等）。
 
 品牌识别靠三件事：**靛蓝主色**（`#6366F1`）、**纯黑 AMOLED 表面**（`#000000`）、**M3 语义化容器层级**。它不是营销型网页风格，而是一个「克制的工具型深色优先」系统——默认 Dark 表面为 `#121218`，卡片用 `surfaceContainer` 阶梯（`#1E1E25` → `#262630` → `#31313B`）表达层级，而不是用投影。AMOLED 模式下所有表面塌缩为纯黑，卡片仅靠 1dp 描边区分，最大化 OLED 省电。
 
 系统支持三套视觉档位：跟随系统的 Light/Dark、Android 12+ 的动态取色（Material You）、以及用户手动开启的 AMOLED 纯黑模式（`AmoledDarkColorScheme`）。AMOLED 不改变组件语义，只把表面换黑、把实心按钮换成描边按钮。
 
 **关键特征：**
-- Material 3 标准 `ColorScheme`，品牌色只作为 `OpenCodePrimary`（`#6366F1`）等 accent 供给特殊组件，主 UI 消费语义化 token（`primary` / `surfaceContainer` / `outline`…）
+- Material 3 标准 `ColorScheme`，品牌色只作为 `StarBurstPrimary`（`#6366F1`）等 accent 供给特殊组件，主 UI 消费语义化 token（`primary` / `surfaceContainer` / `outline`…）
 - Dark 优先：默认表面 `#121218`，正文 `#E5E1E9`，容器用 `surfaceContainer*` 阶梯替代投影
 - AMOLED 纯黑模式：`#000000` 表面 + 1dp 描边卡片 + 描边按钮
 - 圆角体系集中：对话框 20dp、卡片/列表项 12dp、搜索框 14dp
@@ -212,7 +212,7 @@ OpenCode Android 是一个以「终端即服务」为核心的移动客户端：
 
 ## Colors
 
-> **来源文件**：`Color.kt`（品牌/状态色）、`Theme.kt`（三套 M3 色板）。所有 token 由 `OpenCodeTheme` 统一注入，组件内一律读 `MaterialTheme.colorScheme`，禁止硬编码 hex。
+> **来源文件**：`Color.kt`（品牌/状态色）、`Theme.kt`（三套 M3 色板）。所有 token 由 `StarBurstTheme` 统一注入，组件内一律读 `MaterialTheme.colorScheme`，禁止硬编码 hex。
 
 ### 品牌色（Accent）
 - **Primary Indigo**（`{colors.primary}` — `#6366F1`）：品牌核心色。Light 模式主按钮填充、AMOLED 模式按钮描边/文字、选中态高亮、加载条、Section 标题。
@@ -345,7 +345,7 @@ OpenCode Android 是一个以「终端即服务」为核心的移动客户端：
 ## Do's and Don'ts
 
 ### Do
-- 一切颜色读 `MaterialTheme.colorScheme`，一切文字读 `MaterialTheme.typography`；**禁止在组件里硬编码 hex/字号**。品牌色只从 `Color.kt` 的 `OpenCodePrimary/Secondary/Tertiary` 进入系统。
+- 一切颜色读 `MaterialTheme.colorScheme`，一切文字读 `MaterialTheme.typography`；**禁止在组件里硬编码 hex/字号**。品牌色只从 `Color.kt` 的 `StarBurstPrimary/Secondary/Tertiary` 进入系统。
 - 层级用 `surfaceContainer*` 阶梯表达，默认不投影。
 - 按钮走 `AppPrimaryButton / AppSecondaryButton` 封装——AMOLED 语义（黑底描边）由封装自动处理，业务代码不感知。
 - 状态语义固定：连接绿 `#4CAF50`、错误红 `#EF4444`、警告琥珀 `#F59E0B`。
@@ -354,7 +354,7 @@ OpenCode Android 是一个以「终端即服务」为核心的移动客户端：
 
 ### Don't
 - 不要新增第四套主题色板；三档（Light/Dark/AMOLED）之外的颜色必须能映射回现有 token。
-- 不要在业务页面里用 `darkColorScheme/lightColorScheme` 临时造色板，统一走 `OpenCodeTheme`。
+- 不要在业务页面里用 `darkColorScheme/lightColorScheme` 临时造色板，统一走 `StarBurstTheme`。
 - 不要把 AMOLED 当「又一个暗色」——它只换表面为纯黑 + 描边，不改变组件语义与层级。
 - 不要引入营销式视觉（大投影、渐变背景、装饰性插画）；系统是工具型、信息优先的。
 - 不要用非等宽字体渲染代码/终端内容。

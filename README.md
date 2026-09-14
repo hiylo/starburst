@@ -4,7 +4,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 <div align="center">
 
-# OpenCode (Android)
+# StarBurst (Android)
 
 **A native Android client for [OpenCode](https://github.com/anomalyco/opencode) AI coding agents**
 
@@ -16,7 +16,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 </div>
 
-OpenCode for Android is a feature-rich, native Material 3 client that lets you drive your
+StarBurst is a feature-rich, native Material 3 client that lets you drive your
 [OpenCode](https://opencode.ai) AI coding agent from your phone or tablet. Connect to any OpenCode
 server over the network, chat with your agent, browse workspace files, run a full terminal, and
 manage sessions — all from a mobile-first UI.
@@ -52,7 +52,7 @@ manage sessions — all from a mobile-first UI.
   synced
 - **Bookmarks & full-text search** — bookmark key messages and full-text search across a server's
   messages (both scoped to the current server)
-- **Task Center (opencode-backend)** — background tasks, batch runs and archives, with AI plan
+- **Task Center (starburst-backend)** — background tasks, batch runs and archives, with AI plan
   breakdown, scheduling and dependency blocking; the backend is detected automatically with a
   one-click install over SSH when missing
 - **Workspace files** — browse project folders, preview highlighted text, Markdown and images, and
@@ -182,12 +182,12 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ```
 app/src/main/
 ├── cpp/                    # C++ layer
-│   ├── opencode_mnn_jni.cpp  # JNI wrapper (load / streaming generate / reset / release)
+│   ├── starburst_mnn_jni.cpp  # JNI wrapper (load / streaming generate / reset / release)
 │   ├── CMakeLists.txt        # Links MNN native libs
 │   └── include/              # MNN 3.6.1 headers (version-locked to the .so)
 ├── jniLibs/                # Prebuilt MNN runtime (libMNN, libllm, …) + libsherpa-mnn-jni.so (ASR)
 ├── assets/models/          # On-device Qwen3.5-0.8B (MNN) + config + tokenizer
-└── kotlin/org/hiylo/opencode/
+└── kotlin/org/hiylo/starburst/
     ├── data/api/           # OpenCode server API + SuggestionProvider (external LLM)
     ├── data/repository/    # EventReducer, settings, server/session repositories
     ├── data/sync/          # Cross-device sync (gist/webdav) + Keystore-secured secrets

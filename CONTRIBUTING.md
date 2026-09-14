@@ -2,7 +2,7 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# Contributing to OpenCode Android
+# Contributing to StarBurst
 
 Thanks for your interest in contributing! Please take a moment to review this guide.
 
@@ -14,7 +14,7 @@ unacceptable behavior, report it to the maintainers.
 
 ## Reporting Bugs
 
-- Search [the issue tracker](https://github.com/hiylo/opencode/issues) first to avoid duplicates.
+- Search [the issue tracker](https://github.com/hiylo/starburst/issues) first to avoid duplicates.
 - Include the app version, Android version, device model, and the OpenCode server version.
 - Attach a reproduction step, expected vs. actual behavior, and a diagnostic log export if possible.
 
@@ -44,7 +44,7 @@ Clearly mark it as a feature request.
 - Kotlin, ktlint-style (4-space indent, 120-column limit).
 - Public APIs documented with Javadoc.
 - Prefer reusing existing utilities over duplicating logic.
-- Keep `app/src/main/cpp/opencode_mnn_jni.cpp` focused on the JNI boundary.
+- Keep `app/src/main/cpp/starburst_mnn_jni.cpp` focused on the JNI boundary.
 
 ## License
 

@@ -48,7 +48,7 @@ jobs:
           MANIFEST_VERSION=$(python3 -c 'import json; print(json.load(open("update.json"))["versionName"])')
           MANIFEST_CODE=$(python3 -c 'import json; print(json.load(open("update.json"))["versionCode"])')
           MANIFEST_URL=$(python3 -c 'import json; print(json.load(open("update.json"))["releaseUrl"])')
-          EXPECTED_URL="https://github.com/hiylo/opencode/releases/tag/v${{ steps.version.outputs.name }}"
+          EXPECTED_URL="https://github.com/hiylo/starburst/releases/tag/v${{ steps.version.outputs.name }}"
           test "$MANIFEST_VERSION" = "${{ steps.version.outputs.name }}" || { echo "::error::update.json versionName mismatch"; exit 1; }
           test "$MANIFEST_CODE" = "${{ steps.version.outputs.code }}" || { echo "::error::update.json versionCode mismatch"; exit 1; }
           test "$MANIFEST_URL" = "$EXPECTED_URL" || { echo "::error::update.json releaseUrl mismatch"; exit 1; }
@@ -78,7 +78,7 @@ jobs:
           mkdir -p release-apks
           APK=$(find app/build/outputs/apk/release -name '*.apk' ! -name '*unsigned*' | head -1)
           if [ -n "$APK" ]; then
-            cp "$APK" release-apks/opencode-${VERSION}.apk
+            cp "$APK" release-apks/starburst-${VERSION}.apk
           else
             echo "::error::No APK found in app/build/outputs/apk/release/"
             exit 1
@@ -89,7 +89,7 @@ jobs:
           VERSION: ${{ steps.version.outputs.name }}
           VERSION_CODE: ${{ steps.version.outputs.code }}
         run: |
-          APK="release-apks/opencode-${VERSION}.apk"
+          APK="release-apks/starburst-${VERSION}.apk"
           BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
           "$BUILD_TOOLS/apksigner" verify --verbose "$APK"
 
@@ -97,7 +97,7 @@ jobs:
           APK_PACKAGE=$(printf '%s\n' "$BADGING" | sed -n "s/^package: name='\([^']*\)'.*/\1/p")
           APK_VERSION_CODE=$(printf '%s\n' "$BADGING" | sed -n "s/^package: name='[^']*' versionCode='\([^']*\)'.*/\1/p")
           APK_VERSION_NAME=$(printf '%s\n' "$BADGING" | sed -n "s/^package: name='[^']*' versionCode='[^']*' versionName='\([^']*\)'.*/\1/p")
-          test "$APK_PACKAGE" = "org.hiylo.opencode" || { echo "::error::APK package mismatch"; exit 1; }
+          test "$APK_PACKAGE" = "org.hiylo.starburst" || { echo "::error::APK package mismatch"; exit 1; }
           test "$APK_VERSION_CODE" = "$VERSION_CODE" || { echo "::error::APK versionCode mismatch"; exit 1; }
           test "$APK_VERSION_NAME" = "$VERSION" || { echo "::error::APK versionName mismatch"; exit 1; }
 
@@ -112,9 +112,9 @@ jobs:
           manifest = {
               "versionName": version,
               "versionCode": int(os.environ["VERSION_CODE"]),
-              "releaseUrl": f"https://github.com/hiylo/opencode/releases/tag/v{version}",
-              "packageName": "org.hiylo.opencode",
-              "apkUrl": f"https://github.com/hiylo/opencode/releases/download/v{version}/opencode-{version}.apk",
+              "releaseUrl": f"https://github.com/hiylo/starburst/releases/tag/v{version}",
+              "packageName": "org.hiylo.starburst",
+              "apkUrl": f"https://github.com/hiylo/starburst/releases/download/v{version}/starburst-{version}.apk",
               "sha256": os.environ["SHA256"],
           }
           with open("release-metadata/update.json", "w", encoding="utf-8") as output:
@@ -143,8 +143,8 @@ jobs:
           # Upload the on-device model zip if it was placed in release-apks/ (manually,
           # e.g. as a large-file Release asset). It is intentionally not stored in the repo.
           MODEL_ASSET=""
-          if [ -f "release-apks/opencode-model.zip" ]; then
-            MODEL_ASSET="release-apks/opencode-model.zip"
+          if [ -f "release-apks/starburst-model.zip" ]; then
+            MODEL_ASSET="release-apks/starburst-model.zip"
           fi
 
           # Check if release already exists

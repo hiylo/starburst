@@ -9,12 +9,33 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-09-14
+
+### Added
+- **Server management screens** — Automation rules (Rules), API tokens (Tokens) and audit log (Audit) as first-class screens under server settings; rules support natural-language AI generation (`/api/rules/generate`), scheduled/git/webhook triggers and execution history.
+- **AGENTS.md workflow** — detect a project's `AGENTS.md`, then generate (no file), improve (AI enhancement), modify (natural-language instruction) or manually edit it, and save it back to the project root via PTY. Generation shows an animated status indicator and failed attempts offer a "Continue" retry.
+- **Continue on failure** — when the agent aborts or a retry fails, the error message now offers a "Continue" action that resumes the session.
+- **Fork branch navigation** — a branch bar lets you jump between a session and its forked child sessions, and back to the parent.
+- **Re-copy share link** — already-shared sessions can copy the share URL again from the overflow menu.
+- **Quick prompt templates** — one-tap presets (code review / generate tests / explain code / fix bug) fill the composer, handy on mobile.
+
+### Changed
+- **Renamed project to StarBurst** — application id `org.hiylo.starburst`, app label StarBurst, new signing keystore.
+- **Server-side ASR preferred** — voice input now prefers the backend streaming engine and falls back to the on-device MNN model.
+- **"Suggestion service" renamed to "LLM service"** — the provider setting now reflects its broader role.
+- **Source-code split** — ChatScreen / NavGraph / OpenCodeApi split into per-concern files for maintainability.
+
+### Fixed
+- AGENTS.md empty-file detection (server returns 200 + empty content for missing files).
+- AGENTS.md editor layout pushing the save button off-screen.
+- Stats/audit/rules/tokens endpoints accept the app token.
+
 ## [1.3.0] - 2026-09-13
 
 ### Added
 - **Theme schemes** — three full cartoon color schemes (Candy / Ocean / Sunset) covering surface/container/secondary/tertiary tones, plus five extra accent colors (pink/orange/lime/sky/mint) in a wrap-around palette; non-default schemes replace the accent entirely for a complete look.
 - **Backend-first suggestions** — next-step suggestions now prefer the backend-configured LLM (`/api/llm/generate`), then the app's external provider, then the on-device MNN model; the suggestion area labels its source (server / cloud / on-device / fallback).
-- **Task Center** — background tasks, batch runs and archives via opencode-backend; AI plan breakdown (fresh + refine streaming), scheduling (immediate / delayed / at-time / cron), dependency blocking/unblocking, finished-task purge.
+- **Task Center** — background tasks, batch runs and archives via starburst-backend; AI plan breakdown (fresh + refine streaming), scheduling (immediate / delayed / at-time / cron), dependency blocking/unblocking, finished-task purge.
 - **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links (open session / connect server / new session / search / task center), plus long-press shortcuts.
 - **Server-side ASR** — streaming speech recognition via the backend engine as a fallback when the on-device model isn't available, with a 5-minute per-server availability cache.
 - **Bookmarks & full-text search** — message bookmarks and cross-session full-text search, both scoped to the current server (entry moved from Settings to the session-list top bar).

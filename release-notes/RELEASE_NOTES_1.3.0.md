@@ -2,10 +2,10 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# OpenCode v1.3.0 - Release Notes
+# StarBurst v1.3.0 - Release Notes
 
 This release adds theme schemes, backend-first suggestions, a Task Center backed by
-opencode-backend, a home-screen Widget, bookmarks and full-text search, server-side ASR, and a
+starburst-backend, a home-screen Widget, bookmarks and full-text search, server-side ASR, and a
 one-click backend installer — plus a major native-memory fix.
 
 ## Highlights
@@ -16,7 +16,7 @@ one-click backend installer — plus a major native-memory fix.
 - **Backend-first suggestions** — next-step suggestions now try the backend-configured LLM first,
   then the app's external provider, then the on-device MNN model; the suggestion area shows its
   source (server / cloud / on-device / fallback).
-- **Task Center** — background tasks, batch runs and archives via opencode-backend, with AI plan
+- **Task Center** — background tasks, batch runs and archives via starburst-backend, with AI plan
   breakdown (streaming), scheduling (immediate / delayed / at-time / cron), dependency
   blocking/unblocking, and finished-task purge.
 - **Home-screen Widget & App Shortcuts** — session/server/task snapshots with deep links (open

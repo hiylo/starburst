@@ -20,7 +20,7 @@ Please allow us time to fix and release a patch before public disclosure.
 
 ## Scope
 
-This policy applies to the OpenCode Android client. Issues in the upstream
+This policy applies to the StarBurst client. Issues in the upstream
 [OpenCode](https://github.com/anomalyco/opencode) server should be reported to that project.
 
 ## Security-relevant behavior

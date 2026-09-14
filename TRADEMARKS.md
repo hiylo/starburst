@@ -2,12 +2,12 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# OpenCode Trademark and Branding Policy
+# StarBurst Trademark and Branding Policy
 
 The software source code is licensed under the license specified in
 the LICENSE file.
 
-The "OpenCode" name, application logo, application icon, screenshots,
+The "StarBurst" name, application logo, application icon, screenshots,
 visual identity and other project branding are not granted for use as
 the name or primary branding of derivative applications.
 
@@ -19,6 +19,10 @@ Modified or independently distributed versions must:
    the original project or its author;
 4. clearly identify themselves as independently maintained forks.
 
-The name "OpenCode" may be used descriptively to state that a project
-is based on or derived from OpenCode, provided that such use does not
+The name "StarBurst" may be used descriptively to state that a project
+is based on or derived from StarBurst, provided that such use does not
 create confusion about affiliation or endorsement.
+
+The project is derived from OC Remote (MIT-licensed) and connects to the
+upstream OpenCode AI coding agent. Those names remain the property of
+their respective owners and are used only descriptively.

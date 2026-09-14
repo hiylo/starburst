@@ -4,9 +4,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ---
 version: alpha
-name: OpenCode-Android-design-system
+name: StarBurst-design-system
 description: |
-  The design system of the OpenCode Android client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code.
+  The design system of the StarBurst client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code.
 
 colors:
   primary: "#6366F1"
@@ -196,10 +196,10 @@ components:
 
 ## Overview
 
-OpenCode Android is a "terminal-as-a-service" mobile client: users manage multiple OpenCode
+StarBurst is a "terminal-as-a-service" mobile client: users manage multiple OpenCode
 servers from their device, browse sessions, run commands in a real terminal emulator, and view
 AI-generated content. The whole UI is built on **Material 3 (Material You)** with Jetpack Compose.
-Every design token comes from `app/src/main/kotlin/org/hiylo/opencode/ui/theme/`
+Every design token comes from `app/src/main/kotlin/org/hiylo/starburst/ui/theme/`
 (`Color.kt` / `Theme.kt` / `Type.kt`) and `ui/components/` (`AppSurfaces.kt`, etc.).
 
 Brand identity rests on three pillars: **indigo primary** (`#6366F1`), **pure-black AMOLED
@@ -215,7 +215,7 @@ not change component semantics — it only swaps surfaces to black and filled bu
 buttons.
 
 **Key characteristics:**
-- Standard Material 3 `ColorScheme`; brand colors enter only as accents such as `OpenCodePrimary`
+- Standard Material 3 `ColorScheme`; brand colors enter only as accents such as `StarBurstPrimary`
   (`#6366F1`); the main UI consumes semantic tokens (`primary` / `surfaceContainer` / `outline`…)
 - Dark-first: default surface `#121218`, body text `#E5E1E9`, containers use the `surfaceContainer*`
   ladder instead of shadows
@@ -228,7 +228,7 @@ buttons.
 ## Colors
 
 > **Source files**: `Color.kt` (brand/status colors), `Theme.kt` (the three M3 palettes). All tokens
-> are injected by `OpenCodeTheme`; components always read `MaterialTheme.colorScheme` and never
+> are injected by `StarBurstTheme`; components always read `MaterialTheme.colorScheme` and never
 > hard-code hex.
 
 ### Brand colors (Accent)
@@ -397,7 +397,7 @@ icons keep their original form).
 ### Do
 - Read all colors from `MaterialTheme.colorScheme` and all text from `MaterialTheme.typography`;
   **never hard-code hex or sizes in components**. Brand colors enter the system only through
-  `OpenCodePrimary/Secondary/Tertiary` in `Color.kt`.
+  `StarBurstPrimary/Secondary/Tertiary` in `Color.kt`.
 - Express hierarchy with the `surfaceContainer*` ladder; no shadows by default.
 - Use the `AppPrimaryButton / AppSecondaryButton` wrappers — AMOLED semantics (black + outline)
   are handled by the wrapper, business code never knows.
@@ -410,7 +410,7 @@ icons keep their original form).
 - Do not add a fourth theme palette; any color outside Light/Dark/AMOLED must map back to an
   existing token.
 - Do not fabricate ad-hoc palettes with `darkColorScheme/lightColorScheme` in business pages —
-  always go through `OpenCodeTheme`.
+  always go through `StarBurstTheme`.
 - Do not treat AMOLED as "just another dark mode" — it only swaps surfaces to pure black + outlines,
   without changing component semantics or hierarchy.
 - Do not introduce marketing-style visuals (big shadows, gradient backgrounds, decorative

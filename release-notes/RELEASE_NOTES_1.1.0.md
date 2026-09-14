@@ -2,7 +2,7 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# OpenCode v1.1.0 - Release Notes
+# StarBurst v1.1.0 - Release Notes
 
 This release adds server & provider management, workspace file editing, and a much richer
 Git experience.

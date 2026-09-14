@@ -19,7 +19,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## 1.1.0 (Released ✅)
 
-### Server & service management — [#16](https://github.com/hiylo/opencode/issues/16)
+### Server & service management — [#16](https://github.com/hiylo/starburst/issues/16)
 
 - [x] Persistent PTY promoted to a "connection-level shared session" (was previously scoped to the Git page)
 - [x] Server basics: CPU / memory / disk (PTY runs `free` / `df` / `/proc`)
@@ -28,33 +28,61 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Service restart (PTY runs the restart command; feasibility depends on deployment/permissions)
 - [x] Server health monitoring dashboard
 
-### File editing — [#17](https://github.com/hiylo/opencode/issues/17)
+### File editing — [#17](https://github.com/hiylo/starburst/issues/17)
 
 - [x] File browser supports edit & save (writes go through the persistent PTY, e.g. `cat > path` / `tee`)
 - [x] Undo / redo, save-conflict prompt
 
-### Git deepening — [#18](https://github.com/hiylo/opencode/issues/18)
+### Git deepening — [#18](https://github.com/hiylo/starburst/issues/18)
 
 - [x] Selective staging (check files / hunks)
 - [x] `fetch` / `stash` / `tag`
 - [x] Commit history load-more (pagination)
 - [x] Unpushed-commit indicator
 
-### On-device model expansion — [#19](https://github.com/hiylo/opencode/issues/19)
+### On-device model expansion — [#19](https://github.com/hiylo/starburst/issues/19)
 
 - [x] Code completion (inline completion)
 - [x] Conversation summary / code explanation
 
-### Chat experience — [#20](https://github.com/hiylo/opencode/issues/20)
+### Chat experience — [#20](https://github.com/hiylo/starburst/issues/20)
 
 - [x] Markdown enhancements (mermaid diagrams, inline images, code-block copy/line numbers/run)
 - [x] Message actions (edit & resend, regenerate, stop)
 - [x] In-session search
 
-## Now — 1.3.0 (Released ✅)
+## Now — 1.4.0 (In development)
+
+> 2026-09-14. Server management, AGENTS.md 工作流与工程重构。
+
+### Server management
+
+- [x] Automation rules (Rules): cron / git / webhook triggers, natural-language AI generation, execution history
+- [x] API tokens (Tokens): create / revoke, plaintext shown once
+- [x] Audit log (Audit): recent authenticated API actions
+
+### AGENTS.md
+
+- [x] Detect project `AGENTS.md`; generate / improve / instruction-based modify / manual edit, save via PTY
+- [x] Animated generating indicator + "Continue" retry on failure
+
+### Chat experience
+
+- [x] "Continue" action on agent abort / retry failure
+- [x] Fork branch navigation (jump between parent / child sessions)
+- [x] Re-copy share link
+- [x] Quick prompt templates (code review / tests / explain / fix bug)
+
+### Engineering
+
+- [x] Server-side ASR preferred over on-device model
+- [x] Source split: ChatScreen / NavGraph / OpenCodeApi broken into per-concern files
+- [x] Renamed project to StarBurst (app id, label, keystore)
+
+## 1.3.0 (Released ✅)
 
 > Released 2026-09-13. Everything below is a **pure client** change — the opencode server is untouched.
-> Exceptions: voice input (relies on an on-device ASR model or the opencode-backend engine) and image
+> Exceptions: voice input (relies on an on-device ASR model or the starburst-backend engine) and image
 > understanding (relies on the model supporting vision); neither involves opencode server-side code.
 
 ### Sessions & project management
@@ -104,7 +132,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## 1.3.0 (Released ✅)
 
-> Released 2026-09-13. Includes optional opencode-backend integration (task center, archives,
+> Released 2026-09-13. Includes optional starburst-backend integration (task center, archives,
 > server-side ASR fallback, backend-first suggestions, one-click backend install).
 
 ### Notifications & background
@@ -122,7 +150,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 - [x] Theme schemes: Candy / Ocean / Sunset full color schemes + 5 extra accent colors
 
-### Backend integration (opencode-backend, optional)
+### Backend integration (starburst-backend, optional)
 
 - [x] Task Center: background tasks / batch runs / archives with real API; AI plan breakdown, scheduling, dependency blocking
 - [x] Backend-first next-step suggestions (`/api/llm/generate`) with source label
@@ -150,6 +178,6 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Backend integration — task center with real API (tasks + batch + archives; zero-config: auto-derive `:18880` + default token `ocb_default`), WS realtime status, one-click backend install *(released 1.3.0)*
 - [x] Task arrangement — structured fields (name/prompt/directory/session/dependency), scheduling (delay / at-time / recurring cron via `scheduled` status + scheduler), multi-step plans (auto `dependsOn` chain), conversational AI breakdown (`POST /api/tasks/generate`) *(released 1.3.0)*
 - [x] Session archive to backend — long-press in session list / chat overflow menu → snapshot to backend archives; fixed upstream message-shape parsing so archives carry real transcript content *(released 1.3.0)*
-- [ ] Backend integration — stats / rules (needs Web-Session login flow on the client)
+- [x] Backend integration — stats / rules / audit / tokens management screens (APP-token readable, no web-session login needed) *(released 1.4.0)*
 - [x] Voice input via backend streaming engine *(released 1.3.0 as server-side ASR fallback)*
 - [ ] Remaining engineering quality (unit tests, performance testing)

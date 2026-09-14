@@ -18,7 +18,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## 1.1.0（已发布 ✅）
 
-### 服务器与服务管理 — [#16](https://github.com/hiylo/opencode/issues/16)
+### 服务器与服务管理 — [#16](https://github.com/hiylo/starburst/issues/16)
 
 - [x] 常驻 PTY 提升为「连接级共享会话」（当前是 Git 页作用域）
 - [x] 服务器基本信息：CPU / 内存 / 磁盘（PTY 跑 `free` / `df` / `/proc`）
@@ -27,24 +27,24 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] 服务重启（PTY 跑重启命令，可操作性取决于服务端部署方式/权限）
 - [x] 服务器健康监控仪表盘
 
-### 文件编辑 — [#17](https://github.com/hiylo/opencode/issues/17)
+### 文件编辑 — [#17](https://github.com/hiylo/starburst/issues/17)
 
 - [x] 文件浏览器支持编辑与保存（写入走常驻 PTY，如 `cat > path` / `tee`）
 - [x] 撤销 / 重做、保存冲突提示
 
-### Git 深化 — [#18](https://github.com/hiylo/opencode/issues/18)
+### Git 深化 — [#18](https://github.com/hiylo/starburst/issues/18)
 
 - [x] 选择性暂存（勾选文件 / hunk）
 - [x] `fetch` / `stash` / `tag`
 - [x] 提交历史加载更多（分页）
 - [x] 未推送提交提示
 
-### 端侧模型扩展 — [#19](https://github.com/hiylo/opencode/issues/19)
+### 端侧模型扩展 — [#19](https://github.com/hiylo/starburst/issues/19)
 
 - [x] 代码补全（inline completion）
 - [x] 对话总结 / 代码解释
 
-### 聊天体验 — [#20](https://github.com/hiylo/opencode/issues/20)
+### 聊天体验 — [#20](https://github.com/hiylo/starburst/issues/20)
 
 - [x] Markdown 增强（mermaid 图、图片内联、代码块复制/行号/运行）
 - [x] 消息操作（编辑重发、重新生成、停止生成）
@@ -100,4 +100,4 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 ## Later — Backlog
 
 - [ ] 消息内容全文搜索（本地 FTS，需评估数据量）
-- [ ] 工程质量（单元测试、性能、无障碍、平板/折叠屏适配） — [#23](https://github.com/hiylo/opencode/issues/23)
+- [ ] 工程质量（单元测试、性能、无障碍、平板/折叠屏适配） — [#23](https://github.com/hiylo/starburst/issues/23)
