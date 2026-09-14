@@ -438,6 +438,8 @@ fun ChatScreen(
     var showSendConfirmDialog by remember { mutableStateOf(false) }
     // Pending send action: stored so the confirm dialog can trigger it
     var pendingSendAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    // Pending template prompt: stored so the confirm dialog can send it
+    var pendingTemplatePrompt by remember { mutableStateOf<String?>(null) }
     var inputMode by rememberSaveable { mutableStateOf(ChatInputMode.NORMAL.name) }
     val isShellMode = inputMode == ChatInputMode.SHELL.name
 
@@ -1703,6 +1705,7 @@ fun ChatScreen(
                 contextWindow = uiState.contextWindow,
                 lastContextTokens = uiState.lastContextTokens,
                 contextUsage = uiState.contextUsage,
+                contextMessages = uiState.messages,
                 suggestions = uiState.suggestions,
                 suggestionsSource = uiState.suggestionsSource,
                 isGeneratingSuggestions = uiState.isGeneratingSuggestions,
@@ -2233,16 +2236,6 @@ fun ChatScreen(
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(messageSpacing)
                     ) {
-                        // Fork 分支导航：子会话可返回父会话；父会话可查看 fork 分支。
-                        if (uiState.parentSessionId != null || uiState.childSessions.isNotEmpty()) {
-                            item(key = "fork_branches") {
-                                ForkBranchBar(
-                                    parentSessionId = uiState.parentSessionId,
-                                    childSessions = uiState.childSessions,
-                                    onNavigateToSession = onNavigateToSession,
-                                )
-                            }
-                        }
                         // "Load earlier messages" button at the top
                         if (uiState.hasOlderMessages) {
                             item(key = "load_older") {
@@ -2434,9 +2427,9 @@ fun ChatScreen(
                             }
                         }
 
-                        pendingInteractions.firstOrNull()?.let { interaction ->
+                        pendingInteractions.forEachIndexed { index, interaction ->
                             item(key = "pending_${interaction::class.simpleName}_${interaction.sessionId}_${interaction.id}") {
-                                val position = stringResource(R.string.pending_request_position, 1, pendingInteractions.size)
+                                val position = stringResource(R.string.pending_request_position, index + 1, pendingInteractions.size)
                                 when (interaction) {
                                     is PendingInteraction.Permission -> PermissionCard(
                                         permission = interaction.request,
@@ -2692,8 +2685,7 @@ fun ChatScreen(
         TemplatePickerDialog(
             onSelect = { template ->
                 showTemplatePicker = false
-                inputText = TextFieldValue(template, TextRange(template.length))
-                keyboardController?.show()
+                pendingTemplatePrompt = template
             },
             onDismiss = { showTemplatePicker = false },
         )
@@ -2703,6 +2695,7 @@ fun ChatScreen(
         ContextUsageDialog(
             usage = uiState.contextUsage,
             contextWindow = uiState.contextWindow,
+            messages = uiState.messages,
             onDismiss = { showSubagentContextDetails = false },
         )
     }
@@ -2781,6 +2774,36 @@ fun ChatScreen(
                     showSendConfirmDialog = false
                     pendingSendAction?.invoke()
                     pendingSendAction = null
+                }) {
+                    Text(stringResource(R.string.settings_send))
+                }
+            }
+        }
+    }
+
+    // Template send confirmation dialog
+    pendingTemplatePrompt?.let { prompt ->
+        ChatDialog(onDismiss = {
+            pendingTemplatePrompt = null
+        }) {
+            Text(stringResource(R.string.settings_confirm_send_title), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(16.dp))
+            Text(prompt, style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(20.dp))
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                AppSecondaryButton(onClick = {
+                    pendingTemplatePrompt = null
+                }) {
+                    Text(stringResource(R.string.cancel))
+                }
+                AppPrimaryButton(onClick = {
+                    viewModel.sendMessage(prompt)
+                    inputText = TextFieldValue("")
+                    attachments.clear()
+                    viewModel.clearConfirmedPaths()
+                    viewModel.clearFileSearch()
+                    viewModel.clearDraft()
+                    pendingTemplatePrompt = null
                 }) {
                     Text(stringResource(R.string.settings_send))
                 }
@@ -3237,6 +3260,7 @@ private fun ChatInputBar(
     contextWindow: Int = 0,
     lastContextTokens: Int = 0,
     contextUsage: ContextUsageDetails = ContextUsageDetails(),
+    contextMessages: List<ChatMessage> = emptyList(),
     suggestions: List<String> = emptyList(),
     suggestionsSource: SuggestionSource? = null,
     isGeneratingSuggestions: Boolean = false,
@@ -4145,6 +4169,7 @@ private fun ChatInputBar(
         ContextUsageDialog(
             usage = contextUsage,
             contextWindow = contextWindow,
+            messages = contextMessages,
             onDismiss = { showContextDetails = false },
         )
     }

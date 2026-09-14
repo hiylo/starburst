@@ -9,14 +9,17 @@
  */
 package org.hiylo.starburst.ui.screens.shared
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.repository.SharedSessionRepository
 import org.hiylo.starburst.domain.model.SharedSession
@@ -52,6 +55,7 @@ sealed interface SharedSessionUiState {
 class SharedSessionViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val repository: SharedSessionRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
     /** 分享 ID，由导航参数传入。 */
@@ -80,7 +84,7 @@ class SharedSessionViewModel @Inject constructor(
                 _state.value = SharedSessionUiState.Session(session)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load shared session", e)
-                _state.value = SharedSessionUiState.Error(e.message ?: "加载分享会话失败")
+                _state.value = SharedSessionUiState.Error(e.message ?: context.getString(R.string.share_load_failed))
             }
         }
     }

@@ -8,6 +8,7 @@
  */
 package org.hiylo.starburst.ui.screens.tasks
 
+import android.content.Context
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.KeyboardType
@@ -91,22 +93,33 @@ private data class ClarifyMessage(
 private const val MAX_CLARIFY_TURNS = 4
 
 /** 把拆解草稿转成可读的一句话摘要，用于对话历史展示。 */
-private fun summarizeDraft(draft: BackendPlanDraft): String {
+private fun summarizeDraft(context: Context, draft: BackendPlanDraft): String {
+    val isZh = context.resources.configuration.locales[0].language == "zh"
     val sb = StringBuilder()
-    if (draft.name.isNotBlank()) sb.append("「").append(draft.name).append("」")
-    sb.append("共 ").append(draft.steps.size).append(" 步")
+    if (draft.name.isNotBlank()) {
+        if (isZh) sb.append("「").append(draft.name).append("」") else sb.append("\"").append(draft.name).append("\"")
+    }
+    if (isZh) {
+        sb.append("共 ").append(draft.steps.size).append(" 步")
+    } else {
+        sb.append(draft.steps.size).append(" steps total")
+    }
     draft.steps.forEachIndexed { i, s ->
-        val n = s.name.ifBlank { "步骤 ${i + 1}" }
+        val n = s.name.ifBlank { if (isZh) "步骤 ${i + 1}" else "Step ${i + 1}" }
         sb.append("\n").append(i + 1).append(". ").append(n)
     }
     draft.schedule?.let { sch ->
-        sb.append("\n调度：")
+        if (isZh) {
+            sb.append("\n调度：")
+        } else {
+            sb.append("\nSchedule: ")
+        }
         sb.append(
             when (sch.type) {
-                "delay" -> "${sch.minutes} 分钟后"
+                "delay" -> if (isZh) "${sch.minutes} 分钟后" else "in ${sch.minutes} minute(s)"
                 "at" -> sch.at
-                "cron" -> "周期 ${sch.cron}"
-                else -> "立即"
+                "cron" -> if (isZh) "周期 ${sch.cron}" else "every ${sch.cron}"
+                else -> if (isZh) "立即" else "immediately"
             },
         )
     }
@@ -131,6 +144,7 @@ fun TaskCreateDialog(
         onResult: (Result<BackendPlanDraft>) -> Unit,
     ) -> Unit,
 ) {
+    val context = LocalContext.current
     var mode by remember { mutableStateOf(TaskMode.Single) }
     var name by remember { mutableStateOf("") }
     var prompt by remember { mutableStateOf("") }
@@ -338,7 +352,7 @@ fun TaskCreateDialog(
                                                         onSuccess = { draft ->
                                                             currentDraft = draft
                                                             fillDraft(draft)
-                                                            conversation = (conversation + ClarifyMessage(false, summarizeDraft(draft))).takeLast(MAX_CLARIFY_TURNS * 2)
+                                                            conversation = (conversation + ClarifyMessage(false, summarizeDraft(context, draft))).takeLast(MAX_CLARIFY_TURNS * 2)
                                                             description = ""
                                                         },
                                                         onFailure = { e ->
@@ -541,7 +555,7 @@ fun TaskCreateDialog(
                                 onValueChange = { cronExpr = it },
                                 modifier = Modifier.fillMaxWidth(),
                                 label = { Text(stringResource(R.string.task_cron_custom)) },
-                                placeholder = { Text("秒 分 时 日 月 周") },
+                                placeholder = { Text(stringResource(R.string.task_cron_custom)) },
                                 singleLine = true,
                             )
                         }

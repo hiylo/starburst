@@ -8,16 +8,19 @@
  */
 package org.hiylo.starburst.ui.screens.server
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendRule
 import org.hiylo.starburst.data.api.BackendRuleDraft
@@ -53,6 +56,7 @@ class ServerRulesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val serverRepository: ServerRepository,
     private val api: BackendApi,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
 
@@ -70,7 +74,7 @@ class ServerRulesViewModel @Inject constructor(
             if (backendUrl.isNotBlank()) {
                 refresh()
             } else {
-                _uiState.update { it.copy(isLoading = false, error = "后端未配置") }
+                _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.server_backend_not_configured)) }
             }
         }
     }
@@ -84,7 +88,7 @@ class ServerRulesViewModel @Inject constructor(
                 _uiState.update { it.copy(rules = rules, isLoading = false) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load rules", e)
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "加载失败") }
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.server_load_failed)) }
             }
         }
     }
@@ -100,7 +104,7 @@ class ServerRulesViewModel @Inject constructor(
                 _uiState.update { it.copy(isGenerating = false, generateDraft = draft) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to generate rule", e)
-                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: "生成失败") }
+                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: context.getString(R.string.server_generate_failed)) }
             }
         }
     }

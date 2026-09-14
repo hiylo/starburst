@@ -8,16 +8,19 @@
  */
 package org.hiylo.starburst.ui.screens.tasks
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendPlanDraft
 import org.hiylo.starburst.data.api.BackendPlanStepDraft
 import org.hiylo.starburst.data.api.BackendStats
@@ -38,10 +41,11 @@ private const val TAG = "TaskListViewModel"
  * @since V1.3.0
  */
 @HiltViewModel
-class TaskListViewModel @Inject constructor(
+ class TaskListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val serverRepository: ServerRepository,
     private val backendRepository: BackendRepository,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
 
@@ -99,7 +103,7 @@ class TaskListViewModel @Inject constructor(
                 backendRepository.loadTasks(serverId, backendUrl, backendToken)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load tasks", e)
-                _error.value = e.message ?: "加载失败"
+                _error.value = e.message ?: context.getString(R.string.task_load_failed)
             } finally {
                 _loading.value = false
             }
@@ -122,7 +126,7 @@ class TaskListViewModel @Inject constructor(
                 onDone(true)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create task", e)
-                _error.value = e.message ?: "创建失败"
+                _error.value = e.message ?: context.getString(R.string.task_create_failed)
                 onDone(false)
             }
         }
@@ -142,7 +146,7 @@ class TaskListViewModel @Inject constructor(
                 onDone(true)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to create plan", e)
-                _error.value = e.message ?: "创建计划失败"
+                _error.value = e.message ?: context.getString(R.string.task_create_plan_failed)
                 onDone(false)
             }
         }
@@ -191,7 +195,7 @@ class TaskListViewModel @Inject constructor(
                 onDone(true)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to batch tasks", e)
-                _error.value = e.message ?: "批量创建失败"
+                _error.value = e.message ?: context.getString(R.string.task_batch_create_failed)
                 onDone(false)
             }
         }
@@ -203,7 +207,7 @@ class TaskListViewModel @Inject constructor(
                 backendRepository.cancelTask(serverId, backendUrl, backendToken, id)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to cancel task", e)
-                _error.value = e.message ?: "取消失败"
+                _error.value = e.message ?: context.getString(R.string.task_cancel_failed)
             }
         }
     }
@@ -214,7 +218,7 @@ class TaskListViewModel @Inject constructor(
                 backendRepository.unblockTask(serverId, backendUrl, backendToken, id)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to unblock task", e)
-                _error.value = e.message ?: "解阻失败"
+                _error.value = e.message ?: context.getString(R.string.task_unblock_failed)
             }
         }
     }
@@ -226,7 +230,7 @@ class TaskListViewModel @Inject constructor(
                 onDone(deleted)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to purge finished tasks", e)
-                _error.value = e.message ?: "清除失败"
+                _error.value = e.message ?: context.getString(R.string.task_purge_failed)
                 onDone(0)
             }
         }
@@ -240,7 +244,7 @@ class TaskListViewModel @Inject constructor(
                 backendRepository.loadArchives(serverId, backendUrl, backendToken)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load archives", e)
-                _archiveError.value = e.message ?: "加载归档失败"
+                _archiveError.value = e.message ?: context.getString(R.string.task_load_archive_failed)
             } finally {
                 _archiveLoading.value = false
             }
@@ -256,7 +260,7 @@ class TaskListViewModel @Inject constructor(
                 _stats.value = backendRepository.getStats(backendUrl, backendToken)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load stats", e)
-                _statsError.value = e.message ?: "加载统计失败"
+                _statsError.value = e.message ?: context.getString(R.string.task_load_stats_failed)
             } finally {
                 _statsLoading.value = false
             }
@@ -270,7 +274,7 @@ class TaskListViewModel @Inject constructor(
                 onDone(true)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to archive session", e)
-                _archiveError.value = e.message ?: "归档失败"
+                _archiveError.value = e.message ?: context.getString(R.string.task_archive_failed)
                 onDone(false)
             }
         }
@@ -282,7 +286,7 @@ class TaskListViewModel @Inject constructor(
                 backendRepository.deleteArchive(serverId, backendUrl, backendToken, id)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to delete archive", e)
-                _archiveError.value = e.message ?: "删除归档失败"
+                _archiveError.value = e.message ?: context.getString(R.string.task_delete_archive_failed)
             }
         }
     }

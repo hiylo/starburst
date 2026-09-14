@@ -49,6 +49,7 @@ import org.hiylo.starburst.data.repository.DiagnosticLogRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.service.SshRunner
+import org.hiylo.starburst.ui.gate.BackendGate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -167,6 +168,10 @@ class ServerSettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ServerSettingsUiState(serverName = serverName, isLoading = true))
     val uiState: StateFlow<ServerSettingsUiState> = _uiState.asStateFlow()
 
+    /** 后端是否「正常可用」（健康 + 版本达标）。后端相关功能入口的显隐统一使用该判定。 */
+    val isBackendReady: Boolean
+        get() = BackendGate.isReady(_uiState.value.backendAvailable, _uiState.value.backendVersion)
+
     init {
         viewModelScope.launch {
             settingsRepository.hiddenModels(serverId).collect { hidden ->
@@ -191,19 +196,12 @@ class ServerSettingsViewModel @Inject constructor(
             _uiState.update { it.copy(backendAvailable = null, backendVersion = null, backendNeedsUpgrade = false) }
             _serverConfig = serverRepository.getServer(serverId)
             val server = _serverConfig
-            val backendUrl = server?.backendResolvedUrl
-                ?: "http://${hostFrom(serverUrl)}:18880"
-            val token = server?.backendResolvedToken ?: "ocb_default"
-            val available = backendApi.isHealthy(backendUrl)
-            // 后端可用时顺带读 /api/system 拿自身版本，用于判断是否需要升级。
-            val system = if (available) backendApi.getSystemInfo(backendUrl, token) else null
-            val version = system?.version.orEmpty()
-            val needsUpgrade = version.isNotBlank() && compareVersions(version, REQUIRED_BACKEND_VERSION) < 0
+            val probe = BackendGate.probe(backendApi, server, serverUrl)
             _uiState.update {
                 it.copy(
-                    backendAvailable = available,
-                    backendVersion = version.ifBlank { null },
-                    backendNeedsUpgrade = needsUpgrade,
+                    backendAvailable = probe.available,
+                    backendVersion = probe.version,
+                    backendNeedsUpgrade = probe.needsUpgrade,
                 )
             }
         }
@@ -218,12 +216,12 @@ class ServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val server = _serverConfig ?: serverRepository.getServer(serverId)
             if (server == null) {
-                _uiState.update { it.copy(backendInstallLog = "服务器信息缺失，无法安装") }
+                _uiState.update { it.copy(backendInstallLog = context.getString(R.string.server_install_missing_info)) }
                 return@launch
             }
             if (!server.useSsh) {
                 _uiState.update {
-                    it.copy(backendInstallLog = "未配置 SSH，无法远程安装。请先在服务器配置里填写 SSH 账号。")
+                    it.copy(backendInstallLog = context.getString(R.string.server_install_no_ssh))
                 }
                 return@launch
             }
@@ -234,15 +232,15 @@ class ServerSettingsViewModel @Inject constructor(
                 // sudo 需可免密（或 SSH 用户本身是 root），否则会返回提示后失败。
                 val command = "curl -fsSL $scriptUrl | sudo bash -- --port 18880 --default-token ocb_default"
                 val output = SshRunner.runCommand(server, command, timeoutMs = 300_000)
-                // 安装完成后再实测 /api/health，避免把「命令成功但服务未起」误判为可用。
-                val available = backendApi.isHealthy(
-                    server.backendResolvedUrl ?: "http://${hostFrom(serverUrl)}:18880"
-                )
+                // 安装完成后再探测一次（health + version），避免把「命令成功但服务未起」误判为可用。
+                val probe = BackendGate.probe(backendApi, server, serverUrl)
                 _uiState.update {
                     it.copy(
                         isInstallingBackend = false,
                         backendInstallLog = output,
-                        backendAvailable = available,
+                        backendAvailable = probe.available,
+                        backendVersion = probe.version,
+                        backendNeedsUpgrade = probe.needsUpgrade,
                     )
                 }
             } catch (e: Exception) {
@@ -250,7 +248,7 @@ class ServerSettingsViewModel @Inject constructor(
                 _uiState.update {
                     it.copy(
                         isInstallingBackend = false,
-                        backendInstallLog = e.message ?: "安装失败",
+                        backendInstallLog = e.message ?: context.getString(R.string.server_install_failed),
                     )
                 }
             }
@@ -262,11 +260,6 @@ class ServerSettingsViewModel @Inject constructor(
         get() = _serverConfig
 
     private var _serverConfig: ServerConfig? = null
-
-    /** 从 opencode 服务地址推导主机名（不含端口），用于默认后端地址。 */
-    private fun hostFrom(rawUrl: String): String =
-        runCatching { java.net.URL(rawUrl).host }.getOrNull()
-            ?: rawUrl.substringAfter("://").substringBefore(":")
 
     fun loadProviders() {
         viewModelScope.launch {
@@ -716,20 +709,4 @@ class ServerSettingsViewModel @Inject constructor(
         return "$providerId:${model.id}" !in hidden
     }
 
-}
-
-/** App 要求的最低的 starburst-backend 版本。低于该版本时提示升级（后端可能缺 Endpoint）。 */
-private const val REQUIRED_BACKEND_VERSION = "1.0.0"
-
-/** 简单的语义化版本比较：取数字段逐个比较，返回 <0 / 0 / >0。无法解析时按相等处理。 */
-private fun compareVersions(a: String, b: String): Int {
-    val pa = a.trim().trimStart('v').split('.').mapNotNull { it.toIntOrNull() }
-    val pb = b.trim().trimStart('v').split('.').mapNotNull { it.toIntOrNull() }
-    val n = maxOf(pa.size, pb.size)
-    for (i in 0 until n) {
-        val av = pa.getOrElse(i) { 0 }
-        val bv = pb.getOrElse(i) { 0 }
-        if (av != bv) return av.compareTo(bv)
-    }
-    return 0
 }

@@ -1019,63 +1019,6 @@ private fun ContinueInlineAction(onContinue: (() -> Unit)?) {
 }
 
 /**
- * Fork 分支导航条：子会话显示「返回父会话」，父会话显示其 fork 出的分支列表，
- * 点击可在父子会话间快速切换对比。
- */
-@Composable
-internal fun ForkBranchBar(
-    parentSessionId: String?,
-    childSessions: List<Session>,
-    onNavigateToSession: (String) -> Unit,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
-    ) {
-        if (parentSessionId != null) {
-            TextButton(onClick = { onNavigateToSession(parentSessionId) }) {
-                Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = null,
-                    modifier = Modifier.size(16.dp),
-                )
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(R.string.menu_back_to_parent), style = MaterialTheme.typography.labelMedium)
-            }
-        }
-        if (childSessions.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = stringResource(R.string.fork_branches) + ":",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                childSessions.forEach { child ->
-                    FilterChip(
-                        selected = false,
-                        onClick = { onNavigateToSession(child.id) },
-                        label = {
-                            Text(
-                                text = child.title.orEmpty().ifBlank { child.id.take(8) },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        },
-                    )
-                }
-            }
-        }
-    }
-}
-/**
  * Renders markdown content using mikepenz markdown renderer with code syntax highlighting.
  */
 @Composable
@@ -3790,10 +3733,10 @@ internal fun QuestionCard(
     val hapticOn = LocalHapticFeedbackEnabled.current
 
     // Prevent multiple submissions
-    var submitted by remember(question.sessionId, question.id) { mutableStateOf(false) }
+    var submitted by remember(question) { mutableStateOf(false) }
 
     // Track answers per question
-    val answersPerQuestion = remember {
+    val answersPerQuestion = remember(question) {
         mutableStateListOf<List<String>>().apply {
             repeat(question.questions.size) { add(emptyList()) }
         }
@@ -3853,7 +3796,7 @@ internal fun QuestionCard(
 
                 if (q.multiple) {
                     // ── Multi-select: checkboxes ──
-                    val selectedLabels = remember { mutableStateListOf<String>() }
+                    val selectedLabels = remember(question, index) { mutableStateListOf<String>() }
 
                     q.options.forEach { option ->
                         val checked = option.label in selectedLabels
@@ -4006,8 +3949,8 @@ internal fun QuestionCard(
                             }
                         }
                     } else {
-                        var isEditingCustom by remember { mutableStateOf(false) }
-                        var customText by remember { mutableStateOf("") }
+                        var isEditingCustom by remember(question, index) { mutableStateOf(false) }
+                        var customText by remember(question, index) { mutableStateOf("") }
 
                         if (!isEditingCustom) {
                             Surface(

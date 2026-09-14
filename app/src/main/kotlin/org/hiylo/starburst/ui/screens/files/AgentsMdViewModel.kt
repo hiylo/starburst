@@ -8,10 +8,12 @@
  */
 package org.hiylo.starburst.ui.screens.files
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
@@ -47,19 +50,24 @@ data class AgentsMdUiState(
     val saveState: FileSaveState = FileSaveState(),
 )
 
-/** 生成 AGENTS.md 时喂给模型的 system 指令。 */
-private const val AGENTS_MD_SYSTEM = """你是一名资深软件工程师，负责为项目编写或完善 AGENTS.md 文件。
-AGENTS.md 是 AI 编码助手读取的项目级规则文档，内容应包含：
-1. 项目简介与技术栈；
-2. 构建、测试、运行的常用命令；
-3. 代码风格与目录结构约定；
-4. 开发/提交规范与其他 AI 需要遵守的约定。
 
-要求：
-- 直接输出 AGENTS.md 的完整 Markdown 内容，不要包含任何解释、前后缀或代码块围栏。
-- 语言与用户提供的上下文保持一致（中文项目用中文）。
-- 保持简洁、可执行、可检索，避免空话。
-- 如果是「完善」模式，保留已有内容中仍然有效的部分，只做补充和修正。"""
+/** 扫描项目结构时识别为「技术栈标识文件」的文件名。 */
+private val TECH_STACK_FILES = setOf(
+    "go.mod", "go.sum", "pom.xml", "package.json", "pnpm-lock.yaml",
+    "build.gradle.kts", "build.gradle", "settings.gradle.kts", "settings.gradle",
+    "Cargo.toml", "pyproject.toml", "requirements.txt", "composer.json",
+    "mix.exs", "pubspec.yaml", "gradlew", "manage.py", "mkdocs.yml",
+)
+
+/** 扫描结构时跳过的目录（构建产物 / VCS / IDE 噪音）。 */
+private val SKIP_DIRS = setOf(
+    ".git", ".gradle", ".idea", ".kotlin", "build", "node_modules", "dist",
+    "out", "target", ".venv", "venv", "__pycache__", ".cxx", ".direnv", "release-notes",
+)
+
+/** 结构扫描最大递归深度与每层最大展开目录数（控制 token 预算）。 */
+private const val MAX_SCAN_DEPTH = 4
+private const val MAX_DIRS_PER_LEVEL = 10
 
 /**
  * AGENTS.md 初始化 / 完善 ViewModel：检测项目根 AGENTS.md，用后端 LLM 生成或完善，
@@ -75,6 +83,7 @@ class AgentsMdViewModel @Inject constructor(
     private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
     private val shellRegistry: ServerShellRegistry,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val connection = ServerConnection.from(
         url = savedStateHandle.get<String>("serverUrl").orEmpty(),
@@ -131,21 +140,51 @@ class AgentsMdViewModel @Inject constructor(
         }
     }
 
+    /** 生成 AGENTS.md 时喂给模型的 system 指令（按当前语言返回）。 */
+    private fun agentsMdSystemPrompt(): String {
+        val isZh = context.resources.configuration.locales[0].language == "zh"
+        return if (isZh) {
+            "你是一名资深软件工程师，负责为项目编写或完善 AGENTS.md 文件。\n" +
+                "AGENTS.md 是 AI 编码助手读取的项目级规则文档，内容应包含：\n" +
+                "1. 项目简介与技术栈；\n" +
+                "2. 构建、测试、运行的常用命令；\n" +
+                "3. 代码风格与目录结构约定；\n" +
+                "4. 开发/提交规范与其他 AI 需要遵守的约定。\n\n" +
+                "要求：\n" +
+                "- 直接输出 AGENTS.md 的完整 Markdown 内容，不要包含任何解释、前后缀或代码块围栏。\n" +
+                "- 语言与用户提供的上下文保持一致（中文项目用中文）。\n" +
+                "- 保持简洁、可执行、可检索，避免空话。\n" +
+                "- 如果是「完善」模式，保留已有内容中仍然有效的部分，只做补充和修正。"
+        } else {
+            "You are a senior software engineer tasked with writing or improving an AGENTS.md file for a project.\n" +
+                "AGENTS.md is a project-level rules document read by AI coding assistants. It should include:\n" +
+                "1. Project overview and tech stack;\n" +
+                "2. Common commands for build, test and run;\n" +
+                "3. Code style and directory structure conventions;\n" +
+                "4. Development/commit conventions and other rules AI should follow.\n\n" +
+                "Requirements:\n" +
+                "- Output ONLY the complete Markdown content of AGENTS.md — no explanations, no prefixes/suffixes, no code fences.\n" +
+                "- Match the language of the user-provided context (use English for English projects).\n" +
+                "- Keep it concise, actionable and searchable; avoid filler.\n" +
+                "- In \"improve\" mode, preserve still-valid parts of the existing content and only supplement or correct."
+        }
+    }
+
     /** 用后端 LLM 生成（或完善）AGENTS.md 草稿。 */
     fun generate() {
         if (backendUrl.isBlank()) {
-            _uiState.update { it.copy(generateError = "后端未配置，无法生成") }
+            _uiState.update { it.copy(generateError = context.getString(R.string.agents_md_no_backend_generate)) }
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isGenerating = true, generateError = null) }
             try {
                 val context = buildContext()
-                val text = backendApi.completeText(backendUrl, backendToken, AGENTS_MD_SYSTEM, context)
+                val text = backendApi.completeText(backendUrl, backendToken, agentsMdSystemPrompt(), context)
                 _uiState.update { it.copy(isGenerating = false, draft = text.trim()) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to generate AGENTS.md", e)
-                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: "生成失败") }
+                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: context.getString(R.string.agents_md_generate_failed)) }
             }
         }
     }
@@ -155,52 +194,117 @@ class AgentsMdViewModel @Inject constructor(
         val trimmed = instruction.trim()
         if (trimmed.isEmpty()) return
         if (backendUrl.isBlank()) {
-            _uiState.update { it.copy(generateError = "后端未配置，无法修改") }
+            _uiState.update { it.copy(generateError = context.getString(R.string.agents_md_no_backend_modify)) }
             return
         }
         viewModelScope.launch {
             _uiState.update { it.copy(isGenerating = true, generateError = null) }
             try {
                 val context = buildModifyContext(trimmed)
-                val text = backendApi.completeText(backendUrl, backendToken, AGENTS_MD_SYSTEM, context)
+                val text = backendApi.completeText(backendUrl, backendToken, agentsMdSystemPrompt(), context)
                 _uiState.update { it.copy(isGenerating = false, draft = text.trim()) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to modify AGENTS.md", e)
-                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: "修改失败") }
+                _uiState.update { it.copy(isGenerating = false, generateError = e.message ?: context.getString(R.string.agents_md_modify_failed)) }
             }
         }
     }
 
-    /** 构建给模型的用户上下文：目录名 + 顶层结构 + 现有内容。 */
+    /** 构建给模型的用户上下文：目录名 + 递归项目结构 + 现有内容。 */
     private suspend fun buildContext(): String {
+        val isZh = context.resources.configuration.locales[0].language == "zh"
         val existing = _uiState.value.existingContent
-        val structure = runCatching { api.listDirectory(connection, "", directory) }.getOrNull()
-        val topLevel = structure
-            ?.take(40)
-            ?.joinToString(", ") { it.name + if (it.type == "directory") "/" else "" }
-            .orEmpty()
         val dirName = directory.trimEnd('/').substringAfterLast('/').ifBlank { directory }
+        val structure = scanProjectStructure()
         return buildString {
-            append("项目目录：$dirName\n")
-            if (topLevel.isNotBlank()) append("顶层内容：$topLevel\n")
+            if (isZh) {
+                append("项目目录：$dirName\n")
+            } else {
+                append("Project directory: $dirName\n")
+            }
+            if (structure.isNotBlank()) {
+                if (isZh) {
+                    append("项目结构与技术栈（递归扫描自代码库，必须基于以下真实结构编写，不要臆测也不许建议重复创建）：\n")
+                } else {
+                    append("Project structure and tech stack (recursively scanned from the codebase; base the content on this real structure — don't guess and don't suggest duplicate creation):\n")
+                }
+                append("```\n").append(structure.trimEnd()).append("\n```\n")
+            }
             if (existing.isNotBlank()) {
-                append("\n现有 AGENTS.md 内容如下，请在此基础上完善（保留仍有效的内容）：\n")
+                if (isZh) {
+                    append("\n现有 AGENTS.md 内容如下，请在此基础上完善（保留仍有效的内容）：\n")
+                } else {
+                    append("\nExisting AGENTS.md content follows; improve on it (keep the parts that are still valid):\n")
+                }
                 append("```\n").append(existing).append("\n```\n")
             } else {
-                append("\n请为该项目生成一份全新的 AGENTS.md。\n")
+                if (isZh) {
+                    append("\n请为该项目生成一份全新的 AGENTS.md。\n")
+                } else {
+                    append("\nPlease generate a brand-new AGENTS.md for this project.\n")
+                }
             }
         }
     }
 
-    /** 构建指令式修改的上下文：当前草稿 + 用户自然语言指令。 */
-    private fun buildModifyContext(instruction: String): String {
-        val current = _uiState.value.draft.ifBlank { _uiState.value.existingContent }
-        return buildString {
-            if (current.isNotBlank()) {
-                append("当前 AGENTS.md 内容如下：\n```\n").append(current).append("\n```\n\n")
+    /**
+     * 递归扫描项目目录树（深度受 [MAX_SCAN_DEPTH] 限制），输出 LLM 可读的结构摘要：
+     * 保留源码/配置目录骨架，并在含技术栈标识文件（build.gradle.kts / go.mod / pom.xml 等）
+     * 的目录上标注。单次扫描失败自动跳过，不中断整体生成。
+     */
+    private suspend fun scanProjectStructure(): String {
+        val sb = StringBuilder()
+        suspend fun scan(relPath: String, depth: Int) {
+            if (depth > MAX_SCAN_DEPTH) return
+            val nodes = runCatching { api.listDirectory(connection, relPath, directory) }.getOrNull() ?: return
+            val dirs = nodes.filter {
+                it.type == "directory" && it.name !in SKIP_DIRS && !it.name.startsWith('.')
             }
-            append("用户修改指令：").append(instruction).append("\n\n")
-            append("请根据上述指令修改 AGENTS.md，输出修改后的完整 Markdown 内容。")
+            val files = nodes.filter { it.type != "directory" }
+            val tech = files.mapNotNull { f -> TECH_STACK_FILES.firstOrNull { f.name == it } }
+            val indent = "  ".repeat(depth)
+            val label = if (relPath.isEmpty()) "/" else relPath
+            if (tech.isNotEmpty()) {
+                sb.append(indent).append(label).append("  [").append(tech.joinToString(", ")).append("]\n")
+            } else {
+                sb.append(indent).append(label).append("/\n")
+            }
+            dirs.take(MAX_DIRS_PER_LEVEL).forEach { sub ->
+                scan(if (relPath.isEmpty()) sub.name else "$relPath/${sub.name}", depth + 1)
+            }
+        }
+        scan("", 0)
+        return sb.toString()
+    }
+
+    /** 构建指令式修改的上下文：真实项目结构 + 当前草稿 + 用户自然语言指令。 */
+    private suspend fun buildModifyContext(instruction: String): String {
+        val isZh = context.resources.configuration.locales[0].language == "zh"
+        val current = _uiState.value.draft.ifBlank { _uiState.value.existingContent }
+        val structure = scanProjectStructure()
+        return buildString {
+            if (structure.isNotBlank()) {
+                if (isZh) {
+                    append("项目结构（递归扫描自代码库，基于此真实结构判断，不要凭空假设目录）：\n")
+                } else {
+                    append("Project structure (recursively scanned from the codebase; base your judgment on this real structure, don't assume directories):\n")
+                }
+                append("```\n").append(structure.trimEnd()).append("\n```\n\n")
+            }
+            if (current.isNotBlank()) {
+                if (isZh) {
+                    append("当前 AGENTS.md 内容如下：\n```\n").append(current).append("\n```\n\n")
+                } else {
+                    append("Current AGENTS.md content:\n```\n").append(current).append("\n```\n\n")
+                }
+            }
+            if (isZh) {
+                append("用户修改指令：").append(instruction).append("\n\n")
+                append("请根据上述指令与真实项目结构修改 AGENTS.md，输出修改后的完整 Markdown 内容。")
+            } else {
+                append("User modification instruction: ").append(instruction).append("\n\n")
+                append("Modify AGENTS.md according to the instruction and the real project structure above. Output the full updated Markdown content.")
+            }
         }
     }
 

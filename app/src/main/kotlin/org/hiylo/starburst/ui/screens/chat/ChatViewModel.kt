@@ -203,7 +203,34 @@ data class CustomSlashCommand(
     val prompt: String,
 )
 
-data class ContextUsageDetails(    val input: Int = 0,
+/** 上下文 token 分布分类。 */
+enum class ContextBreakdownKey {
+    SYSTEM, USER, ASSISTANT, TOOL, OTHER;
+
+    /** 分布条颜色（与 Web UI 一致的语义色）。 */
+    val colorKey: ContextBreakdownColor get() = when (this) {
+        SYSTEM -> ContextBreakdownColor.BLUE
+        USER -> ContextBreakdownColor.GREEN
+        ASSISTANT -> ContextBreakdownColor.PURPLE
+        TOOL -> ContextBreakdownColor.ORANGE
+        OTHER -> ContextBreakdownColor.GRAY
+    }
+}
+
+/** 分布条分段颜色。 */
+enum class ContextBreakdownColor {
+    BLUE, GREEN, PURPLE, ORANGE, GRAY
+}
+
+/** 上下文 token 分布条的一个分段。 */
+data class ContextBreakdownSegment(
+    val key: ContextBreakdownKey,
+    val tokens: Int,
+    val percentage: Double,
+)
+
+data class ContextUsageDetails(
+    val input: Int = 0,
     val output: Int = 0,
     val reasoning: Int = 0,
     val cacheRead: Int = 0,
@@ -216,9 +243,99 @@ data class ContextUsageDetails(    val input: Int = 0,
     val totalCost: Double = 0.0,
     val userMessages: Int = 0,
     val assistantMessages: Int = 0,
+    val providerLabel: String? = null,
+    val modelLabel: String? = null,
+    val sessionTitle: String? = null,
+    val sessionCreatedAt: Long? = null,
+    val lastActivityAt: Long? = null,
+    val systemPrompt: String? = null,
+    val breakdown: List<ContextBreakdownSegment> = emptyList(),
 ) {
     val currentTotal: Int get() = input + output + reasoning + cacheRead + cacheWrite
     val sessionTotal: Int get() = sessionInput + sessionOutput + sessionReasoning + sessionCacheRead + sessionCacheWrite
+}
+
+/**
+ * 估算上下文 token 在各类别中的分布（system / user / assistant / tool / other）。
+ * 参考 OpenCode Web UI 的 estimateSessionContextBreakdown 逻辑。
+ */
+internal fun computeContextBreakdown(
+    messages: List<ChatMessage>,
+    input: Int,
+    systemPrompt: String?,
+): List<ContextBreakdownSegment> {
+    if (input <= 0) return emptyList()
+
+    var systemChars = systemPrompt?.length ?: 0
+    var userChars = 0
+    var assistantChars = 0
+    var toolChars = 0
+
+    for (msg in messages) {
+        when (val m = msg.message) {
+            is Message.User -> {
+                for (part in msg.parts) {
+                    when (part) {
+                        is Part.Text -> userChars += part.text.length
+                        is Part.File -> part.source?.let { source ->
+                            val text = (source as? kotlinx.serialization.json.JsonObject)
+                                ?.get("text")
+                                ?.let { (it as? kotlinx.serialization.json.JsonObject)?.get("value") }
+                            text?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.length ?: 0 }
+                        }
+                        is Part.Agent -> part.source?.let {
+                            (it as? kotlinx.serialization.json.JsonPrimitive)?.content?.length ?: 0
+                        }
+                        else -> {}
+                    }
+                }
+            }
+            is Message.Assistant -> {
+                for (part in msg.parts) {
+                    when (part) {
+                        is Part.Text -> assistantChars += part.text.length
+                        is Part.Reasoning -> assistantChars += part.text.length
+                        is Part.Tool -> {
+                            val state = part.state
+                            val inputSize = when (state) {
+                                is ToolState.Pending -> (state.input?.size ?: 0) * 16 + (state.raw?.length ?: 0)
+                                is ToolState.Running -> (state.input?.size ?: 0) * 16
+                                is ToolState.Completed -> (state.input?.size ?: 0) * 16 + (state.output?.length ?: 0)
+                                is ToolState.Error -> (state.input?.size ?: 0) * 16 + (state.error?.length ?: 0)
+                            }
+                            toolChars += inputSize
+                        }
+                        else -> {}
+                    }
+                }
+            }
+        }
+    }
+
+    val estimateTokens = { chars: Int -> Math.ceil(chars / 4.0).toInt() }
+    val systemTokens = estimateTokens(systemChars)
+    val userTokens = estimateTokens(userChars)
+    val assistantTokens = estimateTokens(assistantChars)
+    val toolTokens = estimateTokens(toolChars)
+    val estimated = systemTokens + userTokens + assistantTokens + toolTokens
+
+    val scale = if (estimated > input) input.toDouble() / estimated else 1.0
+    val scaledSystem = Math.floor(systemTokens * scale).toInt()
+    val scaledUser = Math.floor(userTokens * scale).toInt()
+    val scaledAssistant = Math.floor(assistantTokens * scale).toInt()
+    val scaledTool = Math.floor(toolTokens * scale).toInt()
+    val total = scaledSystem + scaledUser + scaledAssistant + scaledTool
+    val other = (input - total).coerceAtLeast(0)
+
+    val toPercent = { tokens: Int -> if (input > 0) (tokens.toDouble() / input * 100) else 0.0 }
+
+    return listOf(
+        ContextBreakdownSegment(ContextBreakdownKey.SYSTEM, scaledSystem, toPercent(scaledSystem)),
+        ContextBreakdownSegment(ContextBreakdownKey.USER, scaledUser, toPercent(scaledUser)),
+        ContextBreakdownSegment(ContextBreakdownKey.ASSISTANT, scaledAssistant, toPercent(scaledAssistant)),
+        ContextBreakdownSegment(ContextBreakdownKey.TOOL, scaledTool, toPercent(scaledTool)),
+        ContextBreakdownSegment(ContextBreakdownKey.OTHER, other, toPercent(other)),
+    ).filter { it.tokens > 0 }
 }
 
 internal fun sessionAcceptsPrompts(session: Session?): Boolean = session != null && session.parentId == null
@@ -281,6 +398,8 @@ internal fun groupChatTurns(messages: List<ChatMessage>): List<ChatTurn> {
     }
 
     messages.forEach { message ->
+        // 过滤回答过程中尚无任何可渲染 part 的空 assistant 消息（流式创建时 parts 未到达）。
+        if (message.isAssistant && message.parts.none(::isBubbleRenderablePart)) return@forEach
         if (message.isAssistant) {
             assistantRun += message
         } else {
@@ -696,6 +815,26 @@ class ChatViewModel @Inject constructor(
         val lastContextTokens = lastWithOutput?.tokens?.let { t ->
             t.input + t.output + t.reasoning + t.cache.read + t.cache.write
         } ?: 0
+        // Extract system prompt from the last user message that has one
+        val systemPrompt = sessionMessages
+            .filterIsInstance<Message.User>()
+            .sortedBy { it.time.created }
+            .lastOrNull { !it.system.isNullOrBlank() }
+            ?.system
+        // Build context breakdown
+        val breakdown = computeContextBreakdown(chatMessages, lastWithOutput?.tokens?.input ?: 0, systemPrompt)
+        // Provider/model labels from the last assistant message
+        val lastAssistant = lastWithOutput
+        val providerLabel = lastAssistant?.providerId?.let { pid ->
+            providers.find { it.id == pid }?.name ?: pid
+        } ?: effectiveProviderId?.let { pid ->
+            providers.find { it.id == pid }?.name ?: pid
+        }
+        val modelLabel = lastAssistant?.modelId?.let { mid ->
+            providers.find { it.id == lastAssistant.providerId }?.models?.get(mid)?.name ?: mid
+        } ?: effectiveModelId?.let { mid ->
+            providers.find { it.id == effectiveProviderId }?.models?.get(mid)?.name ?: mid
+        }
         val contextUsage = ContextUsageDetails(
             input = lastWithOutput?.tokens?.input ?: 0,
             output = lastWithOutput?.tokens?.output ?: 0,
@@ -710,6 +849,13 @@ class ChatViewModel @Inject constructor(
             totalCost = totalCost,
             userMessages = sessionMessages.count { it is Message.User },
             assistantMessages = assistantMessages.size,
+            providerLabel = providerLabel,
+            modelLabel = modelLabel,
+            sessionTitle = session?.title,
+            sessionCreatedAt = session?.time?.created,
+            lastActivityAt = lastWithOutput?.time?.created,
+            systemPrompt = systemPrompt,
+            breakdown = breakdown,
         )
 
         // Resolve available variants for the currently selected model.
@@ -1738,7 +1884,7 @@ class ChatViewModel @Inject constructor(
      * @param onResult 发送是否成功（会话可接收 prompt 且未在发送中）
      */
     fun continueSession(onResult: (Boolean) -> Unit = {}) {
-        val ok = sendMessage("请继续处理之前中断的任务")
+        val ok = sendMessage(context.getString(R.string.chat_continue_task_prompt))
         onResult(ok)
     }
 
@@ -2188,7 +2334,10 @@ class ChatViewModel @Inject constructor(
     fun createNewSession(onResult: (Session?) -> Unit) {
         viewModelScope.launch {
             try {
-                val session = api.createSession(conn, directory = sessionDirectory)
+                // 继承当前会话的工作目录，保证「新会话」与父会话落在同一个 project 下。
+                val dir = sessionDirectory
+                if (BuildConfig.DEBUG) Log.d(TAG, "createNewSession from=$sessionId directory=$dir")
+                val session = api.createSession(conn, directory = dir)
                 eventReducer.upsertSession(serverId, session)
                 if (BuildConfig.DEBUG) Log.d(TAG, "Created new session: ${session.id}")
                 onResult(session)
@@ -2303,7 +2452,7 @@ class ChatViewModel @Inject constructor(
                     _suggestionsSource.value = SuggestionSource.ON_DEVICE
                 }
                 if (parsed.isEmpty() && text.isNotBlank()) {
-                    _suggestionsError.value = "未能解析建议: ${text.take(200)}"
+                    _suggestionsError.value = context.getString(R.string.suggestions_parse_failed, text.take(200))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -2685,15 +2834,6 @@ class ChatViewModel @Inject constructor(
     }
 
     }
-
-/** Prompt asking the model to produce exactly three next-step suggestions as a JSON array. */
-internal const val SUGGESTION_PROMPT =
-    "你是一个编程助手。根据对话内容，建议3个用户可以采取的下一步操作。\n" +
-        "只输出一个JSON数组，包含3条简短的中文建议字符串，不要输出其他任何内容。\n\n" +
-        "示例：\n" +
-        "用户：我需要修复 auth.py 里的 bug\n" +
-        "助手：[\"添加日志来调试认证流程\", \"为登录函数编写单元测试\", \"检查 token 验证逻辑\"]\n\n" +
-        "现在请根据上面的对话建议3个操作。只输出JSON数组。"
 
 /** Number of recent user/assistant turns included in the suggestion prompt. */
 internal const val SUGGESTION_CONTEXT_MAX_ROUNDS = 4

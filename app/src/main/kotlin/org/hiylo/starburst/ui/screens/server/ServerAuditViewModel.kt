@@ -8,16 +8,19 @@
  */
 package org.hiylo.starburst.ui.screens.server
 
+import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendAuditEntry
 import org.hiylo.starburst.data.repository.ServerRepository
@@ -44,6 +47,7 @@ class ServerAuditViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val serverRepository: ServerRepository,
     private val api: BackendApi,
+    @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
 
@@ -61,7 +65,7 @@ class ServerAuditViewModel @Inject constructor(
             if (backendUrl.isNotBlank()) {
                 refresh()
             } else {
-                _uiState.update { it.copy(isLoading = false, error = "后端未配置") }
+                _uiState.update { it.copy(isLoading = false, error = context.getString(R.string.server_backend_not_configured)) }
             }
         }
     }
@@ -75,7 +79,7 @@ class ServerAuditViewModel @Inject constructor(
                 _uiState.update { it.copy(entries = entries, isLoading = false) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load audit", e)
-                _uiState.update { it.copy(isLoading = false, error = e.message ?: "加载失败") }
+                _uiState.update { it.copy(isLoading = false, error = e.message ?: context.getString(R.string.server_load_failed)) }
             }
         }
     }

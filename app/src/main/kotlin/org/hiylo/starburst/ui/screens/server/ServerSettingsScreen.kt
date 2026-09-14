@@ -77,6 +77,8 @@ fun ServerSettingsScreen(
     val uiState by viewModel.uiState.collectAsState()
     val backendAvailable = uiState.backendAvailable
     val isInstallingBackend = uiState.isInstallingBackend
+    // 后端「正常可用」（健康 + 版本达标）时展示依赖后端的入口（Rules/Tokens/Audit）。
+    val backendReady = viewModel.isBackendReady
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -261,123 +263,132 @@ fun ServerSettingsScreen(
                 }
             }
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenRules)
-            ) {
-                Row(
+            // 自动化规则：强依赖后端，仅在「后端正常可用」时显示。
+            if (backendReady) {
+                Card(
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    border = appAmoledBorder(0.65f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable(onClick = onOpenRules)
                 ) {
-                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_rules),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_rules_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.server_settings_rules),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.server_settings_rules_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenTokens)
-            ) {
-                Row(
+            // API 令牌：强依赖后端，仅在「后端正常可用」时显示。
+            if (backendReady) {
+                Card(
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    border = appAmoledBorder(0.65f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable(onClick = onOpenTokens)
                 ) {
-                    Icon(Icons.Default.Lock, contentDescription = null)
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_tokens),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_tokens_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        Icon(Icons.Default.Lock, contentDescription = null)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.server_settings_tokens),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.server_settings_tokens_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenAudit)
-            ) {
-                Row(
+            // 审计日志：强依赖后端，仅在「后端正常可用」时显示。
+            if (backendReady) {
+                Card(
+                    shape = AppCardShape,
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+                    ),
+                    border = appAmoledBorder(0.65f),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .clickable(onClick = onOpenAudit)
                 ) {
-                    Icon(Icons.Default.History, contentDescription = null)
-                    Column(
+                    Row(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_audit),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_audit_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        Icon(Icons.Default.History, contentDescription = null)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp)
+                        ) {
+                            Text(
+                                text = stringResource(R.string.server_settings_audit),
+                                style = MaterialTheme.typography.titleSmall
+                            )
+                            Text(
+                                text = stringResource(R.string.server_settings_audit_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                            )
+                        }
+                        Icon(
+                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 }
             }
 

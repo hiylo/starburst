@@ -33,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.font.FontFamily
@@ -44,6 +45,7 @@ import org.hiylo.starburst.domain.model.*
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ProviderModel
 import java.util.Locale
+import java.text.SimpleDateFormat
 import kotlin.math.roundToInt
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
@@ -560,6 +562,7 @@ internal fun CustomCommandsDialog(
 internal fun ContextUsageDialog(
     usage: ContextUsageDetails,
     contextWindow: Int,
+    messages: List<ChatMessage> = emptyList(),
     onDismiss: () -> Unit,
 ) {
     val isAmoled = isAmoledTheme()
@@ -571,72 +574,361 @@ internal fun ContextUsageDialog(
         percentage >= 70 -> MaterialTheme.colorScheme.tertiary
         else -> MaterialTheme.colorScheme.primary
     }
+    var showSystemPrompt by remember { mutableStateOf(false) }
+    val timeFormat = remember { SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.getDefault()) }
+
     AppDialog(
         onDismissRequest = onDismiss,
         modifier = Modifier.fillMaxWidth().widthIn(max = 560.dp),
     ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+        Column(
+            modifier = Modifier
+                .padding(20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            // --- Header ---
+            Text(stringResource(R.string.chat_context_details), style = MaterialTheme.typography.titleMedium)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.Bottom,
             ) {
-                Text(stringResource(R.string.chat_context_details), style = MaterialTheme.typography.titleMedium)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom,
-                ) {
-                    Text(
-                        text = "$percentage%",
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = progressColor,
-                    )
-                    Text(
-                        text = stringResource(
-                            R.string.chat_context_used,
-                            formatTokenCount(used),
-                            formatTokenCount(contextWindow),
-                        ),
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                LinearProgressIndicator(
-                    progress = { if (contextWindow > 0) (used.toFloat() / contextWindow).coerceIn(0f, 1f) else 0f },
-                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                Text(
+                    text = "$percentage%",
+                    style = MaterialTheme.typography.headlineMedium,
                     color = progressColor,
-                    trackColor = progressColor.copy(alpha = 0.16f),
                 )
                 Text(
-                    text = stringResource(R.string.chat_context_remaining, formatTokenCount(remaining)),
-                    style = MaterialTheme.typography.bodySmall,
+                    text = stringResource(
+                        R.string.chat_context_used,
+                        formatTokenCount(used),
+                        formatTokenCount(contextWindow),
+                    ),
+                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            LinearProgressIndicator(
+                progress = { if (contextWindow > 0) (used.toFloat() / contextWindow).coerceIn(0f, 1f) else 0f },
+                modifier = Modifier.fillMaxWidth().height(6.dp),
+                color = progressColor,
+                trackColor = progressColor.copy(alpha = 0.16f),
+            )
+            Text(
+                text = stringResource(R.string.chat_context_remaining, formatTokenCount(remaining)),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            // --- Stats Grid ---
+            HorizontalDivider()
+            ContextStatGrid(
+                stats = buildContextStats(usage, contextWindow, percentage, timeFormat),
+            )
+
+            // --- Token Breakdown Bar ---
+            if (usage.breakdown.isNotEmpty()) {
                 HorizontalDivider()
-                Text(stringResource(R.string.chat_context_current_turn), style = MaterialTheme.typography.labelLarge)
-                ContextTokenRow(stringResource(R.string.chat_context_input), usage.input)
-                ContextTokenRow(stringResource(R.string.chat_context_output), usage.output)
-                if (usage.reasoning > 0) ContextTokenRow(stringResource(R.string.chat_context_reasoning), usage.reasoning)
-                if (usage.cacheRead > 0) ContextTokenRow(stringResource(R.string.chat_context_cache_read), usage.cacheRead)
-                if (usage.cacheWrite > 0) ContextTokenRow(stringResource(R.string.chat_context_cache_write), usage.cacheWrite)
+                ContextBreakdownBar(usage.breakdown)
+            }
+
+            // --- System Prompt ---
+            if (!usage.systemPrompt.isNullOrBlank()) {
                 HorizontalDivider()
-                Text(stringResource(R.string.chat_context_session_totals), style = MaterialTheme.typography.labelLarge)
-                ContextTokenRow(stringResource(R.string.chat_context_tokens_processed), usage.sessionTotal)
-                ContextTokenRow(
-                    stringResource(R.string.chat_context_messages),
-                    usage.userMessages + usage.assistantMessages,
-                    raw = true,
-                )
-                if (usage.totalCost > 0) {
-                    ContextTokenRow(
-                        stringResource(R.string.chat_context_cost),
-                        0,
-                        value = String.format(Locale.US, "$%.4f", usage.totalCost),
-                    )
-                }
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    AppSecondaryButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { showSystemPrompt = !showSystemPrompt }
+                            .padding(vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.chat_context_system_prompt_title),
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        Text(
+                            text = if (showSystemPrompt) stringResource(R.string.chat_collapse) else stringResource(R.string.chat_expand),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    if (showSystemPrompt) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .padding(vertical = 8.dp),
+                            color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
+                            border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+                        ) {
+                            Text(
+                                text = usage.systemPrompt.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                modifier = Modifier
+                                    .padding(12.dp)
+                                    .verticalScroll(rememberScrollState()),
+                            )
+                        }
+                    }
                 }
             }
+
+            // --- Raw Messages ---
+            if (messages.isNotEmpty()) {
+                HorizontalDivider()
+                Text(
+                    text = stringResource(R.string.chat_context_raw_messages_title),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 300.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    items(messages) { msg ->
+                        ContextRawMessageRow(msg, timeFormat)
+                    }
+                }
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                AppSecondaryButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+            }
+        }
+    }
+}
+
+/** Build a list of stat items for the context panel grid. */
+@Composable
+internal fun buildContextStats(
+    usage: ContextUsageDetails,
+    contextWindow: Int,
+    percentage: Int,
+    timeFormat: SimpleDateFormat,
+): List<Pair<String, String>> {
+    val fmt = { v: Int -> if (v == 0) "—" else formatTokenCount(v) }
+    val fmtPct = { "$percentage%" }
+    val fmtCost = if (usage.totalCost > 0) String.format(Locale.US, "$%.4f", usage.totalCost) else "—"
+    val fmtTime = { t: Long? -> t?.let { timeFormat.format(java.util.Date(it)) } ?: "—" }
+    val cacheLabel = if (usage.cacheRead > 0 || usage.cacheWrite > 0) {
+        "${fmt(usage.cacheRead)} / ${fmt(usage.cacheWrite)}"
+    } else "—"
+
+    return listOf(
+        stringResource(R.string.chat_context_stats_session) to (usage.sessionTitle ?: "—"),
+        stringResource(R.string.chat_context_stats_messages) to "${usage.userMessages + usage.assistantMessages}",
+        stringResource(R.string.chat_context_stats_provider) to (usage.providerLabel ?: "—"),
+        stringResource(R.string.chat_context_stats_model) to (usage.modelLabel ?: "—"),
+        stringResource(R.string.chat_context_stats_limit) to (if (contextWindow > 0) formatTokenCount(contextWindow) else "—"),
+        stringResource(R.string.chat_context_stats_total_tokens) to fmt(usage.currentTotal),
+        stringResource(R.string.chat_context_stats_usage) to fmtPct(),
+        stringResource(R.string.chat_context_stats_input_tokens) to fmt(usage.input),
+        stringResource(R.string.chat_context_stats_output_tokens) to fmt(usage.output),
+        stringResource(R.string.chat_context_stats_reasoning_tokens) to fmt(usage.reasoning),
+        stringResource(R.string.chat_context_stats_cache_tokens) to cacheLabel,
+        stringResource(R.string.chat_context_stats_user_messages) to usage.userMessages.toString(),
+        stringResource(R.string.chat_context_stats_assistant_messages) to usage.assistantMessages.toString(),
+        stringResource(R.string.chat_context_stats_total_cost) to fmtCost,
+        stringResource(R.string.chat_context_stats_created) to fmtTime(usage.sessionCreatedAt),
+        stringResource(R.string.chat_context_stats_last_activity) to fmtTime(usage.lastActivityAt),
+    )
+}
+
+/** 2-column stats grid for the context panel. */
+@Composable
+private fun ContextStatGrid(stats: List<Pair<String, String>>) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val rowSize = 2
+        stats.chunked(rowSize).forEach { row ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                row.forEach { (label, value) ->
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = value,
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 上下文 token 分布条：彩色分段 + 图例。 */
+@Composable
+private fun ContextBreakdownBar(segments: List<ContextBreakdownSegment>) {
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text(
+            text = stringResource(R.string.chat_context_breakdown_title),
+            style = MaterialTheme.typography.labelLarge,
+        )
+        // Colored bar
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(4.dp))
+                .height(8.dp),
+        ) {
+            segments.forEach { segment ->
+                val color = breakdownSegmentColor(segment.key)
+                Box(
+                    modifier = Modifier
+                        .weight((segment.percentage / 100.0).toFloat())
+                        .fillMaxHeight()
+                        .background(color),
+                )
+            }
+        }
+        // Legend
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            segments.forEach { segment ->
+                val label = when (segment.key) {
+                    ContextBreakdownKey.SYSTEM -> stringResource(R.string.chat_context_breakdown_system)
+                    ContextBreakdownKey.USER -> stringResource(R.string.chat_context_breakdown_user)
+                    ContextBreakdownKey.ASSISTANT -> stringResource(R.string.chat_context_breakdown_assistant)
+                    ContextBreakdownKey.TOOL -> stringResource(R.string.chat_context_breakdown_tool)
+                    ContextBreakdownKey.OTHER -> stringResource(R.string.chat_context_breakdown_other)
+                }
+                val color = breakdownSegmentColor(segment.key)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(RoundedCornerShape(2.dp))
+                            .background(color),
+                    )
+                    Text(
+                        text = "$label ${String.format(Locale.US, "%.1f", segment.percentage)}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        Text(
+            text = stringResource(R.string.chat_context_breakdown_note),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        )
+    }
+}
+
+/** 分布条分段颜色。 */
+private fun breakdownSegmentColor(key: ContextBreakdownKey): Color = when (key) {
+    ContextBreakdownKey.SYSTEM -> Color(0xFF569CD6) // blue
+    ContextBreakdownKey.USER -> Color(0xFF4EC9B0)   // green
+    ContextBreakdownKey.ASSISTANT -> Color(0xFFC586C0) // purple
+    ContextBreakdownKey.TOOL -> Color(0xFFCE9178)  // orange
+    ContextBreakdownKey.OTHER -> Color(0xFF808080)  // gray
+}
+
+/** 原始消息行：显示角色、ID、时间和展开的 parts。 */
+@Composable
+private fun ContextRawMessageRow(message: ChatMessage, timeFormat: SimpleDateFormat) {
+    var expanded by remember { mutableStateOf(false) }
+    val msg = message.message
+    val role = msg.role
+    val id = msg.id
+    val time = timeFormat.format(java.util.Date(msg.time.created))
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { expanded = !expanded }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = "$role • $id",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.Medium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = time,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Text(
+            text = "${message.parts.size}p",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (expanded) {
+        Column(modifier = Modifier.padding(start = 12.dp)) {
+            message.parts.forEach { part ->
+                when (part) {
+                    is Part.Text -> {
+                        if (part.text.isNotBlank()) {
+                            Text(
+                                text = part.text.take(200) + if (part.text.length > 200) "…" else "",
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    is Part.Reasoning -> {
+                        if (part.text.isNotBlank()) {
+                            Text(
+                                text = "[reasoning] ${part.text.take(100)}${if (part.text.length > 100) "…" else ""}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    is Part.Tool -> {
+                        Text(
+                            text = "[tool] ${part.tool}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.tertiary,
+                        )
+                    }
+                    is Part.File -> {
+                        Text(
+                            text = "[file] ${part.filename ?: part.url ?: part.mime}",
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    else -> {}
+                }
+            }
+        }
     }
 }
 
@@ -825,7 +1117,7 @@ private fun SessionFileDiffContent(before: String, after: String) {
 data class PromptTemplate(
     val id: String,
     val titleRes: Int,
-    val prompt: String,
+    val promptRes: Int,
 )
 
 /** 预设的快捷模板列表。 */
@@ -833,22 +1125,27 @@ private val promptTemplates = listOf(
     PromptTemplate(
         id = "code_review",
         titleRes = R.string.chat_template_code_review,
-        prompt = "请对当前项目的代码做一次全面的代码审查，重点关注：潜在 bug、安全问题、性能瓶颈、代码风格一致性。请指出具体的文件和位置，并给出可执行的修复建议。",
+        promptRes = R.string.chat_template_code_review_prompt,
     ),
     PromptTemplate(
         id = "generate_tests",
         titleRes = R.string.chat_template_generate_tests,
-        prompt = "请为项目中的核心功能生成单元测试，覆盖主要的正常流程和边界情况，遵循项目现有的测试框架和风格。",
+        promptRes = R.string.chat_template_generate_tests_prompt,
     ),
     PromptTemplate(
         id = "explain_code",
         titleRes = R.string.chat_template_explain_code,
-        prompt = "请解释当前项目的核心架构和关键代码逻辑，帮助我快速理解项目。如有相关文件，请结合具体代码说明。",
+        promptRes = R.string.chat_template_explain_code_prompt,
     ),
     PromptTemplate(
         id = "fix_bug",
         titleRes = R.string.chat_template_fix_bug,
-        prompt = "请帮我排查并修复项目中的 bug。先定位问题的根因，再给出修复方案和具体的代码修改。",
+        promptRes = R.string.chat_template_fix_bug_prompt,
+    ),
+    PromptTemplate(
+        id = "continue_task",
+        titleRes = R.string.chat_template_continue_task,
+        promptRes = R.string.chat_template_continue_task_prompt,
     ),
 )
 
@@ -858,6 +1155,7 @@ internal fun TemplatePickerDialog(
     onSelect: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
+    val context = LocalContext.current
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chat_template_title)) },
@@ -871,7 +1169,7 @@ internal fun TemplatePickerDialog(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clip(RoundedCornerShape(12.dp))
-                            .clickable(onClick = { onSelect(template.prompt) })
+                            .clickable(onClick = { onSelect(context.getString(template.promptRes)) })
                             .padding(horizontal = 12.dp, vertical = 10.dp),
                     ) {
                         Text(
@@ -880,7 +1178,7 @@ internal fun TemplatePickerDialog(
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
-                            text = template.prompt.take(48) + "…",
+                            text = context.getString(template.promptRes).take(48) + "…",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 2,
