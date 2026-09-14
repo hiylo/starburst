@@ -1,0 +1,60 @@
+/*
+ * Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
+ * Project : StarBurst
+ * File : SyncTransport.kt
+ * Date : 2026/09/06 15:42:23
+ * Author : Hsi Chu
+ * Contact : hiylo@live.com
+ * Version : V1.0
+ */
+package org.hiylo.starburst.data.sync
+
+data class RemoteSyncFile(
+    val content: String,
+    val revision: String?,
+    val resolvedEndpoint: String? = null,
+)
+
+interface SyncTransport {
+    suspend fun read(): RemoteSyncFile?
+    suspend fun write(content: String, expectedRevision: String? = null, create: Boolean = false): String?
+}
+
+class SyncHttpException(message: String) : Exception(message)
+class SyncPermissionException(message: String, cause: Throwable? = null) : Exception(message, cause)
+
+enum class SyncDecision { MISSING_UPLOAD, UP_TO_DATE, PULL_REMOTE, PUSH_LOCAL, CONFLICT }
+enum class BackupSyncDecision { CREATE, UP_TO_DATE, UPDATE, DIVERGED }
+
+fun decideSync(
+    remoteExists: Boolean,
+    storedRevision: String?,
+    remoteRevision: String?,
+    storedLocalHash: String?,
+    localHash: String,
+): SyncDecision {
+    if (!remoteExists) return SyncDecision.MISSING_UPLOAD
+    if (storedRevision == null || storedLocalHash == null) return SyncDecision.CONFLICT
+    val remoteChanged = storedRevision != remoteRevision
+    val localChanged = storedLocalHash != localHash
+    return when {
+        remoteChanged && localChanged -> SyncDecision.CONFLICT
+        remoteChanged -> SyncDecision.PULL_REMOTE
+        localChanged -> SyncDecision.PUSH_LOCAL
+        else -> SyncDecision.UP_TO_DATE
+    }
+}
+
+fun decideBackupSync(
+    remoteExists: Boolean,
+    acknowledgedContentHash: String?,
+    remoteContentHash: String?,
+    canonicalContentHash: String,
+): BackupSyncDecision {
+    if (!remoteExists) return BackupSyncDecision.CREATE
+    if (remoteContentHash == canonicalContentHash) return BackupSyncDecision.UP_TO_DATE
+    if (acknowledgedContentHash != null && remoteContentHash == acknowledgedContentHash) {
+        return BackupSyncDecision.UPDATE
+    }
+    return BackupSyncDecision.DIVERGED
+}
