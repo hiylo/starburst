@@ -9,6 +9,41 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-09-14
+
+### Added
+- **AI workbench** — a dashboard of all agent activity on the connected server: a live event stream
+  (push-driven with polling fallback, localized event text, heartbeat/high-frequency filtering,
+  correct local timezone), aggregated per-session rows, and a decision panel per session showing the
+  latest AI reply, pending questions (with quick one-tap answers), a quick-reply composer with voice
+  input, and a jump-into-full-session action.
+- **Backend full mirror** — when a starburst-backend is reachable, the app routes through its
+  `/api/opencode/*` mirror (Bearer token) for consistent state and faster pushes, with automatic
+  fallback to a direct connection on repeated failures. Over SSH, the backend port (18880) is now
+  forwarded alongside the OpenCode port so pushes work through the tunnel.
+- **Event collection & push** — the backend records session events (`/api/events`) and pushes them
+  live over `/api/ws`; the app turns session completion / question / permission / error events into
+  heads-up notifications with sound and vibration, even while the session is open.
+- **Accurate session status** — backend status endpoint combines a snapshot with event aggregation
+  (idle set explicitly, busy corrected by recent message activity, seeded from the database), and
+  push-driven updates keep the session list and workbench in sync.
+- **Expanded session pinned header** — the expanded session's title row stays fixed while its
+  decision content scrolls; all sessions support long-press menus (enter / delete session).
+
+### Changed
+- **Event display** — modified-file events show the full file path (directory + filename) with
+  middle-ellipsis truncation instead of a possibly-ambiguous session title.
+- **Notifications** — event notifications use high-priority heads-up banners (sound + vibration)
+  instead of full-screen intents, which Android 14 denies by default.
+
+### Fixed
+- SSH-tunnel deployments could not reach the backend (only the OpenCode port was forwarded), so push
+  notifications never fired; the backend port is now forwarded too.
+- R8 shrinking stripped JSch's JCE classes (`com.jcraft.jsch.jce.Random`), breaking SSH tunnels in
+  release builds; keep rules now preserve them.
+- Release builds could crash on startup due to stale incremental build artifacts (Hilt generated
+  classes); full clean builds are reliable.
+
 ## [1.4.0] - 2026-09-14
 
 ### Added

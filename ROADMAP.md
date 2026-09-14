@@ -51,6 +51,40 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Message actions (edit & resend, regenerate, stop)
 - [x] In-session search
 
+## 2.0.0 (Released ✅)
+
+> Released 2026-09-14. AI workbench, backend full mirror and live event push.
+
+### AI workbench
+
+- [x] Workbench entry from the session list (dashboard icon) + navigation route
+- [x] Live event stream: push-driven with polling fallback, localized event text, heartbeat / high-frequency filtering, correct local timezone
+- [x] Per-session aggregation with the latest event per session
+- [x] Decision panel: latest AI reply (full text), pending questions with one-tap answers, quick-reply composer with voice input, jump into full session
+- [x] Session rows: status ordering, pinned expanded header with scrollable decision content, long-press menu (enter / delete session)
+- [x] Event title fallback: modified-file events show directory + filename with middle-ellipsis truncation
+
+### Backend full mirror (starburst-backend)
+
+- [x] `/api/opencode/*` full-path mirror (prefix strip, SSE passthrough, token auth) — M-OC/M3
+- [x] Event collection into Postgres (`/api/events`, JSONB sanitize, event unwrap)
+- [x] `/api/ws` live push channel (401 without token, 101 with token)
+- [x] Accurate `/session/status`: snapshot + event aggregation, idle set explicitly, busy corrected by recent message activity, DB-seeded
+- [x] App dual-channel: backend mirror preferred when healthy (2.5s probe), direct fallback on repeated failures
+- [x] SSH tunnel forwards the backend port (18880) alongside the OpenCode port so pushes work through the tunnel
+
+### Push notifications
+
+- [x] Completion / question / permission / error notifications over the push channel (sound + vibration, exponential-backoff reconnect)
+- [x] Heads-up banner instead of full-screen intents (Android 14 denies full-screen by default)
+- [x] Notifications post even while the session is open (no foreground suppression)
+
+### Fixed
+
+- [x] SSH-tunnel backend port not forwarded → push notifications never fired
+- [x] R8 stripped JSch JCE classes → SSH tunnels broken in release builds (keep rules added)
+- [x] Release startup crash from stale incremental build artifacts (Hilt classes)
+
 ## Now — 1.4.0 (In development)
 
 > 2026-09-14. Server management, AGENTS.md 工作流与工程重构。

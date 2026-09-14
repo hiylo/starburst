@@ -65,6 +65,13 @@ manage sessions — all from a mobile-first UI.
 - **Model & agent control** — search providers/models, cycle agents, view token usage and context
 - **Multi-server** — connect to several OpenCode servers at once, with stable reconnection and
   one-tap switching from the session list
+- **AI workbench** — a live dashboard of agent activity across sessions: real-time event stream,
+  per-session latest status, and a decision panel with the latest AI reply, pending questions
+  (one-tap answers), quick-reply composer with voice input, and jump-into-session
+- **Backend mirror & live push (starburst-backend)** — routes through the backend `/api/opencode/*`
+  mirror when reachable (direct fallback otherwise); records session events and pushes completion /
+  question / permission / error notifications with sound, vibration and heads-up banners, even while
+  the session is open
 - **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links, plus
   long-press shortcuts (new session / global search / task center)
 - **SSH tunnel** — optionally connect and restart the OpenCode service over an SSH tunnel, with
