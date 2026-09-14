@@ -24,6 +24,7 @@ import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConfigPatch
 import org.hiylo.starburst.data.api.ServerConfigResponse
 import org.hiylo.starburst.data.api.ServerConnection
+import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.getConfig
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.updateConfig
@@ -35,6 +36,7 @@ import org.hiylo.starburst.service.StarBurstConnectionService
 import org.hiylo.starburst.service.ServerConnectionMetrics
 import org.hiylo.starburst.service.ServerConnectionStatus
 import org.hiylo.starburst.service.SshRunner
+import org.hiylo.starburst.ui.gate.BackendGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -68,6 +70,12 @@ data class ServerManagementUiState(
     val isSavingConfig: Boolean = false,
     val error: String? = null,
     val message: String? = null,
+    /** 探测到的 starburst-backend 是否可用（GET /api/health）。null 表示探测中。 */
+    val backendAvailable: Boolean? = null,
+    /** 探测到的后端自身版本（GET /api/system 的 version 字段）。 */
+    val backendVersion: String? = null,
+    /** 后端版本是否低于 App 要求的最低版本（需要升级）。 */
+    val backendNeedsUpgrade: Boolean = false,
 )
 
 /** 单个服务器连接的实时健康状态。 */
@@ -87,6 +95,7 @@ data class ServerConnectionHealthUi(
 class ServerManagementViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val api: OpenCodeApi,
+    private val backendApi: BackendApi,
     private val shellRegistry: ServerShellRegistry,
     private val serverRepository: ServerRepository,
     @ApplicationContext private val context: Context,
@@ -110,6 +119,10 @@ class ServerManagementViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ServerManagementUiState(serverName = serverName, isLoading = true))
     val uiState: StateFlow<ServerManagementUiState> = _uiState.asStateFlow()
+
+    /** 后端是否「正常可用」（健康 + 版本达标）。后端相关功能入口的显隐统一使用该判定。 */
+    val isBackendReady: Boolean
+        get() = BackendGate.isReady(_uiState.value.backendAvailable, _uiState.value.backendVersion)
 
     private var serviceBinder: StarBurstConnectionService.LocalBinder? = null
     private var healthObserverJob: Job? = null
@@ -200,7 +213,26 @@ class ServerManagementViewModel @Inject constructor(
             loadServiceInfo()
             loadSystemInfo()
             loadConfig()
+            probeBackend()
             _uiState.update { it.copy(isLoading = false) }
+        }
+    }
+
+    /** 探测当前服务器对应的 starburst-backend 是否已部署并存活（health + 版本）。 */
+    fun probeBackend() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(backendAvailable = null, backendVersion = null, backendNeedsUpgrade = false)
+            }
+            val server = serverRepository.getServer(serverId)
+            val probe = BackendGate.probe(backendApi, server, serverUrl)
+            _uiState.update {
+                it.copy(
+                    backendAvailable = probe.available,
+                    backendVersion = probe.version,
+                    backendNeedsUpgrade = probe.needsUpgrade,
+                )
+            }
         }
     }
 

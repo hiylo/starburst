@@ -10,6 +10,7 @@
 package org.hiylo.starburst.data.api
 
 import org.hiylo.starburst.domain.model.MessageWithParts
+import org.hiylo.starburst.logging.AppLogger as Log
 import io.ktor.client.call.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
@@ -128,22 +129,47 @@ suspend fun OpenCodeApi.promptAsync(
     system: String? = null,
     tools: Map<String, Boolean>? = null
 ) {
-    val response = httpClient.post("${conn.baseUrl}/session/$sessionId/prompt_async") {
-        conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
-        contentType(ContentType.Application.Json)
-        setBody(PromptRequest(
-            messageId = messageId,
-            parts = parts,
-            model = model,
-            agent = agent,
-            variant = variant,
-            system = system,
-            tools = tools
-        ))
-    }
-    if (!response.status.isSuccess()) {
-        throw RuntimeException("prompt_async failed: ${response.status}")
+    val textPreview = parts.asSequence()
+        .filter { it.type == "text" }
+        .joinToString(" ") { it.text.orEmpty() }
+        .trim()
+        .take(120)
+    val textBytes = parts.sumOf { it.text?.length ?: 0 }
+    val startedAt = System.currentTimeMillis()
+    try {
+        val response = httpClient.post("${conn.baseUrl}/session/$sessionId/prompt_async") {
+            conn.authHeader?.let { header("Authorization", it) }
+            directory?.let { header("x-starburst-directory", it) }
+            contentType(ContentType.Application.Json)
+            setBody(PromptRequest(
+                messageId = messageId,
+                parts = parts,
+                model = model,
+                agent = agent,
+                variant = variant,
+                system = system,
+                tools = tools
+            ))
+        }
+        val elapsedMs = System.currentTimeMillis() - startedAt
+        Log.i(
+            "PromptAsyncTrace",
+            "send sid=$sessionId mid=$messageId dir=${directory ?: "-"} " +
+                "types=${parts.joinToString(",") { it.type }} bytes=$textBytes http=${response.status.value} " +
+                "elapsed=${elapsedMs}ms text='$textPreview'",
+        )
+        if (!response.status.isSuccess()) {
+            throw RuntimeException("prompt_async failed: ${response.status}")
+        }
+    } catch (error: Exception) {
+        val elapsedMs = System.currentTimeMillis() - startedAt
+        Log.e(
+            "PromptAsyncTrace",
+            "failed sid=$sessionId mid=$messageId dir=${directory ?: "-"} bytes=$textBytes elapsed=${elapsedMs}ms " +
+                "text='$textPreview' error=${error.message}",
+            error,
+        )
+        throw error
     }
 }
 

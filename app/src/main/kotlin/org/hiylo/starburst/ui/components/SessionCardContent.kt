@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Icon
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.FontFamily
@@ -56,6 +58,7 @@ import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.ui.theme.StatusError
+import org.hiylo.starburst.ui.theme.StatusWarning
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -93,9 +96,14 @@ fun SessionCardContent(
     }
     val accent = category?.let { sessionCategoryColor(it.color) }
         ?: MaterialTheme.colorScheme.primary
-    val statusBadge: Pair<String, Color>? = when (status) {
-        SessionStatus.Busy -> stringResource(R.string.session_status_busy) to StatusConnected
-        is SessionStatus.Retry -> stringResource(R.string.sessions_retrying) to StatusError
+    val statusBadge: Triple<String, Color, ImageVector?>? = when (status) {
+        SessionStatus.Busy -> Triple(stringResource(R.string.session_status_busy), StatusConnected, null)
+        is SessionStatus.Retry -> Triple(stringResource(R.string.sessions_retrying), StatusError, null)
+        SessionStatus.Question -> Triple(
+            stringResource(R.string.session_status_pending_question),
+            StatusWarning,
+            Icons.Default.HelpOutline,
+        )
         SessionStatus.Idle -> null
     }
     Column(
@@ -208,14 +216,18 @@ fun SessionCardContent(
                     )
                 }
                 Text(
-                    text = session.title?.takeIf(String::isNotBlank) ?: stringResource(R.string.session_untitled),
+                    text = session.title?.takeIf(String::isNotBlank)?.replace('\n', ' ') ?: stringResource(R.string.session_untitled),
                     modifier = Modifier.weight(1f),
                     style = MaterialTheme.typography.bodyLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
                 if (statusBadge != null) {
-                    SessionStatusBadge(label = statusBadge.first, color = statusBadge.second)
+                    SessionStatusBadge(
+                        label = statusBadge.first,
+                        color = statusBadge.second,
+                        icon = statusBadge.third,
+                    )
                 }
             }
             Spacer(Modifier.height(if (compact) 1.dp else 2.dp))
@@ -302,15 +314,17 @@ fun SessionCardContent(
 }
 
 /**
- * 会话状态彩色徽章：小圆角背景 + 状态色圆点 + 状态色文字。
+ * 会话状态彩色徽章：小圆角背景 + 状态色圆点（可选状态色图标）+ 状态色文字。
  *
  * @param label 状态文案。
  * @param color 状态语义色。
+ * @param icon 可选的徽章图标（如「待选择/提问中」的问号），与圆点二选一展示。
  */
 @Composable
 private fun SessionStatusBadge(
     label: String,
     color: Color,
+    icon: ImageVector? = null,
 ) {
     Row(
         modifier = Modifier
@@ -320,12 +334,21 @@ private fun SessionStatusBadge(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Box(
-            modifier = Modifier
-                .size(6.dp)
-                .clip(CircleShape)
-                .background(color),
-        )
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(12.dp),
+                tint = color,
+            )
+        } else {
+            Box(
+                modifier = Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(color),
+            )
+        }
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),

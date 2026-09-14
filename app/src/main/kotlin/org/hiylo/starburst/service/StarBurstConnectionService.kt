@@ -30,9 +30,14 @@ import org.hiylo.starburst.MainActivity
 import org.hiylo.starburst.R
 import android.os.Handler
 import android.os.Looper
+import org.hiylo.starburst.data.api.BackendApi
+import org.hiylo.starburst.data.api.BackendStatus
 import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.OpenCodeGateway
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SseClient
+import org.hiylo.starburst.data.backend.BackendPushListener
+import org.hiylo.starburst.data.backend.PushSessionEvent
 import org.hiylo.starburst.data.api.listMessages
 import org.hiylo.starburst.data.api.listPendingPermissions
 import org.hiylo.starburst.data.api.listPendingQuestions
@@ -49,6 +54,8 @@ import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.domain.model.SseEvent
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session as JschSession
 import dagger.hilt.android.AndroidEntryPoint
@@ -88,6 +95,8 @@ private const val SSE_STALL_TIMEOUT_MS = 30_000L
 private const val SSE_STALL_CHECK_INTERVAL_MS = 15_000L
 /** 会话完成兜底轮询间隔：SSE 假死收不到 session.idle 时，靠轮询 /session/status 检测 busy→idle。 */
 private const val COMPLETION_POLL_INTERVAL_MS = 15_000L
+/** 后端推送连续失败达到该次数后，把该 server 连接回退到直连 opencode。 */
+private const val BACKEND_FALLBACK_THRESHOLD = 3
 /** 通知正文结果摘要的最大字符数（约 80 字）。 */
 private const val NOTIFICATION_SUMMARY_MAX_CHARS = 80
 
@@ -131,6 +140,10 @@ private data class ServerConnectionState(
     val sseJob: Job,
     val isConnected: Boolean = false,
     val sshSession: JschSession? = null,
+    val pushJob: Job? = null,
+    val directConn: ServerConnection? = null,
+    /** SSH 隧道内后端镜像的本地端口（SSH 模式额外转发 18880；非 SSH 模式为 null）。 */
+    val backendLocalPort: Int? = null,
 )
 
 /**
@@ -181,6 +194,12 @@ class StarBurstConnectionService : Service() {
 
     @Inject
     lateinit var serverConnectionStateRepository: ServerConnectionStateRepository
+
+    @Inject
+    lateinit var backendApi: BackendApi
+
+    @Inject
+    lateinit var backendPushListener: BackendPushListener
 
     private val binder = LocalBinder()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -454,13 +473,20 @@ class StarBurstConnectionService : Service() {
         connections.compute(server.id) { _, existing ->
             if (existing != null && !existing.sseJob.isCompleted) return@compute existing
             replaced = existing
-            val conn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
+            val baseConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
+            val conn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
+            val sseJob = startSseConnection(server, conn)
+            val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
+            sseJob.invokeOnCompletion { pushJob?.cancel() }
             ServerConnectionState(
                 config = server,
                 conn = conn,
-                sseJob = startSseConnection(server, conn),
+                sseJob = sseJob,
                 isConnected = false,
                 sshSession = resolved.sshSession,
+                pushJob = pushJob,
+                directConn = baseConn,
+                backendLocalPort = resolved.backendLocalPort,
             ).also { replacement = it }
         }
         val state = replacement
@@ -622,16 +648,19 @@ class StarBurstConnectionService : Service() {
     }
 
     /**
-     * 连接所用的 baseUrl 与可选 SSH 会话（本地端口转发建立后返回 127.0.0.1:localPort）。
+     * 连接所用的 baseUrl、可选 SSH 会话（本地端口转发建立后返回 127.0.0.1:localPort），
+     * 以及后端镜像在隧道内的本地端口（SSH 模式下额外转发 host:18880，否则为 null）。
      */
     private data class ResolvedConnection(
         val baseUrl: String,
         val sshSession: JschSession?,
+        val backendLocalPort: Int? = null,
     )
 
     /**
      * 解析连接 baseUrl：未配置 SSH 时直连 [ServerConfig.url]；配置了 SSH 时通过
      * JSch 建立 `host:sshPort` 的会话并做本地端口转发，返回 127.0.0.1:localPort。
+     * 额外把后端端口（默认 18880）也转发到本地，保证 SSH 隧道模式下后端推送/镜像可用。
      */
     private fun resolveConnection(server: ServerConfig): ResolvedConnection {
         if (!server.useSsh) return ResolvedConnection(server.url, null)
@@ -648,7 +677,22 @@ class StarBurstConnectionService : Service() {
             session.connect(SSH_CONNECT_TIMEOUT_MS)
             val localPort = session.setPortForwardingL(0, host, openCodePort)
             Log.i(TAG, "[${server.displayName}] SSH tunnel established: 127.0.0.1:$localPort -> $host:$openCodePort")
-            ResolvedConnection("http://127.0.0.1:$localPort", session)
+            // 后端镜像端口：显式 backendUrl 的端口优先，否则默认 18880。
+            val backendRemotePort = try {
+                java.net.URL(server.backendResolvedUrl).port.takeIf { it != -1 } ?: 18880
+            } catch (_: Exception) {
+                18880
+            }
+            val backendLocalPort = try {
+                session.setPortForwardingL(0, host, backendRemotePort)
+            } catch (_: Exception) {
+                Log.w(TAG, "[${server.displayName}] Backend port $backendRemotePort not reachable over SSH, pushing disabled")
+                null
+            }
+            if (backendLocalPort != null) {
+                Log.i(TAG, "[${server.displayName}] Backend tunnel established: 127.0.0.1:$backendLocalPort -> $host:$backendRemotePort")
+            }
+            ResolvedConnection("http://127.0.0.1:$localPort", session, backendLocalPort)
         } catch (e: Exception) {
             Log.e(TAG, "[${server.displayName}] Failed to establish SSH tunnel", e)
             throw e
@@ -660,14 +704,21 @@ class StarBurstConnectionService : Service() {
         try { session?.disconnect() } catch (_: Exception) { }
     }
 
-    /** 用重建后的 SSH 隧道替换某 server 的连接信息（关闭旧会话）。 */
-    private fun replaceSshSession(serverId: String, newConn: ServerConnection, newSsh: JschSession?) {
+    /** 用重建后的 SSH 隧道替换某 server 的连接信息（关闭旧会话），并同步后端本地端口、重启推送 job。 */
+    private fun replaceSshSession(serverId: String, newConn: ServerConnection, newSsh: JschSession?, newBackendLocalPort: Int?) {
         val oldState = connections[serverId] ?: return
         val oldSsh = oldState.sshSession
+        val newPush = startBackendPushJob(oldState.config, newConn, newBackendLocalPort)
         connections.compute(serverId) { _, state ->
             if (state == null || state.sseJob !== oldState.sseJob) return@compute state
-            state.copy(conn = newConn, sshSession = newSsh)
+            state.copy(
+                conn = newConn,
+                sshSession = newSsh,
+                pushJob = newPush,
+                backendLocalPort = newBackendLocalPort,
+            )
         }
+        oldState.pushJob?.cancel()
         closeSshSession(oldSsh)
     }
 
@@ -713,9 +764,12 @@ class StarBurstConnectionService : Service() {
             Log.i(TAG, "Recovering ${states.size} connection(s) after $reason")
             for (state in states) {
                 val job = startSseConnection(state.config, state.conn, preload = false)
-                val replacement = state.copy(sseJob = job, isConnected = false)
+                val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
+                job.invokeOnCompletion { newPush?.cancel() }
+                val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
                 if (!connections.replace(state.config.id, state, replacement)) {
                     job.cancel()
+                    newPush?.cancel()
                     continue
                 }
                 state.sseJob.cancel()
@@ -763,9 +817,12 @@ class StarBurstConnectionService : Service() {
     private fun forceReconnect(serverId: String) {
         val state = connections[serverId] ?: return
         val job = startSseConnection(state.config, state.conn, preload = false)
-        val replacement = state.copy(sseJob = job, isConnected = false)
+        val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
+        job.invokeOnCompletion { newPush?.cancel() }
+        val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
         if (!connections.replace(serverId, state, replacement)) {
             job.cancel()
+            newPush?.cancel()
             return
         }
         state.sseJob.cancel()
@@ -863,8 +920,9 @@ class StarBurstConnectionService : Service() {
                 if (server.useSsh && attempt > 1) {
                     try {
                         val resolved = resolveConnection(server)
-                        val newConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
-                        replaceSshSession(server.id, newConn, resolved.sshSession)
+                        val baseConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
+                        val newConn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
+                        replaceSshSession(server.id, newConn, resolved.sshSession, resolved.backendLocalPort)
                         currentConn = newConn
                     } catch (e: CancellationException) {
                         throw e
@@ -997,34 +1055,50 @@ class StarBurstConnectionService : Service() {
             // 重连对账是完整的状态同步：/session/status 快照是服务端当前真实状态，
             // 省略的会话即为已空闲，必须纠正掉断线期间残留的 Busy（connected=false 语义）。
             eventReducer.replaceSessionStatuses(server.id, sessionIds, statuses, connected = false)
-            permissions += api.listPendingPermissions(conn).map { request ->
-                SseEvent.PermissionAsked(
-                    id = request.id,
-                    sessionId = request.sessionId,
-                    permission = request.permission,
-                    patterns = request.patterns,
-                    always = request.always,
-                    metadata = request.metadata,
-                    tool = request.tool,
-                )
-            }
-            questions += api.listPendingQuestions(conn).map { request ->
-                SseEvent.QuestionAsked(
-                    id = request.id,
-                    sessionId = request.sessionId,
-                    questions = request.questions.map { question ->
-                        SseEvent.QuestionAsked.Question(
-                            header = question.header,
-                            question = question.question,
-                            multiple = question.multiple,
-                            custom = question.custom,
-                            options = question.options.map { option ->
-                                SseEvent.QuestionAsked.Option(option.label, option.description)
-                            },
+            // 服务器 /permission、/question 按 query 参数 directory 过滤（不认 header），
+            // 必须按会话目录分组聚合，否则拿不到任何 pending 请求。
+            val directories = sessions.asSequence()
+                .map { it.directory }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+            for (dir in directories) {
+                try {
+                    permissions += api.listPendingPermissions(conn, directory = dir).map { request ->
+                        SseEvent.PermissionAsked(
+                            id = request.id,
+                            sessionId = request.sessionId,
+                            permission = request.permission,
+                            patterns = request.patterns,
+                            always = request.always,
+                            metadata = request.metadata,
+                            tool = request.tool,
                         )
-                    },
-                    tool = request.tool,
-                )
+                    }
+                    questions += api.listPendingQuestions(conn, directory = dir).map { request ->
+                        SseEvent.QuestionAsked(
+                            id = request.id,
+                            sessionId = request.sessionId,
+                            questions = request.questions.map { question ->
+                                SseEvent.QuestionAsked.Question(
+                                    header = question.header,
+                                    question = question.question,
+                                    multiple = question.multiple,
+                                    custom = question.custom,
+                                    options = question.options.map { option ->
+                                        SseEvent.QuestionAsked.Option(option.label, option.description)
+                                    },
+                                )
+                            },
+                            tool = request.tool,
+                        )
+                    }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.w(TAG, "[${server.displayName}] Pending reconciliation failed for directory $dir", e)
+                    complete = false
+                }
             }
         } catch (e: CancellationException) {
             throw e
@@ -1194,9 +1268,179 @@ class StarBurstConnectionService : Service() {
         return connections[server.id]?.conn
     }
 
+    /**
+     * 双通道网关：服务器配置了 starburst-backend 且后端存活时，把连接切到
+     * `${backendUrl}/api/opencode` 镜像（Bearer 后端 token）；否则原样直连 opencode。
+     * 探测有 2.5s 总超时；主线程或后端不可达时安全回退到直连。
+     */
+    private fun buildGatewayConn(server: ServerConfig, baseConn: ServerConnection, backendLocalPort: Int?): ServerConnection {
+        val backendUrl = resolveBackendUrl(server, backendLocalPort).trim().trimEnd('/').takeIf { it.isNotBlank() } ?: return baseConn
+        val backendToken = server.backendResolvedToken.trim().takeIf { it.isNotBlank() } ?: return baseConn
+        if (Looper.myLooper() == Looper.getMainLooper()) return baseConn
+        return runCatching {
+            runBlocking {
+                withTimeoutOrNull(2_500L) {
+                    if (!backendApi.isHealthy(backendUrl)) return@withTimeoutOrNull baseConn
+                    val info = backendApi.getSystemInfo(backendUrl, backendToken)
+                    OpenCodeGateway.resolve(
+                        baseConn,
+                        BackendStatus(
+                            backendUrl = backendUrl,
+                            backendToken = backendToken,
+                            backendAvailable = true,
+                            backendVersion = info?.version,
+                        ),
+                    )
+                } ?: baseConn
+            }
+        }.getOrDefault(baseConn)
+    }
+
+    /**
+     * 解析后端镜像地址：SSH 隧道模式下用隧道内后端本地端口（否则 127.0.0.1:18880 不可达），
+     * 非 SSH 模式优先显式 [server.backendUrl]，否则推导为 opencode 同主机 18880。
+     */
+    private fun resolveBackendUrl(server: ServerConfig, backendLocalPort: Int?): String {
+        if (server.useSsh) {
+            backendLocalPort?.let { return "http://127.0.0.1:$it" }
+            // 没有显式 backendUrl 时不推导（隧道未转发后端端口，18880 不可达）。
+            if (server.backendUrl.isNullOrBlank()) return ""
+        }
+        return server.backendResolvedUrl
+    }
+
     private fun getSessionInfo(sessionId: String): Pair<String?, String?> {
         val session = eventReducer.sessions.value.find { it.id == sessionId }
         return Pair(session?.title, session?.directory)
+    }
+
+    /**
+     * 需求 2 后端主动推送：当连接已切到后端镜像（后端可用）时，订阅后端 `/api/ws` 的
+     * `session.event`，把会话完成 / 提问 / 出错 / 授权事件转成带声音震动的通知。
+     * 断线指数退避重连；服务端断开该 server 后自动退出。
+     */
+    private fun startBackendPushJob(server: ServerConfig, conn: ServerConnection, backendLocalPort: Int?): Job? {
+        val backendUrl = resolveBackendUrl(server, backendLocalPort).trim().trimEnd('/').takeIf { it.isNotBlank() } ?: return null
+        if (!conn.baseUrl.startsWith("$backendUrl${OpenCodeGateway.BACKEND_API_PREFIX}")) return null
+        val token = server.backendResolvedToken.trim().takeIf { it.isNotBlank() } ?: return null
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "[${server.displayName}] Backend gateway active, listening /api/ws pushes")
+        }
+        return serviceScope.launch {
+            var backoffMs = 2_000L
+            var consecutiveFailures = 0
+            while (isActive) {
+                if (!connections.containsKey(server.id)) return@launch
+                try {
+                    backendPushListener.eventFlow(backendUrl, token).collect { ev ->
+                        handleBackendPushEvent(server, ev)
+                    }
+                    // 正常断开（收集器结束）不立即判失败；交由超时/下次失败判断。
+                    consecutiveFailures++
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    consecutiveFailures++
+                    Log.w(TAG, "[${server.displayName}] Backend push stream stopped: ${e.message}")
+                }
+                // 后端连续不可用：回退到直连，保证聊天与会话列表仍然可用。
+                if (consecutiveFailures >= BACKEND_FALLBACK_THRESHOLD) {
+                    Log.w(TAG, "[${server.displayName}] Backend push failing repeatedly, falling back to direct opencode")
+                    fallbackToDirectConn(server)
+                    return@launch
+                }
+                delay(backoffMs)
+                backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
+            }
+        }
+    }
+
+    /** 后端不可用时把该 server 的连接切回直连 opencode（重建 SSE；push 镜像关闭）。 */
+    private fun fallbackToDirectConn(server: ServerConfig) {
+        val state = connections[server.id] ?: return
+        val directConn = state.directConn ?: return
+        if (state.conn === directConn) return
+        val job = startSseConnection(state.config, directConn, preload = false)
+        val replacement = state.copy(conn = directConn, sseJob = job, isConnected = false, pushJob = null)
+        if (!connections.replace(server.id, state, replacement)) {
+            job.cancel()
+            return
+        }
+        state.sseJob.cancel()
+        reconciliationJobs.remove(server.id)?.cancel()
+        _connectedServerIds.update { it - server.id }
+        _connectingServerIds.update { it + server.id }
+        connectStartedAt[server.id] = SystemClock.elapsedRealtime()
+        _serverMetrics.update { it - server.id }
+        job.start()
+        if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct opencode")
+    }
+
+    private fun handleBackendPushEvent(server: ServerConfig, ev: PushSessionEvent) {
+        when (ev.eventType) {
+            "session.idle" -> {
+                if (isChildSession(ev.sessionId)) return
+                // 状态准确：推送驱动，把该会话立即置为空闲（不依赖 SSE/轮询）。
+                eventReducer.updateSessionStatus(ev.sessionId, SessionStatus.Idle)
+                serviceScope.launch {
+                    delay(250)
+                    notifySessionComplete(server, ev.sessionId)
+                }
+            }
+            "session.status", "session.updated" -> {
+                if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
+                // 状态准确：以推送事件的 status 为准（/session/status 快照可能不全），
+                // 立即写入 eventReducer，聊天与会话列表实时反映。
+                val status = ev.status()
+                if (status != null) {
+                    eventReducer.updateSessionStatus(ev.sessionId, status)
+                }
+                refreshSessionStatusesSoon(server)
+            }
+            "question.asked", "question.updated" -> {
+                if (isChildSession(ev.sessionId)) return
+                val questionText = ev.questionText()
+                    ?: getString(R.string.notification_has_question, getString(R.string.notification_new_session))
+                showQuestionNotification(server, ev.sessionId, questionText)
+            }
+            "permission.asked", "permission.updated" -> {
+                if (isChildSession(ev.sessionId)) return
+                val permission = ev.permission() ?: return
+                showPermissionNotification(server, ev.sessionId, permission)
+            }
+            "session.error", "session.failed" -> {
+                if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
+                showErrorNotification(server, ev.sessionId.ifBlank { null }, ev.errorMessage()
+                    ?: getString(R.string.error_unknown))
+            }
+            else -> {}
+        }
+    }
+
+    /** 状态类推送的 2s 去抖：合并突发事件，避免频繁全量拉状态。 */
+    private val lastStatusRefreshAtByServer = ConcurrentHashMap<String, Long>()
+    private fun refreshSessionStatusesSoon(server: ServerConfig) {
+        val now = System.currentTimeMillis()
+        val last = lastStatusRefreshAtByServer[server.id] ?: 0L
+        if (now - last < 2_000L) return
+        lastStatusRefreshAtByServer[server.id] = now
+        serviceScope.launch { refreshSessionStatuses(server) }
+    }
+
+    /** 从权威接口拉一次全量状态并写入 eventReducer（busy/retry 立即反映；其余由 SSE/轮询兜底）。 */
+    private suspend fun refreshSessionStatuses(server: ServerConfig) {
+        val state = connections[server.id] ?: return
+        try {
+            val statuses = api.listSessionStatuses(state.conn)
+            statuses.forEach { (sessionId, status) ->
+                eventReducer.updateSessionStatus(sessionId, status)
+            }
+            if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Push-triggered status refresh: ${statuses.size} active sessions")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "[${server.displayName}] Status refresh failed: ${e.message}")
+        }
     }
 
     private fun latestNotifiableAssistantMessageId(sessionId: String): String? {
@@ -1333,6 +1577,10 @@ class StarBurstConnectionService : Service() {
             if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID) != null) {
                 notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID)
             }
+            // 权限/提问通知此前无声（MIUI 上 HIGH channel 不 setSound 即静音），重建一次以生效。
+            if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID) != null) {
+                notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID)
+            }
 
             val connectionChannel = NotificationChannel(
                 NOTIFICATION_CHANNEL_ID,
@@ -1384,6 +1632,14 @@ class StarBurstConnectionService : Service() {
                 setShowBadge(true)
                 enableVibration(true)
                 enableLights(true)
+                // 同 tasks channel：显式默认通知铃声，避免 MIUI 等系统静音。
+                setSound(
+                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
+                    AudioAttributes.Builder()
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                        .build(),
+                )
             }
 
             notificationManager.createNotificationChannel(connectionChannel)
@@ -1499,45 +1755,19 @@ class StarBurstConnectionService : Service() {
             .setAutoCancel(true)
             .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
             .setGroup("server_${server.id}")
-
-        // 高优先级事件走「推送式悬浮弹窗」，而不是只在通知栏堆一句内容。
-        if (!silent) {
-            builder.setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
-        }
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), pendingIntent)
 
         if (!silent) {
             builder.setDefaults(NotificationCompat.DEFAULT_ALL)
                 .setVibrate(longArrayOf(0, 500, 200, 500))
+                // Android 13+ 高优渠道默认横幅（heads-up）；此渠道已配置声音+震动。
+                // Android 14 默认拒绝全屏通知（FSI_REQUESTED_BUT_DENIED），故不用 setFullScreenIntent。
         }
 
         postEventNotification(server, sessionId, notifId, builder.build())
-    }
-
-    /**
-     * 构造「悬浮弹窗」用的 full-screen PendingIntent：点击打开对应会话。
-     * 复用 [createSessionPendingIntent] 的参数格式，但 requestCode 偏移以区分弹窗入口。
-     */
-    private fun popupPendingIntent(server: ServerConfig, sessionId: String?, requestCode: Int): PendingIntent {
-        val sessionPath = sessionId?.let { buildSessionPath(it) }
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_OPEN_SESSION
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-            putExtra(EXTRA_SERVER_URL, server.url)
-            putExtra(EXTRA_SERVER_USERNAME, server.username)
-            putExtra(EXTRA_SERVER_PASSWORD, server.password ?: "")
-            putExtra(EXTRA_SERVER_NAME, server.displayName)
-            putExtra(EXTRA_SERVER_ID, server.id)
-            sessionPath?.let { putExtra(EXTRA_SESSION_PATH, it) }
-            sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
-        }
-        return PendingIntent.getActivity(
-            this,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
     }
 
     private fun showPermissionNotification(server: ServerConfig, sessionId: String, permission: String) {
@@ -1563,7 +1793,8 @@ class StarBurstConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(longArrayOf(0, 300, 100, 300))
-            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup("server_${server.id}")
             .build()
 
@@ -1593,7 +1824,8 @@ class StarBurstConnectionService : Service() {
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(longArrayOf(0, 300, 100, 300))
-            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup("server_${server.id}")
             .build()
 
@@ -1616,7 +1848,8 @@ class StarBurstConnectionService : Service() {
             .setAutoCancel(true)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setFullScreenIntent(popupPendingIntent(server, sessionId, notifId + 10_000), true)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup("server_${server.id}")
 
         builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), viewPendingIntent)
@@ -1634,15 +1867,9 @@ class StarBurstConnectionService : Service() {
         notificationId: Int,
         notification: Notification,
     ) {
-        val post = {
-            notificationManager.notify(notificationId, notification)
-            showServerGroupSummary(server)
-        }
-        if (sessionId == null) {
-            post()
-        } else {
-            SessionNotificationCoordinator.postUnlessActive(server.id, sessionId, post)
-        }
+        // 完整推送：即使正在前台查看该会话也弹通知（含声音震动），不再经 postUnlessActive 抑制。
+        notificationManager.notify(notificationId, notification)
+        showServerGroupSummary(server)
     }
 
     /**

@@ -135,6 +135,14 @@ fun ServerManagementScreen(
             // 连接健康度
             ConnectionHealthSection(isAmoled = isAmoled, health = uiState.connectionHealth)
 
+            // starburst-backend 可用性（门控占位）：探测中/不可用时不展示任何后端功能入口，
+            // 仅显示状态；「正常可用」（健康 + 版本达标）时才说明后端就绪。
+            BackendStatusSection(
+                isAmoled = isAmoled,
+                probing = uiState.backendAvailable == null,
+                ready = viewModel.isBackendReady,
+            )
+
             // 服务基本信息
             SectionCard(isAmoled = isAmoled) {
                 SectionHeader(stringResource(R.string.server_mgmt_basic_info))
@@ -357,6 +365,31 @@ private fun ConnectionHealthSection(
                 val seconds = ((nowMillis - last) / 1_000).coerceAtLeast(0)
                 stringResource(R.string.server_health_heartbeat_ago, seconds)
             } ?: stringResource(R.string.server_health_heartbeat_never),
+        )
+    }
+}
+
+/**
+ * starburst-backend 状态区：探测中显示 checking，正常可用显示 ready，否则显示不可用占位。
+ * 后端不可用/异常时不展示任何后端功能入口，仅保留该状态提示。
+ */
+@Composable
+private fun BackendStatusSection(
+    isAmoled: Boolean,
+    probing: Boolean,
+    ready: Boolean,
+) {
+    SectionCard(isAmoled = isAmoled) {
+        SectionHeader(stringResource(R.string.backend_status_title))
+        val (statusText, statusColor) = when {
+            probing -> stringResource(R.string.backend_checking) to MaterialTheme.colorScheme.tertiary
+            ready -> stringResource(R.string.backend_status_ready) to StatusConnected
+            else -> stringResource(R.string.backend_status_unavailable) to MaterialTheme.colorScheme.error
+        }
+        InfoRow(
+            label = stringResource(R.string.backend_status_label),
+            value = statusText,
+            valueColor = statusColor,
         )
     }
 }

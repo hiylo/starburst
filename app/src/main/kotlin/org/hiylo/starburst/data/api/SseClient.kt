@@ -450,7 +450,7 @@ class SseClient @Inject constructor(
                     SseEvent.PermissionReplied(sessionId = sessionId, requestId = requestId)
                 }
 
-                "question.asked" -> {
+                "question.asked", "question.updated" -> {
                     val id = props.str("id")
                     val sessionId = props.str("sessionID")
                     val toolRef = props["tool"]?.jsonObject?.let { toolObj ->

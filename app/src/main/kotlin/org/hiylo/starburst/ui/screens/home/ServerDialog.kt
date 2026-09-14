@@ -63,7 +63,7 @@ fun ServerDialog(
     val (initialHost, initialPort) = parseHostAndPort(server?.url)
     var name by remember(server) { mutableStateOf(server?.name ?: "") }
     var host by remember(server) { mutableStateOf(initialHost) }
-    var openCodePort by remember(server) { mutableStateOf(initialPort?.toString() ?: "") }
+    var openCodePort by remember(server) { mutableStateOf(initialPort?.toString() ?: "4096") }
     var useHttps by remember(server) { mutableStateOf(server?.url?.startsWith("https://") == true) }
     var username by remember(server) { mutableStateOf(server?.username ?: "opencode") }
     var password by remember(server) { mutableStateOf(server?.password ?: "") }

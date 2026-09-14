@@ -28,6 +28,8 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
+private const val TAG = "OpenCodeApiSessions"
+
 // ============ Session ============
 
 suspend fun OpenCodeApi.listSessions(conn: ServerConnection, directory: String? = null): List<Session> {
@@ -99,12 +101,14 @@ suspend fun OpenCodeApi.createSession(conn: ServerConnection, title: String? = n
         title?.let { put("title", it) }
         parentId?.let { put("parentID", it) }
     }
+    if (BuildConfig.DEBUG) Log.d("CreateSession", "createSession directory=$directory title=$title parentId=$parentId")
     return httpClient.post("${conn.baseUrl}/session") {
         conn.authHeader?.let { header("Authorization", it) }
-        // 工作目录走 query 参数（opencode 服务据此建会话）；旧 header 保留以兼容旧版。
+        // 工作目录必须走 query 参数（opencode 服务只认 directory query 或 x-opencode-directory，
+        // 不认 x-starburst-directory），否则服务回退到 process.cwd()，新会话落到错误路径。
         directory?.let {
             parameter("directory", it)
-            header("x-starburst-directory", it)
+            header("x-opencode-directory", it)
         }
         contentType(ContentType.Application.Json)
         setBody(body)

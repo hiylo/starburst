@@ -164,8 +164,9 @@ internal fun sessionTimeCutoff(filter: SessionTimeFilter, now: Long = System.cur
 }
 
 private fun sessionTimeComparator(sortMode: SessionSortMode): Comparator<SessionItem> = when (sortMode) {
-    SessionSortMode.Newest -> compareByDescending<SessionItem> { it.session.time.updated }
-    SessionSortMode.Oldest -> compareBy<SessionItem> { it.session.time.updated }
+    // 用 lastUserMessageAt（会话状态不变时保持稳定），避免流式更新 time.updated 导致列表跳动。
+    SessionSortMode.Newest -> compareByDescending<SessionItem> { it.lastUserMessageAt }
+    SessionSortMode.Oldest -> compareBy<SessionItem> { it.lastUserMessageAt }
     SessionSortMode.Title -> compareBy<SessionItem> { it.session.title?.lowercase(Locale.getDefault()).orEmpty() }
 }
 
@@ -185,10 +186,10 @@ private fun sortDisplayGroups(
         .then(
             when (sortMode) {
                 SessionSortMode.Newest -> compareByDescending<ProjectSessionGroup> {
-                    it.sessions.maxOfOrNull { s -> s.session.time.updated } ?: 0L
+                    it.sessions.maxOfOrNull { s -> s.lastUserMessageAt } ?: 0L
                 }
                 SessionSortMode.Oldest -> compareBy<ProjectSessionGroup> {
-                    it.sessions.maxOfOrNull { s -> s.session.time.updated } ?: 0L
+                    it.sessions.maxOfOrNull { s -> s.lastUserMessageAt } ?: 0L
                 }
                 SessionSortMode.Title -> compareBy<ProjectSessionGroup> {
                     it.projectName.lowercase(Locale.getDefault())
@@ -268,6 +269,7 @@ fun SessionListScreen(
     onSwitchServer: (serverId: String) -> Unit = {},
     onOpenBookmarks: (serverId: String) -> Unit = {},
     onOpenFtsSearch: (serverId: String) -> Unit = {},
+    onNavigateToWorkbench: () -> Unit = {},
     viewModel: SessionListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -493,7 +495,9 @@ fun SessionListScreen(
                             Column {
                                 Text(
                                     text = uiState.serverName.ifEmpty { stringResource(R.string.sessions_title) },
-                                    style = MaterialTheme.typography.titleMedium
+                                    style = MaterialTheme.typography.titleMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
                                 )
                             }
                         }
@@ -517,10 +521,10 @@ fun SessionListScreen(
                     },
                     actions = {
                         if (!searchActive) {
-                            IconButton(onClick = { searchActive = true }) {
+                            IconButton(onClick = onNavigateToWorkbench) {
                                 Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = stringResource(R.string.search_sessions),
+                                    Icons.Default.Dashboard,
+                                    contentDescription = stringResource(R.string.workbench_enter),
                                 )
                             }
                             IconButton(
@@ -1335,7 +1339,7 @@ private fun ProjectHeader(
         Column(modifier = Modifier.weight(1f)) {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = name,
+                    text = name.replace('\n', ' '),
                     style = MaterialTheme.typography.titleSmall,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

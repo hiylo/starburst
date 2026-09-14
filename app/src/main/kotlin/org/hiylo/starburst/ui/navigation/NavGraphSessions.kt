@@ -43,6 +43,7 @@ import org.hiylo.starburst.ui.screens.search.FtsSearchScreen
 import org.hiylo.starburst.ui.screens.sessions.CrossServerSessionsScreen
 import org.hiylo.starburst.ui.screens.sessions.GlobalSearchScreen
 import org.hiylo.starburst.ui.screens.sessions.SessionListScreen
+import org.hiylo.starburst.ui.screens.workbench.WorkbenchScreen
 
 /**
  * 会话与跨服务器相关路由：跨服务器会话、全局搜索、书签、全文搜索，以及会话列表
@@ -164,6 +165,39 @@ fun NavGraphBuilder.SessionsRoutes(
         )
     }
 
+    // ============ AI 工作台（2.0 服务器级看板） ============
+    composable(
+        route = WorkbenchScreen.ROUTE_PATTERN,
+        arguments = listOf(
+            navArgument("serverUrl") { type = NavType.StringType },
+            navArgument("username") { type = NavType.StringType },
+            navArgument("password") { type = NavType.StringType },
+            navArgument("serverName") { type = NavType.StringType },
+            navArgument("serverId") { type = NavType.StringType },
+        )
+    ) { backStackEntry ->
+        val serverUrl = backStackEntry.arguments?.getString("serverUrl").orEmpty()
+        val username = backStackEntry.arguments?.getString("username").orEmpty()
+        val password = backStackEntry.arguments?.getString("password").orEmpty()
+        val serverName = backStackEntry.arguments?.getString("serverName").orEmpty()
+        val serverId = backStackEntry.arguments?.getString("serverId").orEmpty()
+        WorkbenchScreen(
+            onNavigateBack = { navController.popBackStack() },
+            onOpenSession = { sessionId ->
+                navController.navigate(
+                    Screen.Chat.createRoute(
+                        serverUrl = serverUrl,
+                        username = username,
+                        password = password,
+                        serverName = serverName,
+                        serverId = serverId,
+                        sessionId = sessionId,
+                    ),
+                )
+            },
+        )
+    }
+
     // ============ Session List Screen (native) ============
     composable(
         route = "sessions?serverUrl={serverUrl}&username={username}&password={password}&serverName={serverName}&serverId={serverId}&autoNewSession={autoNewSession}",
@@ -267,6 +301,17 @@ fun NavGraphBuilder.SessionsRoutes(
                             },
                             onOpenFtsSearch = { targetServerId ->
                                 navController.navigate(Screen.FtsSearch.createRoute(targetServerId, serverName))
+                            },
+                            onNavigateToWorkbench = {
+                                navController.navigate(
+                                    WorkbenchScreen.createRoute(
+                                        serverUrl = serverUrl,
+                                        username = username,
+                                        password = password,
+                                        serverName = serverName,
+                                        serverId = serverId,
+                                    ),
+                                )
                             },
                         )
                     }
@@ -384,6 +429,17 @@ fun NavGraphBuilder.SessionsRoutes(
                     },
                     onOpenFtsSearch = { targetServerId ->
                         navController.navigate(Screen.FtsSearch.createRoute(targetServerId, serverName))
+                    },
+                    onNavigateToWorkbench = {
+                        navController.navigate(
+                            WorkbenchScreen.createRoute(
+                                serverUrl = serverUrl,
+                                username = username,
+                                password = password,
+                                serverName = serverName,
+                                serverId = serverId,
+                            ),
+                        )
                     },
                 )
             }

@@ -21,7 +21,13 @@ sealed class SessionStatus {
     
     @Serializable
     data object Busy : SessionStatus()
-    
+
+    /**
+     * 会话有待用户回答的问题（等待用户在提问卡片中选择/确认），优先级高于 Busy。
+     */
+    @Serializable
+    data object Question : SessionStatus()
+
     @Serializable
     data class Retry(
         val attempt: Int,

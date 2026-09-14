@@ -950,15 +950,21 @@ class EventReducer @Inject constructor(
         permissions: List<SseEvent.PermissionAsked>,
         questions: List<SseEvent.QuestionAsked>,
     ) {
-        val snapshot = (permissions.map { PendingInteraction.Permission(it) } +
+        val snapshotItems = (permissions.map { PendingInteraction.Permission(it) } +
             questions.map { PendingInteraction.Question(it) })
             .filter { it.sessionId in sessionIds }
-            .associateBy { it.identityKey() }
+        // 按会话判断权威性：只要 REST 快照对该会话返回了 pending 项，就以 REST 为权威
+        // 替换该会话（清理服务器端已处理完的项）；REST 对该会话返回为空则保留现有项，
+        // 避免 REST 与 SSE 状态不一致（服务器 /question 可能暂时查不到实时 pending）时误删。
+        val authoritativeSessions = snapshotItems.asSequence().map { it.sessionId }.toSet()
+        val snapshotByKey = snapshotItems.associateBy { it.identityKey() }
         val retained = _pendingInteractions.value.mapNotNull { current ->
-            if (current.sessionId !in sessionIds) current else snapshot[current.identityKey()]
+            if (current.sessionId !in sessionIds) current
+            else if (current.sessionId !in authoritativeSessions) current
+            else snapshotByKey[current.identityKey()]
         }
         val retainedKeys = retained.asSequence().map { it.identityKey() }.toSet()
-        val additions = snapshot.values
+        val additions = snapshotItems
             .filterNot { it.identityKey() in retainedKeys }
             .sortedWith(compareBy<PendingInteraction>({ it.sessionId }, { it.typeRank() }, { it.id }))
         _pendingInteractions.value = retained + additions

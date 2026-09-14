@@ -86,7 +86,7 @@ suspend fun OpenCodeApi.replyToPermission(
     }
     val result = httpClient.post("${conn.baseUrl}/permission/$requestId/reply") {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
         contentType(ContentType.Application.Json)
         setBody(body)
     }
@@ -100,7 +100,7 @@ suspend fun OpenCodeApi.replyToPermission(
 suspend fun OpenCodeApi.listPendingPermissions(conn: ServerConnection, directory: String? = null): List<PermissionRequest> {
     return httpClient.get("${conn.baseUrl}/permission") {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
     }.body()
 }
 
@@ -145,14 +145,21 @@ suspend fun OpenCodeApi.replyToQuestion(
     val bodyJson = json.encodeToString(QuestionReplyBody.serializer(), QuestionReplyBody(answers = answers))
     val result = httpClient.post(url) {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
         setBody(TextContent(bodyJson, ContentType.Application.Json))
     }
-    Log.i(
-        OpenCodeApi.TAG,
-        "Question reply: request=$requestId answers=${answers.size} status=${result.status.value}",
-    )
-    return result.status.isSuccess()
+    val ok = result.status.isSuccess()
+    if (ok) {
+        Log.i(OpenCodeApi.TAG, "Question reply: request=$requestId dir=$directory answers=${answers.size} status=${result.status.value}")
+    } else {
+        val body = runCatching { result.bodyAsText() }.getOrDefault("")
+        Log.e(
+            OpenCodeApi.TAG,
+            "Question reply failed: request=$requestId dir=$directory answers=${answers.size} " +
+                "status=${result.status.value} body=${body.take(300)}",
+        )
+    }
+    return ok
 }
 
 /**
@@ -167,10 +174,19 @@ suspend fun OpenCodeApi.rejectQuestion(
     val url = "${conn.baseUrl}/question/$requestId/reject"
     val result = httpClient.post(url) {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
     }
-    Log.i(OpenCodeApi.TAG, "Question reject: request=$requestId status=${result.status.value}")
-    return result.status.isSuccess()
+    val ok = result.status.isSuccess()
+    if (ok) {
+        Log.i(OpenCodeApi.TAG, "Question reject: request=$requestId dir=$directory status=${result.status.value}")
+    } else {
+        val body = runCatching { result.bodyAsText() }.getOrDefault("")
+        Log.e(
+            OpenCodeApi.TAG,
+            "Question reject failed: request=$requestId dir=$directory status=${result.status.value} body=${body.take(300)}",
+        )
+    }
+    return ok
 }
 
 /**
@@ -180,7 +196,7 @@ suspend fun OpenCodeApi.rejectQuestion(
 suspend fun OpenCodeApi.listPendingQuestions(conn: ServerConnection, directory: String? = null): List<QuestionRequest> {
     val response = httpClient.get("${conn.baseUrl}/question") {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
     }
     Log.i(OpenCodeApi.TAG, "Pending questions request: status=${response.status.value}")
     return response.body()

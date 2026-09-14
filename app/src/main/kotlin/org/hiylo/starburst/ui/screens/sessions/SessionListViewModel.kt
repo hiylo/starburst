@@ -23,6 +23,7 @@ import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.executeCommand
 import org.hiylo.starburst.data.api.findFiles
 import org.hiylo.starburst.data.api.listDirectory
+import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
@@ -40,6 +41,7 @@ import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
+import org.hiylo.starburst.domain.model.PendingInteraction
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -273,6 +275,28 @@ class SessionListViewModel @Inject constructor(
             emptyMap(),
         )
 
+    /** 周期性从服务器 REST 拉取的待决问题快照（sessionId -> 有待决问题），按 sessionId 分组。 */
+    private val _pendingQuestionSessionIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * 当前服务器有待决问题（待用户回答）的会话 id 集合。
+     * REST 快照为权威来源，另以 SSE 实时 [PendingInteraction.Question] 兜底，保证回答后徽标即时消失。
+     */
+    val pendingQuestionSessionIds: StateFlow<Set<String>> = combine(
+        eventReducer.pendingInteractions,
+        _pendingQuestionSessionIds,
+    ) { interactions, restSnapshot ->
+        val realtime = interactions
+            .filterIsInstance<PendingInteraction.Question>()
+            .mapTo(mutableSetOf<String>()) { it.sessionId }
+        realtime += restSnapshot
+        realtime
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptySet(),
+    )
+
     private val _error = MutableStateFlow<String?>(null)
     private val _isLoading = MutableStateFlow(true)
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
@@ -301,6 +325,7 @@ class SessionListViewModel @Inject constructor(
             eventReducer.lastUserMessageAt,
             serverRepository.servers,
             connectionStateRepository.connectedServerIds,
+            pendingQuestionSessionIds,
         )
     ) { values ->
         val allSessions = values[0] as List<Session>
@@ -320,6 +345,7 @@ class SessionListViewModel @Inject constructor(
         val lastUserMessageAt = values[14] as Map<String, Long>
         val servers = values[15] as List<ServerConfig>
         val connectedServerIds = values[16] as Set<String>
+        val pendingQuestionIds = values[17] as Set<String>
         val favoriteOrder = favoriteIds.withIndex().associate { (index, id) -> id to index }
         val pinnedOrder = pinnedIds.withIndex().associate { (index, id) -> id to index }
         val categoriesById = categories.associateBy { it.id }
@@ -330,9 +356,12 @@ class SessionListViewModel @Inject constructor(
         // A parent session should look "busy" if any of its sub-agent (child) sessions are busy/retrying,
         // even though the children themselves are filtered out of the list.
         val childBusyByParent = mutableMapOf<String, SessionStatus>()
+        // Sub-agent 有待决问题时，父会话同样标记为 Question（子会话被过滤不出现在列表里）。
+        val parentWithPendingQuestion = mutableSetOf<String>()
         for (child in allSessions) {
             val parentId = child.parentId ?: continue
             if (child.id !in serverSessionIds) continue
+            if (child.id in pendingQuestionIds) parentWithPendingQuestion += parentId
             val childStatus = statuses[child.id] ?: continue
             if (childStatus is SessionStatus.Busy || childStatus is SessionStatus.Retry) {
                 childBusyByParent[parentId] = childStatus
@@ -345,9 +374,17 @@ class SessionListViewModel @Inject constructor(
             .map { session ->
                 SessionItem(
                     session = session,
-                    status = statuses[session.id]
-                        ?: childBusyByParent[session.id]
-                        ?: SessionStatus.Idle,
+                    status = if (session.id in pendingQuestionIds || session.id in parentWithPendingQuestion) {
+                        // 有待决问题优先：等待用户回答，优先级高于处理中/重试。
+                        SessionStatus.Question
+                    } else {
+                        when (val self = statuses[session.id]) {
+                            // 父会话自身正在忙/重试 → 直接用它。
+                            is SessionStatus.Busy, is SessionStatus.Retry -> self
+                            // 否则子会话忙 → 父会话视为忙（子会话被过滤不出现在列表里）。
+                            else -> childBusyByParent[session.id] ?: self ?: SessionStatus.Idle
+                        }
+                    },
                     favoriteIndex = favoriteOrder[session.id],
                     pinnedIndex = pinnedOrder[session.id],
                     category = assignments[session.id]?.let(categoriesById::get),
@@ -396,6 +433,7 @@ class SessionListViewModel @Inject constructor(
                 val connected = connectionStateRepository.connectedServerIds.value.contains(serverId)
                 delay(if (connected) STATUS_POLL_INTERVAL_CONNECTED_MS else STATUS_POLL_INTERVAL_DISCONNECTED_MS)
                 refreshSessionStatuses()
+                refreshPendingQuestions()
             }
         }
     }
@@ -494,6 +532,7 @@ class SessionListViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${sessions.size} sessions for server $serverId")
 
                 refreshSessionStatuses(projects)
+                refreshPendingQuestions()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e(TAG, "Failed to load sessions", e)
@@ -517,6 +556,38 @@ class SessionListViewModel @Inject constructor(
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             if (BuildConfig.DEBUG) Log.d(TAG, "Failed to refresh session statuses: ${e::class.java.simpleName}")
+        }
+    }
+
+    /** 拉取当前服务器全部待决问题，按 sessionId 分组后刷新「待回答」会话集合。 */
+    private suspend fun refreshPendingQuestions() {
+        try {
+            // 服务器 /question 按 query 参数 directory 过滤，按会话目录分组聚合查询。
+            val serverSessionIds = eventReducer.serverSessions.value[serverId].orEmpty()
+            val directories = eventReducer.sessions.value.asSequence()
+                .filter { it.id in serverSessionIds }
+                .map { it.directory }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+            val requests = directories.flatMap { dir ->
+                runCatching { api.listPendingQuestions(conn, directory = dir) }
+                    .getOrElse { e ->
+                        if (e is CancellationException) throw e
+                        if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
+                        emptyList()
+                    }
+            }
+            _pendingQuestionSessionIds.value = requests.mapTo(mutableSetOf<String>()) { it.sessionId }
+            if (BuildConfig.DEBUG) {
+                Log.d(
+                    TAG,
+                    "Pending questions: ${requests.size} requests across ${_pendingQuestionSessionIds.value.size} sessions",
+                )
+            }
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to refresh pending questions: ${e::class.java.simpleName}")
         }
     }
 
