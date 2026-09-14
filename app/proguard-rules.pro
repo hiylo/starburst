@@ -27,6 +27,19 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
+# OkHttp (Ktor OkHttp engine + 直接调用)
+-keep class okhttp3.** { *; }
+-keep class okio.** { *; }
+-dontwarn okhttp3.**
+-dontwarn okio.**
+
+# JSch (SSH 隧道)——加密类经反射加载，R8 误删会导致
+# ClassNotFoundException: com.jcraft.jsch.jce.Random，SSH 连接全线失败。
+-keep class com.jcraft.jsch.** { *; }
+-keep class com.jcraft.jzlib.** { *; }
+-dontwarn com.jcraft.jsch.**
+-dontwarn com.jcraft.jzlib.**
+
 # Ktor
 -keep class io.ktor.** { *; }
 -keep class kotlinx.coroutines.** { *; }
