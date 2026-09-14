@@ -14,7 +14,7 @@
 
 #include "llm/llm.hpp"
 
-#define LOG_TAG "OpenCodeMnn"
+#define LOG_TAG "StarBurstMnn"
 #define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
 #define LOGE(...) __android_log_print(ANDROID_LOG_ERROR, LOG_TAG, __VA_ARGS__)
 
@@ -48,7 +48,7 @@ extern "C" {
 
 // Loads the model from the given directory (must contain config.json / llm_config.json).
 JNIEXPORT jlong JNICALL
-Java_org_hiylo_opencode_ml_MnnLlm_initNative(JNIEnv *env, jobject /*thiz*/, jstring configDir) {
+Java_org_hiylo_starburst_ml_MnnLlm_initNative(JNIEnv *env, jobject /*thiz*/, jstring configDir) {
     const char *dir = env->GetStringUTFChars(configDir, nullptr);
     std::string model_dir(dir ? dir : "");
     env->ReleaseStringUTFChars(configDir, dir);
@@ -164,7 +164,7 @@ private:
         if (!m_env || !m_callback) return;
         // Look up the method on the *interface* (kept un-obfuscated by ProGuard), not on
         // the anonymous implementation class (whose name gets obfuscated -> NoSuchMethodError).
-        jclass cls = m_env->FindClass("org/hiylo/opencode/ml/MnnLlm$StreamingCallback");
+        jclass cls = m_env->FindClass("org/hiylo/starburst/ml/MnnLlm$StreamingCallback");
         if (!cls) return;
         jmethodID mid = m_env->GetMethodID(cls, "onDelta", "(Ljava/lang/String;)V");
         m_env->DeleteLocalRef(cls);
@@ -182,7 +182,7 @@ private:
 // Generates a text response to `prompt`, streaming incremental output to the
 // Java callback object (its onDelta(String) is invoked as tokens are decoded).
 JNIEXPORT jlong JNICALL
-Java_org_hiylo_opencode_ml_MnnLlm_generateStreamingNative(JNIEnv *env, jobject /*thiz*/, jlong llmPtr,
+Java_org_hiylo_starburst_ml_MnnLlm_generateStreamingNative(JNIEnv *env, jobject /*thiz*/, jlong llmPtr,
                                                          jstring prompt, jint maxTokens,
                                                          jobject callback) {
     Llm *llm = reinterpret_cast<Llm *>(llmPtr);
@@ -210,7 +210,7 @@ Java_org_hiylo_opencode_ml_MnnLlm_generateStreamingNative(JNIEnv *env, jobject /
 
 // Synchronously generates a text response to `prompt` and returns the full string.
 JNIEXPORT jstring JNICALL
-Java_org_hiylo_opencode_ml_MnnLlm_generateNative(JNIEnv *env, jobject /*thiz*/, jlong llmPtr,
+Java_org_hiylo_starburst_ml_MnnLlm_generateNative(JNIEnv *env, jobject /*thiz*/, jlong llmPtr,
                                                  jstring prompt, jint maxTokens) {
     Llm *llm = reinterpret_cast<Llm *>(llmPtr);
     if (llm == nullptr) {
@@ -234,7 +234,7 @@ Java_org_hiylo_opencode_ml_MnnLlm_generateNative(JNIEnv *env, jobject /*thiz*/, 
 
 // Clears the conversation context / KV cache for the next prompt.
 JNIEXPORT void JNICALL
-Java_org_hiylo_opencode_ml_MnnLlm_resetNative(JNIEnv * /*env*/, jobject /*thiz*/, jlong llmPtr) {
+Java_org_hiylo_starburst_ml_MnnLlm_resetNative(JNIEnv * /*env*/, jobject /*thiz*/, jlong llmPtr) {
     Llm *llm = reinterpret_cast<Llm *>(llmPtr);
     if (llm != nullptr) {
         llm->reset();
@@ -243,7 +243,7 @@ Java_org_hiylo_opencode_ml_MnnLlm_resetNative(JNIEnv * /*env*/, jobject /*thiz*/
 
 // Destroys the LLM instance and releases native resources.
 JNIEXPORT void JNICALL
-Java_org_hiylo_opencode_ml_MnnLlm_releaseNative(JNIEnv * /*env*/, jobject /*thiz*/, jlong llmPtr) {
+Java_org_hiylo_starburst_ml_MnnLlm_releaseNative(JNIEnv * /*env*/, jobject /*thiz*/, jlong llmPtr) {
     Llm *llm = reinterpret_cast<Llm *>(llmPtr);
     if (llm != nullptr) {
         Llm::destroy(llm);

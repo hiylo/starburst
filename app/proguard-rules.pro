@@ -4,8 +4,8 @@
 
 # MNN JNI callback interface — native code resolves its name via FindClass,
 # so it must not be obfuscated or renamed.
--keep class org.hiylo.opencode.ml.MnnLlm$StreamingCallback { *; }
--keepclassmembers class org.hiylo.opencode.ml.MnnLlm {
+-keep class org.hiylo.starburst.ml.MnnLlm$StreamingCallback { *; }
+-keepclassmembers class org.hiylo.starburst.ml.MnnLlm {
     native <methods>;
 }
 
@@ -19,11 +19,11 @@
     kotlinx.serialization.KSerializer serializer(...);
 }
 
--keep,includedescriptorclasses class org.hiylo.opencode.**$$serializer { *; }
--keepclassmembers class org.hiylo.opencode.** {
+-keep,includedescriptorclasses class org.hiylo.starburst.**$$serializer { *; }
+-keepclassmembers class org.hiylo.starburst.** {
     *** Companion;
 }
--keepclasseswithmembers class org.hiylo.opencode.** {
+-keepclasseswithmembers class org.hiylo.starburst.** {
     kotlinx.serialization.KSerializer serializer(...);
 }
 

@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OpenCode</string>
+    <string name="app_name">StarBurst</string>
     
     <!-- Home Screen -->
-    <string name="home_title">OpenCode</string>
+    <string name="home_title">StarBurst</string>
     <string name="home_add_server">Add Server</string>
     <string name="home_no_servers">No servers configured</string>
     <string name="home_server_health_good">Connected</string>
@@ -166,6 +166,12 @@
     <string name="chat_revert_message">This will undo this message and all subsequent messages. File changes will be reversed.</string>
     <string name="chat_restore">Restore</string>
     <string name="chat_attach">Attach</string>
+    <string name="chat_template">Quick templates</string>
+    <string name="chat_template_title">Quick templates</string>
+    <string name="chat_template_code_review">Code review</string>
+    <string name="chat_template_generate_tests">Generate tests</string>
+    <string name="chat_template_explain_code">Explain code</string>
+    <string name="chat_template_fix_bug">Fix bug</string>
     <string name="chat_attach_title">Attach</string>
     <string name="chat_attach_photo">Photo or image</string>
     <string name="chat_attach_photo_hint">Choose one or more images from your gallery</string>
@@ -387,9 +393,9 @@
     <string name="settings_theme_scheme_sunset">Sunset</string>
 
     <!-- LLM provider settings -->
-    <string name="llm_provider_title">Suggestion service</string>
+    <string name="llm_provider_title">LLM service</string>
     <string name="llm_provider_back">Back</string>
-    <string name="llm_provider_desc">Suggestion priority: server-configured LLM &gt; this cloud provider &gt; on-device model. This cloud provider is used when the server has no LLM configured or is unreachable.</string>
+    <string name="llm_provider_desc">LLM priority: server-configured LLM &gt; this cloud provider &gt; on-device model. This cloud provider is used when the server has no LLM configured or is unreachable.</string>
     <string name="llm_provider_base_url">Base URL</string>
     <string name="llm_provider_base_url_hint">https://api.openai.com/v1</string>
     <string name="llm_provider_model">Model</string>
@@ -576,7 +582,7 @@
     <string name="dialog_select_language">Select Language</string>
     
     <!-- Notifications -->
-    <string name="notification_channel_connection">OpenCode Connection</string>
+    <string name="notification_channel_connection">StarBurst Connection</string>
     <string name="notification_channel_connection_desc">Persistent connection to OpenCode server</string>
     <string name="notification_channel_tasks">Task Notifications</string>
     <string name="notification_channel_tasks_desc">Notifications when OpenCode tasks are completed</string>
@@ -588,7 +594,7 @@
     <string name="notification_connecting">Connecting to %1$s…</string>
     <string name="notification_connected_count">Connected to %1$d of %2$d servers</string>
     <string name="notification_exit">Exit</string>
-    <string name="notification_inbox_title">OpenCode — %1$d/%2$d connected</string>
+    <string name="notification_inbox_title">StarBurst — %1$d/%2$d connected</string>
     <string name="notification_status_connected">Connected</string>
     <string name="notification_status_connecting">Connecting…</string>
     <string name="notification_response_ready">Response ready</string>
@@ -600,7 +606,7 @@
     <string name="notification_has_question">%1$s has a question</string>
     <string name="notification_question">Question</string>
     <string name="notification_session_error">Session error</string>
-    <string name="notification_group_summary">OpenCode notifications</string>
+    <string name="notification_group_summary">StarBurst notifications</string>
     <string name="notification_export_progress">Session export progress</string>
     <string name="notification_task_complete">Task completed</string>
     
@@ -743,7 +749,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="about_description">Android client for OpenCode servers</string>
     <string name="about_unofficial">This is an unofficial community project, not affiliated with the OpenCode team.</string>
     <string name="about_github">GitHub</string>
-    <string name="about_github_url">https://github.com/hiylo/opencode</string>
+    <string name="about_github_url">https://github.com/hiylo/starburst</string>
     <string name="about_opencode">OpenCode</string>
     <string name="about_opencode_url">https://github.com/anomalyco/opencode</string>
     <string name="about_license">License</string>
@@ -753,7 +759,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
 
     <!-- Settings sync -->
     <string name="sync_title">Settings sync</string>
-    <string name="llm_provider_settings_title">Suggestion service</string>
+    <string name="llm_provider_settings_title">LLM service</string>
     <string name="llm_provider_settings_desc">External LLM for next-step suggestions (used when the server LLM is unavailable)</string>
     <string name="settings_on_device_model_title">On-device model</string>
     <string name="settings_on_device_model_desc">On-device model for offline next-step suggestions (~522 MB)</string>
@@ -780,10 +786,10 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="sync_gist_id_desc">Leave empty to create a private Gist</string>
     <string name="sync_github_token">GitHub token</string>
     <string name="sync_webdav_url">WebDAV file URL</string>
-    <string name="sync_webdav_url_desc">Full URL of the OpenCode.json file</string>
+    <string name="sync_webdav_url_desc">Full URL of the StarBurst.json file</string>
     <string name="sync_username">Username</string>
     <string name="sync_webdav_password">WebDAV password</string>
-    <string name="sync_document_desc">Choose an OpenCode.json file from Google Drive or any other app available in the system file picker.</string>
+    <string name="sync_document_desc">Choose an StarBurst.json file from Google Drive or any other app available in the system file picker.</string>
     <string name="sync_document_choose">Choose file</string>
     <string name="sync_document_create">Create file</string>
     <string name="sync_document_selected">Selected sync file</string>
@@ -968,10 +974,14 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="server_settings_tasks_desc">Background tasks, batch runs, and archives via the backend</string>
     <string name="backend_checking">Checking backend…</string>
     <string name="backend_installing">Installing backend…</string>
-    <string name="backend_installing_desc">Installing opencode-backend over SSH via install.sh</string>
+    <string name="backend_installing_desc">Installing starburst-backend over SSH via install.sh</string>
     <string name="backend_not_installed">Backend not installed</string>
-    <string name="backend_not_installed_desc">opencode-backend is unavailable on this server. Install it over SSH to unlock Task Center, archives and voice fallback.</string>
+    <string name="backend_not_installed_desc">starburst-backend is unavailable on this server. Install it over SSH to unlock Task Center, archives and voice fallback.</string>
     <string name="backend_install_action">Install backend</string>
+    <string name="backend_required_version">1.0.0</string>
+    <string name="backend_needs_upgrade">Backend update available</string>
+    <string name="backend_needs_upgrade_desc">Version %1$s installed, %2$s required</string>
+    <string name="backend_upgrade_action">Upgrade backend</string>
     <string name="server_settings_skills">Skills</string>
     <string name="server_settings_skills_desc">Browse this server\'s available skills</string>
     <string name="skills_title">Skills</string>
@@ -982,7 +992,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="notification_action_retry">Retry</string>
 
     <!-- Widget -->
-    <string name="widget_opencode_name">OpenCode</string>
+    <string name="widget_starburst_name">StarBurst</string>
     <string name="widget_new_session">New session</string>
     <string name="widget_search">Search</string>
     <string name="widget_task_center">Tasks</string>
@@ -1017,6 +1027,9 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="bookmarks_delete">Delete</string>
     <string name="chat_bookmark">Bookmark</string>
     <string name="menu_view_share">View share</string>
+    <string name="menu_copy_share_link">Copy share link</string>
+    <string name="menu_back_to_parent">Back to parent session</string>
+    <string name="fork_branches">Fork branches</string>
     <string name="server_mgmt_process_cpu">opencode CPU</string>
     <string name="server_mgmt_process_memory">opencode Memory</string>
     <string name="confirm">Confirm</string>
@@ -1064,7 +1077,13 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="agents_md_empty">No AGENTS.md found in this project</string>
     <string name="agents_md_generate">Generate</string>
     <string name="agents_md_refine">Improve</string>
+    <string name="agents_md_edit">Edit</string>
     <string name="agents_md_generating">Generating…</string>
+    <string name="agents_md_generating_phase1">Analyzing project structure…</string>
+    <string name="agents_md_generating_phase2">Generating AGENTS.md…</string>
+    <string name="agents_md_generating_phase3">Finalizing content…</string>
+    <string name="agents_md_modify">Modify with instruction</string>
+    <string name="agents_md_modify_hint">Describe the change, e.g. \'add a testing convention\'</string>
     <string name="agents_md_saving">Saving…</string>
     <string name="agents_md_save">Save</string>
     <string name="agents_md_save_failed">Save failed</string>

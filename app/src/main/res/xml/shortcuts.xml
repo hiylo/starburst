@@ -9,7 +9,7 @@
         android:shortcutLongLabel="@string/shortcut_new_session">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetClass="org.hiylo.opencode.MainActivity">
+            android:targetClass="org.hiylo.starburst.MainActivity">
             <extra
                 android:name="action"
                 android:value="shortcut_new_session" />
@@ -24,7 +24,7 @@
         android:shortcutLongLabel="@string/shortcut_search">
         <intent
             android:action="android.intent.action.VIEW"
-            android:targetClass="org.hiylo.opencode.MainActivity">
+            android:targetClass="org.hiylo.starburst.MainActivity">
             <extra
                 android:name="action"
                 android:value="shortcut_search" />

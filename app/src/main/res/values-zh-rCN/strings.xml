@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">OpenCode</string>
+    <string name="app_name">StarBurst</string>
     <!-- Home Screen -->
-    <string name="home_title">OpenCode</string>
+    <string name="home_title">StarBurst</string>
     <string name="home_add_server">添加服务器</string>
     <string name="home_no_servers">未配置服务器</string>
     <string name="home_server_health_good">已连接</string>
@@ -46,7 +46,7 @@
     <string name="settings_theme_dark">深色</string>
     <string name="settings_notifications">通知</string>
     <!-- Notifications -->
-    <string name="notification_channel_connection">OpenCode 连接</string>
+    <string name="notification_channel_connection">StarBurst 连接</string>
     <string name="notification_channel_tasks">任务通知</string>
     <string name="notification_connected">已连接到 %1$s</string>
     <string name="notification_task_complete">任务已完成</string>
@@ -82,6 +82,12 @@
     <string name="chat_revert_message">此操作将撤销该消息及之后所有消息，文件更改也将被回退。</string>
     <string name="chat_restore">恢复</string>
     <string name="chat_attach">附件</string>
+    <string name="chat_template">快捷模板</string>
+    <string name="chat_template_title">快捷模板</string>
+    <string name="chat_template_code_review">代码审查</string>
+    <string name="chat_template_generate_tests">生成测试</string>
+    <string name="chat_template_explain_code">解释代码</string>
+    <string name="chat_template_fix_bug">修复 Bug</string>
     <string name="chat_remove">移除</string>
     <string name="chat_clear">清除</string>
     <string name="chat_scroll_bottom">滚动到底部</string>
@@ -268,9 +274,9 @@
     <string name="settings_theme_scheme_sunset">日落</string>
 
     <!-- LLM provider settings -->
-    <string name="llm_provider_title">建议生成服务</string>
+    <string name="llm_provider_title">大模型服务</string>
     <string name="llm_provider_back">返回</string>
-    <string name="llm_provider_desc">生成建议优先级：服务器配置的 LLM &gt; 本云端服务 &gt; 端侧模型。仅当服务器未配置 LLM 或不可达时，才使用本云端服务。</string>
+    <string name="llm_provider_desc">大模型优先级：服务器配置的 LLM &gt; 本云端服务 &gt; 端侧模型。仅当服务器未配置 LLM 或不可达时，才使用本云端服务。</string>
     <string name="llm_provider_base_url">Base URL</string>
     <string name="llm_provider_base_url_hint">https://api.openai.com/v1</string>
     <string name="llm_provider_model">模型</string>
@@ -341,7 +347,7 @@
     <string name="notification_channel_permissions_desc">OpenCode 需要权限时通知</string>
     <string name="notification_connecting">正在连接 %1$s…</string>
     <string name="notification_connected_count">已连接 %1$d/%2$d 个服务器</string>
-    <string name="notification_inbox_title">OpenCode — 已连接 %1$d/%2$d</string>
+    <string name="notification_inbox_title">StarBurst — 已连接 %1$d/%2$d</string>
     <string name="notification_status_connected">已连接</string>
     <string name="notification_status_connecting">正在连接…</string>
     <string name="notification_response_ready">回复已准备好</string>
@@ -352,7 +358,7 @@
     <string name="notification_has_question">%1$s 有问题</string>
     <string name="notification_question">问题</string>
     <string name="notification_session_error">会话错误</string>
-    <string name="notification_group_summary">OpenCode 通知</string>
+    <string name="notification_group_summary">StarBurst 通知</string>
     <string name="notification_export_progress">会话导出进度</string>
     <string name="chat_summarized">上下文已压缩</string>
     <string name="menu_export_session">导出会话</string>
@@ -364,7 +370,7 @@
     <string name="about_description">OpenCode 服务器 Android 客户端</string>
     <string name="about_unofficial">这是一个非官方社区项目，与 OpenCode 团队无关。</string>
     <string name="about_github">GitHub</string>
-    <string name="about_github_url">https://github.com/hiylo/opencode</string>
+    <string name="about_github_url">https://github.com/hiylo/starburst</string>
     <string name="about_opencode">OpenCode</string>
     <string name="about_opencode_url">https://github.com/anomalyco/opencode</string>
     <string name="about_license">许可证</string>
@@ -643,7 +649,7 @@
     <string name="server_mcp_status_needs_registration">需要客户端注册</string>
     <string name="server_mcp_status_unknown">未知状态</string>
     <string name="sync_title">设置同步</string>
-    <string name="llm_provider_settings_title">建议生成服务</string>
+    <string name="llm_provider_settings_title">大模型服务</string>
     <string name="llm_provider_settings_desc">用于生成下一步建议的外部 LLM（服务器 LLM 不可用时生效）</string>
     <string name="settings_on_device_model_title">端侧模型</string>
     <string name="settings_on_device_model_desc">用于离线生成下一步建议的端侧模型（约 522 MB）</string>
@@ -661,7 +667,7 @@
     <string name="sync_gist_id_desc">留空则创建私有 Gist</string>
     <string name="sync_github_token">GitHub 令牌</string>
     <string name="sync_webdav_url">WebDAV 文件 URL</string>
-    <string name="sync_webdav_url_desc">OpenCode.json 文件的完整 URL</string>
+    <string name="sync_webdav_url_desc">StarBurst.json 文件的完整 URL</string>
     <string name="sync_username">用户名</string>
     <string name="sync_webdav_password">WebDAV 密码</string>
     <string name="sync_credential_saved_hint">留空则保留已安全存储的值</string>
@@ -726,7 +732,7 @@
     <string name="settings_terminal_panel_hint">终端面板提示</string>
     <string name="settings_terminal_panel_hint_desc">每次启动应用时显示一次面板打开说明</string>
     <string name="sync_backend_document">文件</string>
-    <string name="sync_document_desc">从 Google Drive 或系统文件选择器中的其他应用选择一个 OpenCode.json 文件。</string>
+    <string name="sync_document_desc">从 Google Drive 或系统文件选择器中的其他应用选择一个 StarBurst.json 文件。</string>
     <string name="sync_document_choose">选择文件</string>
     <string name="sync_document_create">新建文件</string>
     <string name="sync_document_selected">已选择同步文件</string>
@@ -932,10 +938,14 @@
     <string name="server_settings_tasks_desc">通过后端执行后台任务、批量与归档</string>
     <string name="backend_checking">正在检测后端…</string>
     <string name="backend_installing">正在安装后端…</string>
-    <string name="backend_installing_desc">通过 SSH 执行 install.sh 安装 opencode-backend</string>
+    <string name="backend_installing_desc">通过 SSH 执行 install.sh 安装 starburst-backend</string>
     <string name="backend_not_installed">后端未安装</string>
-    <string name="backend_not_installed_desc">该服务器上未部署 opencode-backend。通过 SSH 一键安装后即可解锁任务中心、归档与语音兜底。</string>
+    <string name="backend_not_installed_desc">该服务器上未部署 starburst-backend。通过 SSH 一键安装后即可解锁任务中心、归档与语音兜底。</string>
     <string name="backend_install_action">安装后端</string>
+    <string name="backend_required_version">1.0.0</string>
+    <string name="backend_needs_upgrade">后端需要升级</string>
+    <string name="backend_needs_upgrade_desc">当前版本 %1$s，需要 %2$s</string>
+    <string name="backend_upgrade_action">升级后端</string>
     <string name="server_settings_skills">Skills</string>
     <string name="server_settings_skills_desc">浏览该服务器可用的 Skills</string>
     <string name="skills_title">Skills</string>
@@ -946,7 +956,7 @@
     <string name="notification_action_retry">重试</string>
 
     <!-- Widget -->
-    <string name="widget_opencode_name">OpenCode</string>
+    <string name="widget_starburst_name">StarBurst</string>
     <string name="widget_new_session">新建会话</string>
     <string name="widget_search">全局搜索</string>
     <string name="widget_task_center">任务中心</string>
@@ -981,6 +991,9 @@
     <string name="bookmarks_delete">删除</string>
     <string name="chat_bookmark">书签</string>
     <string name="menu_view_share">查看分享</string>
+    <string name="menu_copy_share_link">复制分享链接</string>
+    <string name="menu_back_to_parent">返回父会话</string>
+    <string name="fork_branches">分支</string>
     <string name="server_mgmt_process_cpu">opencode CPU</string>
     <string name="server_mgmt_process_memory">opencode 内存</string>
     <string name="confirm">确定</string>
@@ -1028,7 +1041,13 @@
     <string name="agents_md_empty">此项目未找到 AGENTS.md</string>
     <string name="agents_md_generate">生成</string>
     <string name="agents_md_refine">完善</string>
+    <string name="agents_md_edit">编辑</string>
     <string name="agents_md_generating">生成中…</string>
+    <string name="agents_md_generating_phase1">正在分析项目结构…</string>
+    <string name="agents_md_generating_phase2">正在生成 AGENTS.md…</string>
+    <string name="agents_md_generating_phase3">正在整理内容…</string>
+    <string name="agents_md_modify">按指令修改</string>
+    <string name="agents_md_modify_hint">描述要修改的内容，例如「增加测试规范」</string>
     <string name="agents_md_saving">保存中…</string>
     <string name="agents_md_save">保存</string>
     <string name="agents_md_save_failed">保存失败</string>

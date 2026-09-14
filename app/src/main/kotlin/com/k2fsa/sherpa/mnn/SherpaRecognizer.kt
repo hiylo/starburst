@@ -1,6 +1,6 @@
 /*
  * Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
- * Project : opencode
+ * Project : StarBurst
  * File : SherpaRecognizer.kt
  * Date : 2026/09/09 23:45:00
  * Author : Hsi Chu

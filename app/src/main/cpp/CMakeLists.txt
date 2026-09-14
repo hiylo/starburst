@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22.1)
-project("opencode_mnn")
+project("starburst_mnn")
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -26,11 +26,11 @@ set_target_properties(MNN_OPENCV PROPERTIES IMPORTED_LOCATION
 
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-add_library(opencode_mnn SHARED
-        opencode_mnn_jni.cpp
+add_library(starburst_mnn SHARED
+        starburst_mnn_jni.cpp
 )
 
-target_link_libraries(opencode_mnn
+target_link_libraries(starburst_mnn
         android
         log
         MNN

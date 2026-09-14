@@ -11,15 +11,15 @@ plugins {
 }
 
 android {
-    namespace = "org.hiylo.opencode"
+    namespace = "org.hiylo.starburst"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "org.hiylo.opencode"
+        applicationId = "org.hiylo.starburst"
         minSdk = 26
         targetSdk = 34
-        versionCode = 5
-        versionName = "1.3.0"
+        versionCode = 6
+        versionName = "1.4.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -47,7 +47,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
-            manifestPlaceholders["appLabel"] = "OpenCode Dev"
+            manifestPlaceholders["appLabel"] = "StarBurst Dev"
         }
         release {
             manifestPlaceholders["appLabel"] = "@string/app_name"
