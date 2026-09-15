@@ -29,6 +29,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
+import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.MessageIdGenerator
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.OpenCodeGateway
@@ -39,6 +40,7 @@ import org.hiylo.starburst.data.api.createdAtEpochMillis
 import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.listMessages
 import org.hiylo.starburst.data.api.listPendingQuestions
+import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listSessionEvents
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
@@ -88,11 +90,13 @@ private const val PANEL_RECENT_COUNT = 8
 /** 决策面板单条消息的最大字符数。 */
 private const val PANEL_MESSAGE_CHAR_LIMIT = 400
 
-/** 工作台会话条目：会话 + 派生状态 + 该会话的待决问题（若有）。 */
+/** 工作台会话条目：会话 + 派生状态 + 该会话的待决问题（若有）+ 未读新消息标记。 */
 data class WorkbenchSession(
     val session: Session,
     val status: SessionStatus = SessionStatus.Idle,
     val pendingQuestion: QuestionRequest? = null,
+    /** 后端 session_unread 记录的有新消息未读（Web/App 共享，仅后端可用时有意义）。 */
+    val unread: Boolean = false,
 )
 
 /** 事件流条目：按会话聚合的最新动态（标题 + 路径 + AI 回复/事件摘要）。 */
@@ -146,6 +150,7 @@ data class DecisionPanelState(
 class WorkbenchViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val api: OpenCodeApi,
+    private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
     private val backendPushListener: BackendPushListener,
     @ApplicationContext private val context: Context,
@@ -185,21 +190,28 @@ class WorkbenchViewModel @Inject constructor(
 
     private var asrRecorder: AsrSession? = null
 
+    /** start 进行中的门控，防止快速双击并发创建 recorder / 录音常驻后无法停止。 */
+    private var voiceStarting = false
+
     /** 点击切换：空闲→开始录音；录音中→结束并提交识别文本。 */
     fun toggleVoice() {
+        if (voiceStarting) return
         if (_voiceActive.value) {
             stopVoice()
             return
         }
+        voiceStarting = true
         viewModelScope.launch {
             val session = createAsrSession()
             if (session == null) {
+                voiceStarting = false
                 _voiceActive.value = false
                 return@launch
             }
             asrRecorder = session
             val ok = session.start(object : AsrSession.Listener {
                 override fun onStart() {
+                    voiceStarting = false
                     _voiceActive.value = true
                 }
 
@@ -208,16 +220,19 @@ class WorkbenchViewModel @Inject constructor(
                 }
 
                 override fun onError(message: String) {
+                    voiceStarting = false
                     _voiceActive.value = false
                     if (asrRecorder === session) asrRecorder = null
                 }
 
                 override fun onStopped() {
+                    voiceStarting = false
                     _voiceActive.value = false
                     if (asrRecorder === session) asrRecorder = null
                 }
             })
             if (!ok) {
+                voiceStarting = false
                 _voiceActive.value = false
                 if (asrRecorder === session) asrRecorder = null
             }
@@ -229,6 +244,17 @@ class WorkbenchViewModel @Inject constructor(
         asrRecorder = null
         _voiceActive.value = false
         if (recorder != null) viewModelScope.launch { recorder.stop() }
+    }
+
+    /** 退出工作台时释放录音会话：独立协程作用域不随 ViewModel 取消，必须显式停止避免麦克风常驻。 */
+    override fun onCleared() {
+        val recorder = asrRecorder
+        asrRecorder = null
+        _voiceActive.value = false
+        if (recorder != null) {
+            viewModelScope.launch { recorder.stop() }
+        }
+        super.onCleared()
     }
 
     /** 创建录音识别会话：优先后端代理流式引擎；不可用时回退端侧 MNN。 */
@@ -325,6 +351,10 @@ class WorkbenchViewModel @Inject constructor(
     }
 
     private fun handlePushEvent(ev: PushSessionEvent) {
+        // 正在查看的会话有新活动视为已读（与后端/Web 一致：任一端看过后全端清除）。
+        if (ev.sessionId == _panel.value?.sessionId && isUnreadTriggerEventType(ev.eventType)) {
+            markSessionRead(ev.sessionId)
+        }
         when (ev.eventType) {
             "session.status", "session.updated" -> {
                 ev.status()?.let { applyPushedStatus(ev.sessionId, it) }
@@ -343,6 +373,13 @@ class WorkbenchViewModel @Inject constructor(
             mergePushEvent(ev)
         }
     }
+
+    /** 与后端 isUnreadTriggerEvent 保持一致：这些事件会把会话标记为「有新消息未读」。 */
+    private fun isUnreadTriggerEventType(t: String): Boolean = t in setOf(
+        "message.complete", "message.created", "message.updated",
+        "question.asked", "question.updated", "permission.asked",
+        "session.idle", "session.status", "session.error", "session.failed",
+    )
 
     /** 推送解析出的会话状态立即写入列表（不等待下一次轮询）。 */
     private fun applyPushedStatus(sessionId: String, status: SessionStatus) {
@@ -466,11 +503,32 @@ class WorkbenchViewModel @Inject constructor(
                     }
             }.groupBy { it.sessionId }
             // 镜像通道下 listSessionStatuses 走后端增强接口（快照+事件聚合），状态准确。
-            val statuses = api.listSessionStatuses(activeConn)
-            val items = buildWorkbenchSessions(sessions, statuses, pendingBySession)
+            // /session/status 只认 query 参数 directory，按会话目录分组聚合查询。
+            val statuses = directories.flatMap { dir ->
+                runCatching { api.listSessionStatuses(activeConn, directory = dir) }
+                    .getOrElse { e ->
+                        if (e is CancellationException) throw e
+                        if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load session status for $dir: ${e.message}")
+                        emptyMap()
+                    }
+                    .toList()
+            }.toMap()
+            // 补齐缺失的 busy/retry 子会话对象，保证父会话能归并子会话的处理中状态。
+            val sessionsWithChildren = hydrateBusyChildren(activeConn, sessions, statuses)
+            val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession)
+            // 未读新消息：仅后端已配置/可达时才有意义（后端 session_unread 为权威状态）。
+            val unread = if (backendUrl.isBlank()) emptySet() else {
+                runCatching { backendApi.listUnread(backendUrl, backendToken) }
+                    .getOrElse { e ->
+                        if (e is CancellationException) throw e
+                        if (BuildConfig.DEBUG) Log.d(TAG, "load unread failed: ${e.message}")
+                        emptySet()
+                    }
+            }
+            val enriched = items.map { if (it.session.id in unread) it.copy(unread = true) else it }
             _uiState.update { current ->
                 current.copy(
-                    sessions = items,
+                    sessions = enriched,
                     loadingSessions = false,
                     sessionsError = null,
                 )
@@ -481,6 +539,28 @@ class WorkbenchViewModel @Inject constructor(
             if (BuildConfig.DEBUG) Log.d(TAG, "refresh sessions failed: ${e.message}")
             _uiState.update { it.copy(loadingSessions = false, sessionsError = e.message ?: context.getString(R.string.workbench_error_sessions)) }
         }
+    }
+
+    /**
+     * 服务器 /session/status 只返回 busy/retry 会话。当子会话（subagent）正在运行而全量列表
+     * 只含根会话时，父会话无法归并子会话的处理中状态。这里补齐缺失的 busy/retry 子会话对象。
+     */
+    private suspend fun hydrateBusyChildren(
+        activeConn: ServerConnection,
+        sessions: List<Session>,
+        statuses: Map<String, SessionStatus>,
+    ): List<Session> {
+        val knownIds = sessions.asSequence().map { it.id }.toSet()
+        val missingBusyIds = statuses.asSequence()
+            .filter { (_, status) -> status is SessionStatus.Busy || status is SessionStatus.Retry }
+            .map { it.key }
+            .filterNot { it in knownIds }
+            .toList()
+        if (missingBusyIds.isEmpty()) return sessions
+        val hydrated = missingBusyIds.mapNotNull { id ->
+            runCatching { api.getSession(activeConn, id) }.getOrNull()
+        }
+        return sessions + hydrated
     }
 
     /**
@@ -543,8 +623,27 @@ class WorkbenchViewModel @Inject constructor(
             return
         }
         _panel.value = DecisionPanelState(sessionId = sessionId, loading = true)
+        markSessionRead(sessionId)
         viewModelScope.launch {
             _panel.value = loadPanel(sessionId)
+        }
+    }
+
+    /** 点开会话视为已读：清本地未读标记并通知后端（任一端读过后全端不再显示未读）。 */
+    private fun markSessionRead(sessionId: String) {
+        _uiState.update { current ->
+            val updated = current.sessions.map { item ->
+                if (item.session.id == sessionId && item.unread) item.copy(unread = false) else item
+            }
+            current.copy(sessions = updated)
+        }
+        if (backendUrl.isBlank()) return
+        viewModelScope.launch {
+            runCatching { backendApi.markSessionRead(backendUrl, backendToken, sessionId) }
+                .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (BuildConfig.DEBUG) Log.d(TAG, "mark session read failed: ${e.message}")
+                }
         }
     }
 

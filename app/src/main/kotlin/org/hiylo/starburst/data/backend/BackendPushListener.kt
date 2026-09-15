@@ -45,6 +45,12 @@ data class PushSessionEvent(
     /** 从原始事件里宽容提取「问题文本」（question.asked）。取不到返回 null。 */
     fun questionText(): String? = extractAny(listOf("question", "text"), arrayKeys = listOf("questions"))
 
+    /** 从 `question.replied`/`question.rejected` 事件里提取问题请求 id（requestID/id）。 */
+    fun questionId(): String? = extractAny(listOf("requestID", "requestId", "id"))
+
+    /** 从 `permission.replied`/`permission.denied`/`permission.granted` 事件里提取授权请求 id。 */
+    fun permissionId(): String? = extractAny(listOf("requestID", "requestId", "id"))
+
     /** 从原始事件里宽容提取「权限类型」（permission.asked）。 */
     fun permission(): String? = extractAny(listOf("permission", "tool", "name"))
 

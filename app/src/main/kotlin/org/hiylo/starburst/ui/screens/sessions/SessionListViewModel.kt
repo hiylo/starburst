@@ -22,6 +22,7 @@ import org.hiylo.starburst.data.api.createSession
 import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.executeCommand
 import org.hiylo.starburst.data.api.findFiles
+import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
@@ -261,6 +262,20 @@ class SessionListViewModel @Inject constructor(
         SharingStarted.WhileSubscribed(5_000),
         emptyList(),
     )
+
+    val savedPaths: StateFlow<List<String>> = settingsRepository.savedPaths(serverId).stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList(),
+    )
+
+    fun addSavedPath(path: String) {
+        viewModelScope.launch { settingsRepository.addSavedPath(serverId, path) }
+    }
+
+    fun removeSavedPath(path: String) {
+        viewModelScope.launch { settingsRepository.removeSavedPath(serverId, path) }
+    }
 
     private val sessionCategories: StateFlow<List<SessionCategory>> = settingsRepository.sessionCategories.stateIn(
         viewModelScope,
@@ -550,12 +565,61 @@ class SessionListViewModel @Inject constructor(
                 .filter { it.id in serverSessionIds }
                 .map { it.id }
                 .toSet()
-            val statuses = api.listSessionStatuses(conn)
+            val statuses = fetchSessionStatuses(serverSessionIds)
+            hydrateUnknownBusySessions(statuses)
             val connected = connectionStateRepository.connectedServerIds.value.contains(serverId)
             eventReducer.replaceSessionStatuses(serverId, sessionIds, statuses, connected)
         } catch (e: Exception) {
             if (e is CancellationException) throw e
             if (BuildConfig.DEBUG) Log.d(TAG, "Failed to refresh session statuses: ${e::class.java.simpleName}")
+        }
+    }
+
+    /**
+     * 服务器 /session/status 只认 query 参数 `?directory=` 来路由到对应 workspace（不认
+     * x-starburst-directory header，也不支持无 directory 的全量查询）。这里按会话目录分组聚合查询，
+     * 与 refreshPendingQuestions 的口径一致。
+     */
+    private suspend fun fetchSessionStatuses(serverSessionIds: Set<String>): Map<String, SessionStatus> {
+        val directories = eventReducer.sessions.value.asSequence()
+            .filter { it.id in serverSessionIds }
+            .map { it.directory }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .toList()
+        if (directories.isEmpty()) return emptyMap()
+        return directories.flatMap { dir ->
+            runCatching { api.listSessionStatuses(conn, directory = dir) }
+                .getOrElse { e ->
+                    if (e is CancellationException) throw e
+                    if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load session status for $dir: ${e.message}")
+                    emptyMap()
+                }
+                .toList()
+        }.toMap()
+    }
+
+    /**
+     * 服务器 /session/status 只返回 busy/retry 会话。当子会话（subagent）正在运行而本端尚未加载
+     * 该子会话对象时（冷启动、SSE 重连期间漏掉 session.created 等），[EventReducer.sessions] 里没有它，
+     * 导致 uiState 的 childBusyByParent 无法把父会话标记为 busy。这里按需补齐缺失的 busy/retry 会话对象，
+     * 使父会话能正确显示处理中状态。
+     */
+    private suspend fun hydrateUnknownBusySessions(statuses: Map<String, SessionStatus>) {
+        val knownIds = eventReducer.sessions.value.asSequence().map { it.id }.toSet()
+        val missingBusyIds = statuses.asSequence()
+            .filter { (_, status) -> status is SessionStatus.Busy || status is SessionStatus.Retry }
+            .map { it.key }
+            .filterNot { it in knownIds }
+            .toList()
+        if (missingBusyIds.isEmpty()) return
+        coroutineScope {
+            missingBusyIds.map { id ->
+                async {
+                    runCatching { api.getSession(conn, id) }
+                        .onSuccess { eventReducer.upsertSession(serverId, it) }
+                }
+            }.awaitAll()
         }
     }
 

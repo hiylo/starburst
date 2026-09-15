@@ -135,6 +135,13 @@
     <string name="sessions_search_folders">搜索文件夹</string>
     <string name="sessions_no_folders">未找到文件夹</string>
     <string name="sessions_empty_directory">目录为空</string>
+    <string name="sessions_saved_paths">常用路径</string>
+    <string name="sessions_add_saved_path">添加路径</string>
+    <string name="sessions_add_saved_path_title">添加常用路径</string>
+    <string name="sessions_add_saved_path_hint">路径</string>
+    <string name="sessions_add_saved_path_placeholder">例如 /home/user/code</string>
+    <string name="sessions_add_saved_path_invalid">请输入有效路径</string>
+    <string name="sessions_remove_saved_path">移除路径</string>
     <string name="sessions_working">处理中</string>
     <string name="sessions_retrying">重试中</string>
     <string name="session_changes_additions">+%1$d</string>

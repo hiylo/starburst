@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material3.Text
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -91,7 +92,7 @@ fun AppDialog(
 ) {
     BasicAlertDialog(onDismissRequest = onDismissRequest) {
         Surface(
-            modifier = modifier,
+            modifier = modifier.imePadding(),
             shape = shape,
             color = appDialogContainerColor(),
             border = appAmoledBorder(),

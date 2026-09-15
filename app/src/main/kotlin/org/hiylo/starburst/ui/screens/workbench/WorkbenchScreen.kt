@@ -15,6 +15,11 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -85,6 +90,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -655,6 +661,7 @@ private fun SessionSummaryRow(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 StatusDot(status = item.status)
+                if (item.unread) UnreadDot()
                 Column(modifier = Modifier.weight(1f)) {
                     Text(
                         text = item.session.title?.takeIf { it.isNotBlank() }?.replace('\n', ' ')
@@ -732,6 +739,25 @@ private fun StatusDot(status: SessionStatus) {
         is SessionStatus.Idle -> MaterialTheme.colorScheme.outlineVariant
     }
     Surface(modifier = Modifier.size(10.dp), shape = CircleShape, color = color) {}
+}
+
+/** 未读新消息：闪动绿点（后端 session_unread 驱动，Web/App 共享已读状态）。 */
+@Composable
+private fun UnreadDot() {
+    val infinite = rememberInfiniteTransition(label = "unreadPulse")
+    val alpha by infinite.animateFloat(
+        initialValue = 1f,
+        targetValue = 0.25f,
+        animationSpec = infiniteRepeatable(animation = tween(800), repeatMode = RepeatMode.Reverse),
+        label = "unreadAlpha",
+    )
+    Surface(
+        modifier = Modifier
+            .size(10.dp)
+            .graphicsLayer { this.alpha = alpha },
+        shape = CircleShape,
+        color = StatusConnected,
+    ) {}
 }
 
 @Composable

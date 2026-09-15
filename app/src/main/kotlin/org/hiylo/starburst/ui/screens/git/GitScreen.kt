@@ -83,6 +83,7 @@ fun GitScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(

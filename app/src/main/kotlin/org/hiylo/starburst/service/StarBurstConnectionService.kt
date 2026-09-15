@@ -43,6 +43,7 @@ import org.hiylo.starburst.data.api.listPendingPermissions
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
+import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.repository.EventReducer
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.normalizeServerUrl
@@ -477,7 +478,9 @@ class StarBurstConnectionService : Service() {
             val conn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
             val sseJob = startSseConnection(server, conn)
             val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
-            sseJob.invokeOnCompletion { pushJob?.cancel() }
+            // SSE 结束（正常/异常/被 cancel）时取消「当前」push job。用 state 实时取值，
+            // 避免替换 pushJob（如 replaceSshSession 后）仍取消旧 job 导致新推送停不掉。
+            sseJob.invokeOnCompletion { connections[server.id]?.pushJob?.cancel() }
             ServerConnectionState(
                 config = server,
                 conn = conn,
@@ -520,6 +523,7 @@ class StarBurstConnectionService : Service() {
         persistDisconnectedServers()
         val state = connections.remove(serverId) ?: return
         state.sseJob.cancel()
+        state.pushJob?.cancel()
         closeSshSession(state.sshSession)
         reconciliationJobs.remove(serverId)?.cancel()
 
@@ -573,6 +577,7 @@ class StarBurstConnectionService : Service() {
 
         for ((_, state) in connections) {
             state.sseJob.cancel()
+            state.pushJob?.cancel()
             closeSshSession(state.sshSession)
         }
         reconciliationJobs.values.forEach { it.cancel() }
@@ -666,9 +671,10 @@ class StarBurstConnectionService : Service() {
         if (!server.useSsh) return ResolvedConnection(server.url, null)
         val host = server.host
         val openCodePort = server.openCodePort
+        var session: JschSession? = null
         return try {
             val jsch = JSch()
-            val session = jsch.getSession(server.sshUsername, host, server.sshPort)
+            session = jsch.getSession(server.sshUsername, host, server.sshPort)
             session.setPassword(server.sshPassword ?: "")
             session.setConfig("StrictHostKeyChecking", "no")
             // SSH 保活：防止会话因空闲/网络波动被中间设备掐断，降低隧道断连概率。
@@ -694,6 +700,8 @@ class StarBurstConnectionService : Service() {
             }
             ResolvedConnection("http://127.0.0.1:$localPort", session, backendLocalPort)
         } catch (e: Exception) {
+            // 端口转发失败等场景：会话已 connect 出但未妥善释放，必须主动断开避免 TCP/守护线程泄漏。
+            session?.disconnect()
             Log.e(TAG, "[${server.displayName}] Failed to establish SSH tunnel", e)
             throw e
         }
@@ -709,7 +717,7 @@ class StarBurstConnectionService : Service() {
         val oldState = connections[serverId] ?: return
         val oldSsh = oldState.sshSession
         val newPush = startBackendPushJob(oldState.config, newConn, newBackendLocalPort)
-        connections.compute(serverId) { _, state ->
+        val applied = connections.compute(serverId) { _, state ->
             if (state == null || state.sseJob !== oldState.sseJob) return@compute state
             state.copy(
                 conn = newConn,
@@ -717,6 +725,13 @@ class StarBurstConnectionService : Service() {
                 pushJob = newPush,
                 backendLocalPort = newBackendLocalPort,
             )
+        }
+        if (applied !== oldState) {
+            // 期间 state 已被并发替换（forceReconnect / 恢复流程），本次替换未生效：
+            // 关闭刚建立的隧道与新 push job，避免泄漏/重复订阅。
+            newPush?.cancel()
+            closeSshSession(newSsh)
+            return
         }
         oldState.pushJob?.cancel()
         closeSshSession(oldSsh)
@@ -765,7 +780,7 @@ class StarBurstConnectionService : Service() {
             for (state in states) {
                 val job = startSseConnection(state.config, state.conn, preload = false)
                 val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
-                job.invokeOnCompletion { newPush?.cancel() }
+                job.invokeOnCompletion { connections[state.config.id]?.pushJob?.cancel() }
                 val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
                 if (!connections.replace(state.config.id, state, replacement)) {
                     job.cancel()
@@ -818,7 +833,7 @@ class StarBurstConnectionService : Service() {
         val state = connections[serverId] ?: return
         val job = startSseConnection(state.config, state.conn, preload = false)
         val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
-        job.invokeOnCompletion { newPush?.cancel() }
+        job.invokeOnCompletion { connections[serverId]?.pushJob?.cancel() }
         val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
         if (!connections.replace(serverId, state, replacement)) {
             job.cancel()
@@ -855,8 +870,14 @@ class StarBurstConnectionService : Service() {
                 localStatuses[sid] is SessionStatus.Busy || localStatuses[sid] is SessionStatus.Retry
             }
             if (!hasLocalActive && lastBusySessions[serverId].orEmpty().isEmpty()) continue
+            val directories = eventReducer.sessions.value.asSequence()
+                .filter { it.id in serverSessionIds }
+                .map { it.directory }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
             val statuses = try {
-                api.listSessionStatuses(state.conn)
+                api.listSessionStatusesForDirectories(state.conn, directories)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1046,22 +1067,22 @@ class StarBurstConnectionService : Service() {
                     Log.w(TAG, "[${server.displayName}] Message reconciliation failed for ${session.id}", e)
                 }
             }
-            val statuses = api.listSessionStatuses(conn)
             val serverSessionIds = eventReducer.serverSessions.value[server.id].orEmpty()
             val sessionIds = eventReducer.sessions.value.asSequence()
                 .filter { it.id in serverSessionIds }
                 .map { it.id }
                 .toSet()
-            // 重连对账是完整的状态同步：/session/status 快照是服务端当前真实状态，
-            // 省略的会话即为已空闲，必须纠正掉断线期间残留的 Busy（connected=false 语义）。
-            eventReducer.replaceSessionStatuses(server.id, sessionIds, statuses, connected = false)
-            // 服务器 /permission、/question 按 query 参数 directory 过滤（不认 header），
-            // 必须按会话目录分组聚合，否则拿不到任何 pending 请求。
+            // /session/status、/permission、/question 都按 query 参数 directory 过滤（不认 header），
+            // 且 /session/status 不支持无 directory 全量查询，必须按会话目录分组聚合。
             val directories = sessions.asSequence()
                 .map { it.directory }
                 .filter { it.isNotBlank() }
                 .distinct()
                 .toList()
+            val statuses = api.listSessionStatusesForDirectories(conn, directories)
+            // 重连对账是完整的状态同步：/session/status 快照是服务端当前真实状态，
+            // 省略的会话即为已空闲，必须纠正掉断线期间残留的 Busy（connected=false 语义）。
+            eventReducer.replaceSessionStatuses(server.id, sessionIds, statuses, connected = false)
             for (dir in directories) {
                 try {
                     permissions += api.listPendingPermissions(conn, directory = dir).map { request ->
@@ -1115,6 +1136,7 @@ class StarBurstConnectionService : Service() {
     private fun cleanupTerminatedConnection(serverId: String, job: Job) {
         val state = connections[serverId] ?: return
         if (state.sseJob !== job || !connections.remove(serverId, state)) return
+        state.pushJob?.cancel()
         closeSshSession(state.sshSession)
         reconciliationJobs.remove(serverId)?.cancel()
 
@@ -1335,8 +1357,9 @@ class StarBurstConnectionService : Service() {
                     backendPushListener.eventFlow(backendUrl, token).collect { ev ->
                         handleBackendPushEvent(server, ev)
                     }
-                    // 正常断开（收集器结束）不立即判失败；交由超时/下次失败判断。
-                    consecutiveFailures++
+                    // 正常断开（收集器结束/WS 被网关按 idle 掐断）不算故障：
+                    // 重置失败计数，避免健康后端仅因空闲断流被误判回退直连。
+                    consecutiveFailures = 0
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {
@@ -1403,10 +1426,32 @@ class StarBurstConnectionService : Service() {
                     ?: getString(R.string.notification_has_question, getString(R.string.notification_new_session))
                 showQuestionNotification(server, ev.sessionId, questionText)
             }
+            "question.replied", "question.rejected" -> {
+                // web 端用 opencode 通道选中/拒绝问题后，App 走推送通道也要同步清除 pending，
+                // 否则会话列表/工作台一直挂着「待回答问题」无法取消。
+                if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
+                val requestId = ev.questionId().orEmpty()
+                if (requestId.isBlank()) {
+                    // payload 缺失请求 id 时按会话兜底清空，避免题永久滞留。
+                    eventReducer.clearPendingForSession(ev.sessionId)
+                } else {
+                    eventReducer.removeQuestion(ev.sessionId, requestId)
+                }
+            }
             "permission.asked", "permission.updated" -> {
                 if (isChildSession(ev.sessionId)) return
                 val permission = ev.permission() ?: return
                 showPermissionNotification(server, ev.sessionId, permission)
+            }
+            "permission.replied", "permission.denied", "permission.granted" -> {
+                // web 端已授权/拒绝后，App 走推送通道同步清除 pending 授权，避免一直挂着无法取消。
+                if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
+                val requestId = ev.permissionId().orEmpty()
+                if (requestId.isBlank()) {
+                    eventReducer.clearPendingForSession(ev.sessionId)
+                } else {
+                    eventReducer.removePermission(ev.sessionId, requestId)
+                }
             }
             "session.error", "session.failed" -> {
                 if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
@@ -1431,7 +1476,14 @@ class StarBurstConnectionService : Service() {
     private suspend fun refreshSessionStatuses(server: ServerConfig) {
         val state = connections[server.id] ?: return
         try {
-            val statuses = api.listSessionStatuses(state.conn)
+            val serverSessionIds = eventReducer.serverSessions.value[server.id].orEmpty()
+            val directories = eventReducer.sessions.value.asSequence()
+                .filter { it.id in serverSessionIds }
+                .map { it.directory }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .toList()
+            val statuses = api.listSessionStatusesForDirectories(state.conn, directories)
             statuses.forEach { (sessionId, status) ->
                 eventReducer.updateSessionStatus(sessionId, status)
             }

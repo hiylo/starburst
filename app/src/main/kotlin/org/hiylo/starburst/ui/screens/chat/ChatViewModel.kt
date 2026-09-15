@@ -1290,6 +1290,7 @@ class ChatViewModel @Inject constructor(
                 e.rethrowCancellation()
                 Log.e(TAG, "Failed to load older messages", e)
             } finally {
+                flushThrottledState()
                 _isLoadingOlder.value = false
             }
         }
@@ -1745,6 +1746,8 @@ class ChatViewModel @Inject constructor(
                     directory = sessionDirectory
                 )
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
+                // 新消息覆盖之前的待决提问：旧的提问已不再等待答复，即时移除。
+                eventReducer.clearQuestionsForSession(sessionId)
                 if (BuildConfig.DEBUG) Log.d(TAG, "Sent prompt to session $sessionId (${parts.size} parts)")
                 reconcilePendingMessage(messageId)
             } catch (e: Exception) {
@@ -1871,6 +1874,8 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Aborted session $sessionId")
                 // Optimistically update session status to Idle so UI reflects change immediately
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Idle)
+                // 中止后，之前的待决提问已不再等待答复，即时移除。
+                eventReducer.clearQuestionsForSession(sessionId)
             } catch (e: Exception) {
                 e.rethrowCancellation()
                 Log.e(TAG, "Failed to abort session", e)

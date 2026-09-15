@@ -208,6 +208,32 @@ class BackendApi @Inject constructor(
             null
         }
 
+    /** `GET /api/unread` 的响应包装（session_id → 是否未读）。 */
+    @Serializable
+    internal data class BackendUnreadResponse(val unread: Map<String, Boolean> = emptyMap())
+
+    /**
+     * 读取后端记录的「有新消息未读」会话集合（`GET /api/unread`）。
+     * 该状态由后端统一维护，Web 与 App 共享；任一端点开会话后经 [markSessionRead] 清除。
+     */
+    suspend fun listUnread(backendUrl: String, token: String): Set<String> {
+        val resp: BackendUnreadResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/unread") {
+            header("Authorization", "Bearer $token")
+            // 非关键状态，短超时：后端不可达时快速失败，不影响会话列表刷新。
+            timeout { requestTimeoutMillis = 3_000L }
+        }.body()
+        return resp.unread.filterValues { it }.keys
+    }
+
+    /** 标记某会话已读（`POST /api/unread/{sessionId}`），任一端口开后全端清除未读。 */
+    suspend fun markSessionRead(backendUrl: String, token: String, sessionId: String): Boolean {
+        val resp: HttpResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/unread/$sessionId") {
+            header("Authorization", "Bearer $token")
+            timeout { requestTimeoutMillis = 3_000L }
+        }
+        return resp.status.value in 200..299
+    }
+
     /** 读取用量统计（`GET /api/stats`）：任务计数 + token 调用量 + 归档数。 */
     suspend fun getStats(backendUrl: String, token: String): BackendStats {
         return httpClient.get("${backendUrl.trimEnd('/')}/api/stats") {

@@ -48,7 +48,7 @@ suspend fun OpenCodeApi.listSessionStatuses(
 ): Map<String, SessionStatus> {
     val payload: JsonObject = httpClient.get("${conn.baseUrl}/session/status") {
         conn.authHeader?.let { header("Authorization", it) }
-        directory?.let { header("x-starburst-directory", it) }
+        directory?.let { parameter("directory", it) }
     }.body()
     return payload.mapValues { (_, value) ->
         val status = value.jsonObject
@@ -62,6 +62,22 @@ suspend fun OpenCodeApi.listSessionStatuses(
             else -> SessionStatus.Idle
         }
     }
+}
+
+/**
+ * /session/status 只认 query 参数 `?directory=` 路由到对应 workspace，且不支持无 directory 全量查询。
+ * 这里按目录分组聚合查询，合并成完整的状态快照（busy/retry）。
+ */
+suspend fun OpenCodeApi.listSessionStatusesForDirectories(
+    conn: ServerConnection,
+    directories: Collection<String>,
+): Map<String, SessionStatus> {
+    if (directories.isEmpty()) return emptyMap()
+    return directories.flatMap { dir ->
+        runCatching { listSessionStatuses(conn, directory = dir) }
+            .getOrElse { emptyMap() }
+            .toList()
+    }.toMap()
 }
 
 suspend fun OpenCodeApi.getSession(conn: ServerConnection, sessionId: String, directory: String? = null): Session {

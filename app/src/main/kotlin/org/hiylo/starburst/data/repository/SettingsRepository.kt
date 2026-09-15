@@ -101,6 +101,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         private const val SERVER_SESSION_CATEGORY_PREFIX = "server_session_category_"
         private const val SERVER_PINNED_IDS_PREFIX = "server_pinned_ids_"
         private const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
+        private const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
 
         internal fun dynamicColorEnabled(preferences: Preferences): Boolean =
             preferences[DYNAMIC_COLOR_KEY] ?: DEFAULT_DYNAMIC_COLOR
@@ -135,6 +136,9 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
 
     private fun serverRecentProjectsKey(serverId: String) =
         stringPreferencesKey(SERVER_RECENT_PROJECTS_PREFIX + serverId)
+
+    private fun serverSavedPathsKey(serverId: String) =
+        stringPreferencesKey(SERVER_SAVED_PATHS_PREFIX + serverId)
 
     val sessionCategories: Flow<List<SessionCategory>> = dataStore.data.map { preferences ->
         preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
@@ -364,6 +368,45 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
                 .toMutableList()
             val updated = (listOf(trimmed) + current.filterNot { it == trimmed }).take(20)
             preferences[key] = updated.joinToString("\n")
+        }
+    }
+
+    /** 用户在 Open Project 里手动固定的常用路径（每服务器独立，保序，最近添加在前）。 */
+    fun savedPaths(serverId: String): Flow<List<String>> = dataStore.data.map { preferences ->
+        preferences[serverSavedPathsKey(serverId)]
+            ?.lineSequence()
+            ?.filter(String::isNotBlank)
+            ?.distinct()
+            ?.toList()
+            .orEmpty()
+    }
+
+    suspend fun addSavedPath(serverId: String, path: String) {
+        val trimmed = path.trim().trimEnd('/')
+        if (trimmed.isBlank()) return
+        dataStore.edit { preferences ->
+            val key = serverSavedPathsKey(serverId)
+            val current = (preferences[key] ?: "")
+                .lineSequence()
+                .filter(String::isNotBlank)
+                .distinct()
+                .toMutableList()
+            val updated = (listOf(trimmed) + current.filterNot { it == trimmed }).take(30)
+            preferences[key] = updated.joinToString("\n")
+        }
+    }
+
+    suspend fun removeSavedPath(serverId: String, path: String) {
+        val trimmed = path.trim().trimEnd('/')
+        if (trimmed.isBlank()) return
+        dataStore.edit { preferences ->
+            val key = serverSavedPathsKey(serverId)
+            val current = (preferences[key] ?: "")
+                .lineSequence()
+                .filter(String::isNotBlank)
+                .distinct()
+                .toList()
+            preferences[key] = current.filterNot { it == trimmed }.joinToString("\n")
         }
     }
 

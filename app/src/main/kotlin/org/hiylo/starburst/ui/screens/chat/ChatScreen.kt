@@ -314,6 +314,10 @@ fun ChatScreen(
         }
     }
     val listState = rememberLazyListState()
+    // 加载更早消息时用于滚动锚定的目标消息 id 与基准消息数：加载前记录当前第一条可见消息，
+    // 旧消息合并后按消息 id 找到对应 turn（turn 分组会随旧消息变化，turn key 不稳定），还原滚动位置。
+    var pendingAnchorMessageId by remember { mutableStateOf<String?>(null) }
+    var pendingAnchorBaselineCount by remember { mutableStateOf(0) }
     var showModelPicker by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showCustomCommandsDialog by remember { mutableStateOf(false) }
@@ -2230,6 +2234,27 @@ fun ChatScreen(
                 else -> {
                     val messageSpacing = if (LocalCompactMessages.current) 4.dp else 12.dp
                     val timeline = remember(uiState.messages) { buildChatTimeline(uiState.messages) }
+
+                    // 加载更早消息后，把滚动位置还原到加载前可见的那条消息，避免视口跳到最旧消息。
+                    // 用 isLoadingOlder + timeline 双键 + 「消息数增长」守卫，规避 flush 与 isLoadingOlder 的时序竞态。
+                    LaunchedEffect(uiState.isLoadingOlder, timeline) {
+                        val anchorId = pendingAnchorMessageId ?: return@LaunchedEffect
+                        if (uiState.isLoadingOlder) return@LaunchedEffect
+                        if (uiState.messages.size <= pendingAnchorBaselineCount) return@LaunchedEffect
+                        val index = timeline.indexOfFirst { entry ->
+                            entry is ChatTimelineEntry.Turn && entry.turn.messages.any { it.message.id == anchorId }
+                        }
+                        android.util.Log.d("ChatAnchor", "anchor msgId=$anchorId index=$index hasOlder=${uiState.hasOlderMessages} msgs=${uiState.messages.size}")
+                        if (index >= 0) {
+                            val itemIndex = index + (if (uiState.hasOlderMessages) 1 else 0)
+                            withFrameNanos { }
+                            android.util.Log.d("ChatAnchor", "scrollToItem itemIndex=$itemIndex total=${listState.layoutInfo.totalItemsCount} autoScroll=$autoScrollEnabled first=${listState.firstVisibleItemIndex}")
+                            listState.scrollToItem(itemIndex, 0)
+                            android.util.Log.d("ChatAnchor", "after scroll first=${listState.firstVisibleItemIndex} offset=${listState.firstVisibleItemScrollOffset}")
+                        }
+                        pendingAnchorMessageId = null
+                    }
+
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
@@ -2262,7 +2287,15 @@ fun ChatScreen(
                                             )
                                         }
                                     } else {
-                                        TextButton(onClick = { viewModel.loadOlderMessages() }) {
+                                        TextButton(onClick = {
+                                            val turnKey = listState.layoutInfo.visibleItemsInfo
+                                                .mapNotNull { it.key as? String }
+                                                .firstOrNull { key -> key != "load_older" && !key.startsWith("day_") }
+                                            pendingAnchorMessageId = turnKey?.removePrefix("t_")?.removePrefix("u_")
+                                            pendingAnchorBaselineCount = uiState.messages.size
+                                            android.util.Log.d("ChatAnchor", "click turnKey=$turnKey anchorId=$pendingAnchorMessageId baseline=$pendingAnchorBaselineCount visible=${listState.layoutInfo.visibleItemsInfo.map { it.key }}")
+                                            viewModel.loadOlderMessages()
+                                        }) {
                                             Text(stringResource(R.string.chat_load_earlier))
                                         }
                                     }

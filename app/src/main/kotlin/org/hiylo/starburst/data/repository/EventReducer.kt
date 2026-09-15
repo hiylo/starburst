@@ -223,22 +223,22 @@ class EventReducer @Inject constructor(
             )))
             is SseEvent.NextShellStarted -> handleNextShellStarted(event)
             is SseEvent.NextShellEnded -> handleNextShellEnded(event)
-            is SseEvent.NextTextStarted -> handleMessagePartUpdated(SseEvent.MessagePartUpdated(
+            is SseEvent.NextTextStarted -> handleMessagePartFinal(SseEvent.MessagePartUpdated(
                 Part.Text(event.textId, event.sessionId, event.messageId, time = Part.Text.Time(event.timestamp)),
             ))
             is SseEvent.NextTextDelta -> handleMessagePartDelta(SseEvent.MessagePartDelta(
                 event.sessionId, event.messageId, event.textId, "text", event.delta,
             ))
-            is SseEvent.NextTextEnded -> handleMessagePartUpdated(SseEvent.MessagePartUpdated(
+            is SseEvent.NextTextEnded -> handleMessagePartFinal(SseEvent.MessagePartUpdated(
                 Part.Text(event.textId, event.sessionId, event.messageId, event.text, time = Part.Text.Time(event.timestamp, event.timestamp)),
             ))
-            is SseEvent.NextReasoningStarted -> handleMessagePartUpdated(SseEvent.MessagePartUpdated(
+            is SseEvent.NextReasoningStarted -> handleMessagePartFinal(SseEvent.MessagePartUpdated(
                 Part.Reasoning(event.reasoningId, event.sessionId, event.messageId, time = Part.Reasoning.Time(event.timestamp)),
             ))
             is SseEvent.NextReasoningDelta -> handleMessagePartDelta(SseEvent.MessagePartDelta(
                 event.sessionId, event.messageId, event.reasoningId, "text", event.delta,
             ))
-            is SseEvent.NextReasoningEnded -> handleMessagePartUpdated(SseEvent.MessagePartUpdated(
+            is SseEvent.NextReasoningEnded -> handleMessagePartFinal(SseEvent.MessagePartUpdated(
                 Part.Reasoning(event.reasoningId, event.sessionId, event.messageId, event.text, time = Part.Reasoning.Time(event.timestamp, event.timestamp)),
             ))
             is SseEvent.NextToolInputStarted -> handleNextToolInputStarted(event)
@@ -742,6 +742,30 @@ class EventReducer @Inject constructor(
             current + (messageId to messageParts)
         }
     }
+
+    /**
+     * 全量替换 part（start/end 事件）：携带的全量文本不应再叠加残留 delta，
+     * 否则 50ms flush 前到达的 ended 事件会与未刷的尾部 delta 重复拼接。
+     * 调用前清空该 part 的残留缓冲。
+     */
+    private fun handleMessagePartFinal(event: SseEvent.MessagePartUpdated) {
+        val messageId = event.part.messageId
+        if (isMessageRemoved(messageId)) return
+        synchronized(deltaLock) {
+            pendingDeltas.keys.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
+            deltaAccumulator.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
+        }
+        _parts.update { current ->
+            val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
+            val existingIndex = messageParts.indexOfFirst { it.id == event.part.id }
+            if (existingIndex >= 0) {
+                messageParts[existingIndex] = event.part
+            } else {
+                messageParts.add(event.part)
+            }
+            current + (messageId to messageParts)
+        }
+    }
     
     private fun handleMessagePartDelta(event: SseEvent.MessagePartDelta) {
         if (isMessageRemoved(event.messageId)) return
@@ -889,6 +913,34 @@ class EventReducer @Inject constructor(
     fun removePermission(sessionId: String, permissionId: String) {
         synchronized(pendingLock) {
             removePending(PendingInteraction.Permission::class.java, sessionId, permissionId)
+            pendingRevision++
+        }
+    }
+
+    /**
+     * 清除某会话的全部 pending 交互（问题与授权）。当推送事件缺失请求 id（replied/rejected
+     * 不带 requestID）时作为兜底，避免 web 端已答复/授权的题在本端永久滞留。
+     */
+    fun clearPendingForSession(sessionId: String) {
+        synchronized(pendingLock) {
+            if (sessionId.isBlank()) return
+            _pendingInteractions.update { current ->
+                current.filterNot { it.sessionId == sessionId }
+            }
+            pendingRevision++
+        }
+    }
+
+    /**
+     * 清除某会话的待决问题（提问）但不影响待决授权。用户发送新消息覆盖旧提问、或中止会话时，
+     * 之前的提问已不再等待答复，应即时消失而不是要求手动 dismiss。
+     */
+    fun clearQuestionsForSession(sessionId: String) {
+        synchronized(pendingLock) {
+            if (sessionId.isBlank()) return
+            _pendingInteractions.update { current ->
+                current.filterNot { it is PendingInteraction.Question && it.sessionId == sessionId }
+            }
             pendingRevision++
         }
     }

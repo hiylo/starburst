@@ -1393,6 +1393,7 @@ private fun OpenProjectDialog(
     val isAmoled = isAmoledTheme()
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
+    val savedPaths by viewModel.savedPaths.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     var currentDir by remember { mutableStateOf<String?>(null) }
     var homeDir by remember { mutableStateOf<String?>(null) }
@@ -1403,6 +1404,9 @@ private fun OpenProjectDialog(
     var newFolderName by remember { mutableStateOf("") }
     var isCreatingFolder by remember { mutableStateOf(false) }
     var createFolderError by remember { mutableStateOf<String?>(null) }
+    var showAddSavedPathDialog by remember { mutableStateOf(false) }
+    var newPathInput by remember { mutableStateOf("") }
+    var addSavedPathError by remember { mutableStateOf<String?>(null) }
     val focusRequester = remember { FocusRequester() }
 
     val isSearching = searchQuery.isNotBlank()
@@ -1647,33 +1651,83 @@ private fun OpenProjectDialog(
                             // Directory listing
                             val showKnownProjects = currentDir == homeDir && projects.isNotEmpty()
 
-                            if (directories.isEmpty() && !showKnownProjects) {
-                                Box(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = stringResource(R.string.sessions_empty_directory),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(vertical = 4.dp)
+                            ) {
+                                // Common paths pinned by the user
+                                item(key = "saved-paths-header") {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 20.dp, end = 8.dp, top = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            text = stringResource(R.string.sessions_saved_paths),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.weight(1f),
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                newPathInput = ""
+                                                addSavedPathError = null
+                                                showAddSavedPathDialog = true
+                                            },
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Add,
+                                                contentDescription = stringResource(R.string.sessions_add_saved_path),
+                                                modifier = Modifier.size(18.dp),
+                                                tint = MaterialTheme.colorScheme.primary,
+                                            )
+                                        }
+                                    }
+                                }
+                                items(savedPaths, key = { it }) { path ->
+                                    SavedPathRow(
+                                        displayPath = tildeReplace(path) + "/",
+                                        onClick = {
+                                            // Navigate into the path so the projects below it are listed
+                                            searchQuery = ""
+                                            currentDir = path
+                                        },
+                                        onRemove = { viewModel.removeSavedPath(path) },
                                     )
                                 }
-                            } else {
-                                LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(vertical = 4.dp)
-                                ) {
-                                    items(directories, key = { it.name }) { node ->
-                                        val absPath = node.absolute ?: "${currentDir?.trimEnd('/')}/${node.name}"
-                                        DirectoryRow(
-                                            displayPath = tildeReplace(absPath) + "/",
-                                            onNavigate = {
-                                                // Navigate into this directory
-                                                currentDir = absPath
-                                            },
-                                            onClick = { onSelect(absPath) }
-                                        )
+                                item(key = "saved-paths-divider") {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                                    )
+                                }
+                                if (directories.isEmpty() && !showKnownProjects) {
+                                    item(key = "empty-directory") {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(vertical = 40.dp),
+                                            contentAlignment = Alignment.Center,
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.sessions_empty_directory),
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                            )
+                                        }
                                     }
+                                }
+                                items(directories, key = { it.name }) { node ->
+                                    val absPath = node.absolute ?: "${currentDir?.trimEnd('/')}/${node.name}"
+                                    DirectoryRow(
+                                        displayPath = tildeReplace(absPath) + "/",
+                                        onNavigate = {
+                                            // Navigate into this directory
+                                            currentDir = absPath
+                                        },
+                                        onClick = { onSelect(absPath) }
+                                    )
                                 }
                             }
                         }
@@ -1760,7 +1814,9 @@ private fun OpenProjectDialog(
                     }
                     AppPrimaryButton(
                         onClick = {
-                            val parent = currentDir ?: homeDir ?: "/"
+                            val parent = (searchQuery.trim().takeIf { it.isNotBlank() }
+                                ?: (currentDir ?: homeDir ?: "/"))
+                                .trimEnd('/').ifEmpty { "/" }
                             val name = newFolderName.trim()
                             if (name.isBlank()) {
                                 createFolderError = context.getString(R.string.sessions_create_folder_invalid_name)
@@ -1797,6 +1853,67 @@ private fun OpenProjectDialog(
                         } else {
                             Text(stringResource(R.string.sessions_create_folder_create))
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showAddSavedPathDialog) {
+        AppDialog(
+            onDismissRequest = { showAddSavedPathDialog = false },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(
+                modifier = Modifier.padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.sessions_add_saved_path_title),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = newPathInput,
+                        onValueChange = {
+                            newPathInput = it
+                            addSavedPathError = null
+                        },
+                        singleLine = true,
+                        label = { Text(stringResource(R.string.sessions_add_saved_path_hint)) },
+                        placeholder = { Text(stringResource(R.string.sessions_add_saved_path_placeholder)) },
+                        isError = addSavedPathError != null,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (addSavedPathError != null) {
+                        Text(
+                            text = addSavedPathError ?: "",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                ) {
+                    AppSecondaryButton(onClick = { showAddSavedPathDialog = false }) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                    AppPrimaryButton(
+                        onClick = {
+                            val trimmed = newPathInput.trim().trimEnd('/')
+                            if (trimmed.isBlank()) {
+                                addSavedPathError = context.getString(R.string.sessions_add_saved_path_invalid)
+                                return@AppPrimaryButton
+                            }
+                            viewModel.addSavedPath(trimmed)
+                            showAddSavedPathDialog = false
+                            newPathInput = ""
+                            addSavedPathError = null
+                        },
+                    ) {
+                        Text(stringResource(R.string.sessions_add_saved_path))
                     }
                 }
             }
@@ -1870,6 +1987,50 @@ private fun DirectoryRow(
                     )
                 }
             }
+    }
+}
+
+/**
+ * A user-pinned common path in the Open Project dialog.
+ * Tapping the row navigates into the path so its subdirectories are listed below.
+ */
+@Composable
+private fun SavedPathRow(
+    displayPath: String,
+    onClick: () -> Unit,
+    onRemove: () -> Unit,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .heightIn(min = 48.dp)
+            .padding(horizontal = 20.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            Icons.Default.Star,
+            contentDescription = null,
+            modifier = Modifier.size(18.dp),
+            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f)
+        )
+        Text(
+            text = displayPath.trimEnd('/'),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
+        IconButton(onClick = onRemove) {
+            Icon(
+                Icons.Default.Close,
+                contentDescription = stringResource(R.string.sessions_remove_saved_path),
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
     }
 }
 

@@ -174,6 +174,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
+        modifier = Modifier.imePadding(),
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(

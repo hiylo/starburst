@@ -19,7 +19,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -75,7 +74,6 @@ fun ServerDialog(
     var hostError by remember { mutableStateOf<String?>(null) }
     val hostInvalidText = stringResource(R.string.server_invalid_host)
 
-    val dialogMaxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
     val scrollState = rememberScrollState()
 
     val isAmoled = isAmoledTheme()
@@ -94,7 +92,7 @@ fun ServerDialog(
 
     AppDialog(
         onDismissRequest = onDismiss,
-        modifier = Modifier.fillMaxWidth().heightIn(max = dialogMaxHeight),
+        modifier = Modifier.fillMaxWidth().fillMaxHeight(0.9f),
     ) {
         Column(
             modifier = Modifier

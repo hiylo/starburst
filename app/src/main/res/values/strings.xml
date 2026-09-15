@@ -96,6 +96,13 @@
     <string name="sessions_search_folders">Search folders</string>
     <string name="sessions_no_folders">No folders found</string>
     <string name="sessions_empty_directory">Empty directory</string>
+    <string name="sessions_saved_paths">Common paths</string>
+    <string name="sessions_add_saved_path">Add path</string>
+    <string name="sessions_add_saved_path_title">Add common path</string>
+    <string name="sessions_add_saved_path_hint">Path</string>
+    <string name="sessions_add_saved_path_placeholder">e.g. /home/user/code</string>
+    <string name="sessions_add_saved_path_invalid">Enter a valid path</string>
+    <string name="sessions_remove_saved_path">Remove path</string>
     <string name="sessions_working">Working</string>
     <string name="sessions_retrying">Retrying</string>
     <string name="sessions_selected_count">%1$d selected</string>
