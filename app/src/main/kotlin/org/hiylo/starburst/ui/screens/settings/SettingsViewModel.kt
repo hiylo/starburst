@@ -337,6 +337,30 @@ class SettingsViewModel @Inject constructor(
         initialValue = false
     )
 
+    val groupNotifications = settingsRepository.groupNotifications.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val dndEnabled = settingsRepository.dndEnabled.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = false
+    )
+
+    val dndStart = settingsRepository.dndStart.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "22:00"
+    )
+
+    val dndEnd = settingsRepository.dndEnd.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = "07:00"
+    )
+
     val terminalFontSize = settingsRepository.terminalFontSize.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
@@ -497,6 +521,25 @@ class SettingsViewModel @Inject constructor(
     fun setSilentNotifications(enabled: Boolean) {
         viewModelScope.launch {
             settingsRepository.setSilentNotifications(enabled)
+        }
+    }
+
+    fun setGroupNotifications(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setGroupNotifications(enabled)
+        }
+    }
+
+    fun setDndEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setDndEnabled(enabled)
+        }
+    }
+
+    fun setDndTime(start: String, end: String) {
+        viewModelScope.launch {
+            settingsRepository.setDndStart(start)
+            settingsRepository.setDndEnd(end)
         }
     }
 

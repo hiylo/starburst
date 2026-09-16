@@ -41,6 +41,8 @@ import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Language
@@ -58,6 +60,8 @@ import androidx.compose.material.icons.filled.UnfoldMore
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.ViewCompact
 import androidx.compose.material.icons.filled.WrapText
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -107,6 +111,10 @@ fun SettingsScreen(
     val chatFontSize by viewModel.chatFontSize.collectAsState()
     val chatLineHeight by viewModel.chatLineHeight.collectAsState()
     val notificationsEnabled by viewModel.notificationsEnabled.collectAsState()
+    val groupNotifications by viewModel.groupNotifications.collectAsState()
+    val dndEnabled by viewModel.dndEnabled.collectAsState()
+    val dndStart by viewModel.dndStart.collectAsState()
+    val dndEnd by viewModel.dndEnd.collectAsState()
 
     val initialMessageCount by viewModel.initialMessageCount.collectAsState()
     val messageHistoryResponseLimitMb by viewModel.messageHistoryResponseLimitMb.collectAsState()
@@ -145,6 +153,8 @@ fun SettingsScreen(
 
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showDndStartDialog by remember { mutableStateOf(false) }
+    var showDndEndDialog by remember { mutableStateOf(false) }
     var showSchemeDialog by remember { mutableStateOf(false) }
     var showAccentDialog by remember { mutableStateOf(false) }
     var showFontSizeDialog by remember { mutableStateOf(false) }
@@ -393,6 +403,80 @@ fun SettingsScreen(
                     viewModel.setSilentNotifications(!silentNotifications)
                 }
             )
+
+            // 按会话分组折叠通知
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_group_notifications)) },
+                supportingContent = { Text(stringResource(R.string.settings_group_notifications_desc)) },
+                leadingContent = {
+                    Icon(Icons.Default.FolderOpen, contentDescription = null)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = groupNotifications,
+                        onCheckedChange = { viewModel.setGroupNotifications(it) },
+                        enabled = notificationsEnabled,
+                        colors = switchColors
+                    )
+                },
+                modifier = Modifier.clickable(enabled = notificationsEnabled) {
+                    viewModel.setGroupNotifications(!groupNotifications)
+                }
+            )
+
+            // 免打扰时段
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_dnd_schedule)) },
+                supportingContent = {
+                    Text(
+                        text = if (dndEnabled) {
+                            stringResource(R.string.settings_dnd_schedule_range, dndStart, dndEnd)
+                        } else {
+                            stringResource(R.string.settings_dnd_schedule_off)
+                        },
+                    )
+                },
+                leadingContent = {
+                    Icon(Icons.Default.Bedtime, contentDescription = null)
+                },
+                trailingContent = {
+                    Switch(
+                        checked = dndEnabled,
+                        onCheckedChange = { viewModel.setDndEnabled(it) },
+                        enabled = notificationsEnabled,
+                        colors = switchColors
+                    )
+                },
+                modifier = Modifier.clickable(enabled = notificationsEnabled) {
+                    viewModel.setDndEnabled(!dndEnabled)
+                }
+            )
+
+            // 免打扰时段起止时间编辑
+            if (dndEnabled && notificationsEnabled) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.settings_dnd_schedule_start),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.weight(1f),
+                    )
+                    TextButton(onClick = { showDndStartDialog = true }) {
+                        Text(dndStart)
+                    }
+                    Text(
+                        text = stringResource(R.string.settings_dnd_schedule_to),
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    TextButton(onClick = { showDndEndDialog = true }) {
+                        Text(dndEnd)
+                    }
+                }
+            }
             }
 
             SettingsCardSpacer()
@@ -816,6 +900,28 @@ fun SettingsScreen(
                 onDismiss = { showThemeDialog = false }
             )
         }
+
+        DndTimeDialog(
+            title = stringResource(R.string.settings_dnd_schedule_start),
+            initial = dndStart,
+            show = showDndStartDialog,
+            onConfirm = { time ->
+                viewModel.setDndTime(time, dndEnd)
+                showDndStartDialog = false
+            },
+            onDismiss = { showDndStartDialog = false }
+        )
+
+        DndTimeDialog(
+            title = stringResource(R.string.settings_dnd_schedule_end),
+            initial = dndEnd,
+            show = showDndEndDialog,
+            onConfirm = { time ->
+                viewModel.setDndTime(dndStart, time)
+                showDndEndDialog = false
+            },
+            onDismiss = { showDndEndDialog = false }
+        )
 
         if (showSchemeDialog) {
             ThemeSchemeDialog(
@@ -1897,4 +2003,62 @@ private fun getImageMaxSideDisplayName(px: Int): String {
         return stringResource(R.string.settings_compress_images_max_side_keep_original)
     }
     return stringResource(R.string.settings_compress_images_max_side_value, px)
+}
+
+/**
+ * Time-picker dialog for the do-not-disturb window start/end.
+ * "HH:mm" strings are parsed to 24h hour/minute; invalid input falls back to midnight.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun DndTimeDialog(
+    title: String,
+    initial: String,
+    show: Boolean,
+    onConfirm: (String) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    if (!show) return
+    val (initialHour, initialMinute) = parseHhMm(initial)
+    val timeState = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true,
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            TimePicker(
+                state = timeState,
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val formatted = String.format(
+                        Locale.ROOT,
+                        "%02d:%02d",
+                        timeState.hour,
+                        timeState.minute,
+                    )
+                    onConfirm(formatted)
+                },
+            ) {
+                Text(stringResource(R.string.settings_dnd_schedule_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.settings_dnd_schedule_cancel))
+            }
+        },
+    )
+}
+
+private fun parseHhMm(value: String): Pair<Int, Int> {
+    val parts = value.split(":")
+    val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 0
+    val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+    return hour to minute
 }

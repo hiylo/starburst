@@ -51,6 +51,9 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_ACCENT_COLOR = "indigo"
         const val DEFAULT_THEME_SCHEME = "default"
 
+        private const val DEFAULT_DND_START = "22:00"
+        private const val DEFAULT_DND_END = "07:00"
+
         private val LANGUAGE_KEY = stringPreferencesKey("app_language")
         private val THEME_KEY = stringPreferencesKey("app_theme")
         private val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
@@ -79,6 +82,10 @@ class SettingsRepository @Inject constructor(
         private val BACKGROUND_WAKE_LOCK_KEY = booleanPreferencesKey("background_wake_lock")
         private val KEEP_SCREEN_ON_KEY = booleanPreferencesKey("keep_screen_on")
         private val SILENT_NOTIFICATIONS_KEY = booleanPreferencesKey("silent_notifications")
+        private val GROUP_NOTIFICATIONS_KEY = booleanPreferencesKey("group_notifications")
+        private val DND_ENABLED_KEY = booleanPreferencesKey("dnd_enabled")
+        private val DND_START_KEY = stringPreferencesKey("dnd_start") // "HH:mm"
+        private val DND_END_KEY = stringPreferencesKey("dnd_end") // "HH:mm"
         private val COMPRESS_IMAGE_ATTACHMENTS_KEY = booleanPreferencesKey("compress_image_attachments")
         private val IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY = intPreferencesKey("image_attachment_max_long_side")
         private val IMAGE_ATTACHMENT_WEBP_QUALITY_KEY = intPreferencesKey("image_attachment_webp_quality")
@@ -821,6 +828,54 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /**
+     * Whether notifications are grouped/collapsed by project by default. Default: false.
+     */
+    val groupNotifications: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[GROUP_NOTIFICATIONS_KEY] ?: false
+    }
+
+    suspend fun setGroupNotifications(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[GROUP_NOTIFICATIONS_KEY] = enabled
+        }
+    }
+
+    /**
+     * Whether do-not-disturb time window is enabled. Default: false.
+     */
+    val dndEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+        preferences[DND_ENABLED_KEY] ?: false
+    }
+
+    suspend fun setDndEnabled(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[DND_ENABLED_KEY] = enabled
+        }
+    }
+
+    /** Do-not-disturb start time "HH:mm". Default: "22:00". */
+    val dndStart: Flow<String> = dataStore.data.map { preferences ->
+        preferences[DND_START_KEY] ?: DEFAULT_DND_START
+    }
+
+    suspend fun setDndStart(value: String) {
+        dataStore.edit { preferences ->
+            preferences[DND_START_KEY] = value
+        }
+    }
+
+    /** Do-not-disturb end time "HH:mm". Default: "07:00". */
+    val dndEnd: Flow<String> = dataStore.data.map { preferences ->
+        preferences[DND_END_KEY] ?: DEFAULT_DND_END
+    }
+
+    suspend fun setDndEnd(value: String) {
+        dataStore.edit { preferences ->
+            preferences[DND_END_KEY] = value
+        }
+    }
+
+    /**
      * Whether image attachments are optimized (resize + WebP) before sending. Default: true.
      */
     val compressImageAttachments: Flow<Boolean> = dataStore.data.map { preferences ->
@@ -946,6 +1001,10 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
             backgroundWakeLock = preferences[BACKGROUND_WAKE_LOCK_KEY] ?: true,
             keepScreenOn = preferences[KEEP_SCREEN_ON_KEY] ?: false,
             silentNotifications = preferences[SILENT_NOTIFICATIONS_KEY] ?: false,
+            groupNotifications = preferences[GROUP_NOTIFICATIONS_KEY] ?: false,
+            dndEnabled = preferences[DND_ENABLED_KEY] ?: false,
+            dndStart = preferences[DND_START_KEY] ?: DEFAULT_DND_START,
+            dndEnd = preferences[DND_END_KEY] ?: DEFAULT_DND_END,
             compressImageAttachments = preferences[COMPRESS_IMAGE_ATTACHMENTS_KEY] ?: true,
             imageAttachmentMaxLongSide = preferences[IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY] ?: 1440,
             imageAttachmentWebpQuality = preferences[IMAGE_ATTACHMENT_WEBP_QUALITY_KEY] ?: 60,
@@ -1071,6 +1130,10 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         preferences[BACKGROUND_WAKE_LOCK_KEY] = settings.backgroundWakeLock
         preferences[KEEP_SCREEN_ON_KEY] = settings.keepScreenOn
         preferences[SILENT_NOTIFICATIONS_KEY] = settings.silentNotifications
+        preferences[GROUP_NOTIFICATIONS_KEY] = settings.groupNotifications
+        preferences[DND_ENABLED_KEY] = settings.dndEnabled
+        preferences[DND_START_KEY] = settings.dndStart
+        preferences[DND_END_KEY] = settings.dndEnd
         preferences[COMPRESS_IMAGE_ATTACHMENTS_KEY] = settings.compressImageAttachments
         preferences[IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY] = settings.imageAttachmentMaxLongSide.coerceIn(0, 4096)
         preferences[IMAGE_ATTACHMENT_WEBP_QUALITY_KEY] = settings.imageAttachmentWebpQuality.coerceIn(1, 100)

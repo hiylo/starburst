@@ -1175,3 +1175,21 @@
     <string name="task_delete_archive_failed">删除归档失败</string>
     <string name="share_load_failed">加载分享会话失败</string>
 </resources>
+    <string name="settings_group_notifications">按会话分组折叠通知</string>
+    <string name="settings_group_notifications_desc">同一会话的多条通知折叠为一条</string>
+    <string name="settings_dnd_schedule">免打扰时段</string>
+    <string name="settings_dnd_schedule_desc">在设定时段内静默所有通知</string>
+    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
+    <string name="settings_dnd_schedule_start">开始时间</string>
+    <string name="settings_dnd_schedule_end">结束时间</string>
+    <string name="settings_dnd_schedule_to">至</string>
+    <string name="settings_dnd_schedule_confirm">确定</string>
+    <string name="settings_dnd_schedule_cancel">取消</string>
+    <string name="settings_dnd_schedule_off">关闭</string>
+    <string name="task_draft_name_quoted">「%1$s」</string>
+    <string name="task_draft_step_count">共 %1$d 步</string>
+    <string name="task_draft_step_default">步骤 %1$d</string>
+    <string name="task_draft_schedule_prefix">调度：</string>
+    <string name="task_draft_schedule_delay">%1$d 分钟后</string>
+    <string name="task_draft_schedule_cron">周期 %1$s</string>
+    <string name="task_draft_schedule_immediately">立即</string>

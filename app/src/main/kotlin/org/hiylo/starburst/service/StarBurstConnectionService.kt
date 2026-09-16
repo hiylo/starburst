@@ -224,6 +224,16 @@ class StarBurstConnectionService : Service() {
     @Volatile
     private var reconnectMode: String = "normal"
 
+    /** Cached do-not-disturb snapshot, refreshed from DataStore on start. */
+    @Volatile
+    private var dndEnabledSnapshot: Boolean = false
+
+    @Volatile
+    private var dndStartSnapshot: String = "22:00"
+
+    @Volatile
+    private var dndEndSnapshot: String = "07:00"
+
     private var autoConnectJob: Job? = null
     @Volatile
     private var recoveryJob: Job? = null
@@ -332,6 +342,15 @@ class StarBurstConnectionService : Service() {
             settingsRepository.reconnectMode.collect { mode ->
                 reconnectMode = mode
             }
+        }
+        serviceScope.launch {
+            settingsRepository.dndEnabled.collect { dndEnabledSnapshot = it }
+        }
+        serviceScope.launch {
+            settingsRepository.dndStart.collect { dndStartSnapshot = it }
+        }
+        serviceScope.launch {
+            settingsRepository.dndEnd.collect { dndEndSnapshot = it }
         }
         serviceScope.launch {
             settingsRepository.backgroundWakeLock.collect { enabled ->
@@ -1920,8 +1939,48 @@ class StarBurstConnectionService : Service() {
         notification: Notification,
     ) {
         // 完整推送：即使正在前台查看该会话也弹通知（含声音震动），不再经 postUnlessActive 抑制。
-        notificationManager.notify(notificationId, notification)
+        val finalNotification = if (isNowInDndWindow()) {
+            // 免扰时段内降级为静默（无声无震动），但仍投递通知。
+            rebuildSilentNotification(notification)
+        } else {
+            notification
+        }
+        notificationManager.notify(notificationId, finalNotification)
         showServerGroupSummary(server)
+    }
+
+    /** 当前时间是否落在免扰时段内（跨午夜窗口正确环绕）。 */
+    private fun isNowInDndWindow(): Boolean {
+        if (!dndEnabledSnapshot) return false
+        val now = java.util.Calendar.getInstance()
+        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
+        val startMinutes = parseHhMmMinutes(dndStartSnapshot)
+        val endMinutes = parseHhMmMinutes(dndEndSnapshot)
+        if (startMinutes == endMinutes) return true
+        return if (startMinutes < endMinutes) {
+            currentMinutes in startMinutes until endMinutes
+        } else {
+            // 跨午夜：start <= now 或 now < end
+            currentMinutes >= startMinutes || currentMinutes < endMinutes
+        }
+    }
+
+    private fun parseHhMmMinutes(value: String): Int {
+        val parts = value.split(":")
+        val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 0
+        val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+        return hour * 60 + minute
+    }
+
+    /** 用静默渠道重建通知（保留内容/分组/意图，去掉声音与震动）。 */
+    private fun rebuildSilentNotification(original: Notification): Notification {
+        val recovered = Notification.Builder.recoverBuilder(this, original)
+        recovered.setChannelId(NOTIFICATION_CHANNEL_TASKS_SILENT_ID)
+            .setSound(null, null)
+            .setVibrate(null)
+            .setDefaults(0)
+            .setPriority(Notification.PRIORITY_LOW)
+        return recovered.build()
     }
 
     /**

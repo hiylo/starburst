@@ -1211,3 +1211,21 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_delete_archive_failed">Failed to delete archive</string>
     <string name="share_load_failed">Failed to load shared session</string>
 </resources>
+    <string name="settings_group_notifications">Group notifications by session</string>
+    <string name="settings_group_notifications_desc">Fold multiple notifications from the same session into one</string>
+    <string name="settings_dnd_schedule">Do Not Disturb schedule</string>
+    <string name="settings_dnd_schedule_desc">Mute all notifications during the configured window</string>
+    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
+    <string name="settings_dnd_schedule_start">Start time</string>
+    <string name="settings_dnd_schedule_end">End time</string>
+    <string name="settings_dnd_schedule_to">to</string>
+    <string name="settings_dnd_schedule_confirm">OK</string>
+    <string name="settings_dnd_schedule_cancel">Cancel</string>
+    <string name="settings_dnd_schedule_off">Off</string>
+    <string name="task_draft_name_quoted">“%1$s”</string>
+    <string name="task_draft_step_count">%1$d steps total</string>
+    <string name="task_draft_step_default">Step %1$d</string>
+    <string name="task_draft_schedule_prefix">Schedule: </string>
+    <string name="task_draft_schedule_delay">in %1$d minute(s)</string>
+    <string name="task_draft_schedule_cron">every %1$s</string>
+    <string name="task_draft_schedule_immediately">immediately</string>
