@@ -275,6 +275,9 @@
     <string name="chat_files_changed">%1$d file changed</string>
     <string name="chat_files_changed_plural">%1$d files changed</string>
     <string name="chat_free_label">Free</string>
+    <string name="model_cap_toolcall">Function calling</string>
+    <string name="model_cap_reasoning">Reasoning</string>
+    <string name="model_cap_attachment">Attachments</string>
     <string name="chat_select_model">Select model</string>
     <string name="chat_question_label">Question</string>
     <string name="chat_permission_label">Permission: %1$s</string>
@@ -536,6 +539,17 @@
     <string name="settings_terminal_panel_hint_desc">Show panel-opening instructions once each time the app starts</string>
     <string name="settings_silent_notifications">Silent notifications</string>
     <string name="settings_silent_notifications_desc">Suppress sound and vibration for task notifications</string>
+    <string name="settings_group_notifications">Group notifications by session</string>
+    <string name="settings_group_notifications_desc">Fold multiple notifications from the same session into one</string>
+    <string name="settings_dnd_schedule">Do Not Disturb schedule</string>
+    <string name="settings_dnd_schedule_desc">Mute all notifications during the configured window</string>
+    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
+    <string name="settings_dnd_schedule_start">Start time</string>
+    <string name="settings_dnd_schedule_end">End time</string>
+    <string name="settings_dnd_schedule_to">to</string>
+    <string name="settings_dnd_schedule_confirm">OK</string>
+    <string name="settings_dnd_schedule_cancel">Cancel</string>
+    <string name="settings_dnd_schedule_off">Off</string>
     <string name="dialog_select_reconnect_mode">Select reconnect mode</string>
 
     <!-- Server Settings -->
@@ -887,6 +901,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="server_mgmt_system_info">System information</string>
     <string name="server_mgmt_config">Server config</string>
     <string name="server_mgmt_version">Version</string>
+    <string name="server_mgmt_server_version">Server version %s</string>
+    <string name="server_mgmt_upgrade">Upgrade</string>
     <string name="server_mgmt_active_sessions">Active sessions</string>
     <string name="server_mgmt_sessions_value">%1$d active</string>
     <string name="server_mgmt_sessions_busy_value">%1$d active · %2$d busy</string>
@@ -1210,18 +1226,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_archive_failed">Failed to archive</string>
     <string name="task_delete_archive_failed">Failed to delete archive</string>
     <string name="share_load_failed">Failed to load shared session</string>
-</resources>
-    <string name="settings_group_notifications">Group notifications by session</string>
-    <string name="settings_group_notifications_desc">Fold multiple notifications from the same session into one</string>
-    <string name="settings_dnd_schedule">Do Not Disturb schedule</string>
-    <string name="settings_dnd_schedule_desc">Mute all notifications during the configured window</string>
-    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
-    <string name="settings_dnd_schedule_start">Start time</string>
-    <string name="settings_dnd_schedule_end">End time</string>
-    <string name="settings_dnd_schedule_to">to</string>
-    <string name="settings_dnd_schedule_confirm">OK</string>
-    <string name="settings_dnd_schedule_cancel">Cancel</string>
-    <string name="settings_dnd_schedule_off">Off</string>
     <string name="task_draft_name_quoted">“%1$s”</string>
     <string name="task_draft_step_count">%1$d steps total</string>
     <string name="task_draft_step_default">Step %1$d</string>
@@ -1229,3 +1233,4 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_draft_schedule_delay">in %1$d minute(s)</string>
     <string name="task_draft_schedule_cron">every %1$s</string>
     <string name="task_draft_schedule_immediately">immediately</string>
+</resources>

@@ -190,6 +190,9 @@
     <string name="chat_files_changed">%1$d 个文件已更改</string>
     <string name="chat_files_changed_plural">%1$d 个文件已更改</string>
     <string name="chat_free_label">免费</string>
+    <string name="model_cap_toolcall">函数调用</string>
+    <string name="model_cap_reasoning">推理</string>
+    <string name="model_cap_attachment">附件</string>
     <string name="chat_question_label">问题</string>
     <string name="chat_permission_label">权限：%1$s</string>
     <string name="chat_question_inline">问题：%1$s</string>
@@ -352,6 +355,17 @@
     <string name="settings_keep_screen_on_desc">聊天时防止屏幕超时</string>
     <string name="settings_silent_notifications">静默通知</string>
     <string name="settings_silent_notifications_desc">任务通知不响铃、不震动</string>
+    <string name="settings_group_notifications">按会话分组折叠通知</string>
+    <string name="settings_group_notifications_desc">同一会话的多条通知折叠为一条</string>
+    <string name="settings_dnd_schedule">免打扰时段</string>
+    <string name="settings_dnd_schedule_desc">在设定时段内静默所有通知</string>
+    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
+    <string name="settings_dnd_schedule_start">开始时间</string>
+    <string name="settings_dnd_schedule_end">结束时间</string>
+    <string name="settings_dnd_schedule_to">至</string>
+    <string name="settings_dnd_schedule_confirm">确定</string>
+    <string name="settings_dnd_schedule_cancel">取消</string>
+    <string name="settings_dnd_schedule_off">关闭</string>
     <string name="dialog_select_reconnect_mode">选择重连模式</string>
     <string name="notification_channel_connection_desc">与 OpenCode 服务器保持连接</string>
     <string name="notification_channel_tasks_desc">OpenCode 任务完成时通知</string>
@@ -851,6 +865,8 @@
     <string name="server_mgmt_system_info">系统信息</string>
     <string name="server_mgmt_config">服务配置</string>
     <string name="server_mgmt_version">版本</string>
+    <string name="server_mgmt_server_version">服务端版本 %s</string>
+    <string name="server_mgmt_upgrade">升级</string>
     <string name="server_mgmt_active_sessions">活跃会话</string>
     <string name="server_mgmt_sessions_value">%1$d 个活跃</string>
     <string name="server_mgmt_sessions_busy_value">%1$d 个活跃 · %2$d 个运行中</string>
@@ -1174,18 +1190,6 @@
     <string name="task_archive_failed">归档失败</string>
     <string name="task_delete_archive_failed">删除归档失败</string>
     <string name="share_load_failed">加载分享会话失败</string>
-</resources>
-    <string name="settings_group_notifications">按会话分组折叠通知</string>
-    <string name="settings_group_notifications_desc">同一会话的多条通知折叠为一条</string>
-    <string name="settings_dnd_schedule">免打扰时段</string>
-    <string name="settings_dnd_schedule_desc">在设定时段内静默所有通知</string>
-    <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
-    <string name="settings_dnd_schedule_start">开始时间</string>
-    <string name="settings_dnd_schedule_end">结束时间</string>
-    <string name="settings_dnd_schedule_to">至</string>
-    <string name="settings_dnd_schedule_confirm">确定</string>
-    <string name="settings_dnd_schedule_cancel">取消</string>
-    <string name="settings_dnd_schedule_off">关闭</string>
     <string name="task_draft_name_quoted">「%1$s」</string>
     <string name="task_draft_step_count">共 %1$d 步</string>
     <string name="task_draft_step_default">步骤 %1$d</string>
@@ -1193,3 +1197,4 @@
     <string name="task_draft_schedule_delay">%1$d 分钟后</string>
     <string name="task_draft_schedule_cron">周期 %1$s</string>
     <string name="task_draft_schedule_immediately">立即</string>
+</resources>
