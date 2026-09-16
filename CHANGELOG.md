@@ -9,7 +9,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.0.0] - 2026-09-14
+## [2.0.0] - 2026-09-16
 
 ### Added
 - **AI workbench** — a dashboard of all agent activity on the connected server: a live event stream
@@ -33,6 +33,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **Event display** — modified-file events show the full file path (directory + filename) with
   middle-ellipsis truncation instead of a possibly-ambiguous session title.
+- **Status colors** — busy/processing is now shown in blue while new messages stay green, so a busy
+  session with unread messages no longer shows two green dots.
 - **Notifications** — event notifications use high-priority heads-up banners (sound + vibration)
   instead of full-screen intents, which Android 14 denies by default.
 
@@ -43,6 +45,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   release builds; keep rules now preserve them.
 - Release builds could crash on startup due to stale incremental build artifacts (Hilt generated
   classes); full clean builds are reliable.
+- Loading earlier messages in chat could jump the viewport to the oldest message; the list now uses
+  reverse layout so the reading position is preserved.
+- Sending a message or stopping only cleared pending questions locally; they are now rejected on the
+  server so they stay gone after re-entering the session.
+- In the workbench, tapping a question option sent it as a normal chat message instead of answering
+  the question; options are now submitted as question answers.
+- The keyboard could cover bottom fields and the confirm/cancel buttons in dialogs; dialogs now lift
+  above the IME and text fields expose Next/Done keyboard actions for faster navigation.
 
 ## [1.4.0] - 2026-09-14
 
