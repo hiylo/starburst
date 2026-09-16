@@ -478,6 +478,23 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        if (uris.isEmpty()) {
+            // Pure-text share (browser link, note, etc.): materialize to a cache file
+            // so the attachment pipeline can consume it.
+            val extraText = intent.getStringExtra(Intent.EXTRA_TEXT)
+            val clipText = intent.clipData?.let { clip ->
+                if (clip.itemCount > 0) {
+                    clip.getItemAt(0).text?.takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
+            }
+            val sharedText = extraText?.takeIf { it.isNotBlank() } ?: clipText?.toString()
+            if (!sharedText.isNullOrBlank()) {
+                materializeSharedText(sharedText)?.let { uris.add(it) }
+            }
+        }
+
         if (uris.isNotEmpty()) {
             // Take persistable read permission so URIs survive configuration changes
             for (uri in uris) {
@@ -493,6 +510,23 @@ class MainActivity : ComponentActivity() {
             }
             Log.i(TAG, "Received ${uris.size} shared attachment(s)")
             _sharedAttachmentsFlow.tryEmit(uris)
+        }
+    }
+
+    /** Writes shared text into a cache file and returns its FileProvider URI. */
+    private fun materializeSharedText(text: String): Uri? {
+        return try {
+            val dir = java.io.File(cacheDir, "shared_text").apply { mkdirs() }
+            val file = java.io.File(dir, "shared_${System.currentTimeMillis()}.txt")
+            file.writeText(text, Charsets.UTF_8)
+            androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                file,
+            )
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to materialize shared text", e)
+            null
         }
     }
 

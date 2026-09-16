@@ -209,7 +209,6 @@ fun NavGraph(
             ) { values -> values.toMap() }.collect { value = it }
         }
     }
-    val currentConnectedServerIds by rememberUpdatedState(connectedServerIds)
 
     // Listen for shared attachments
     LaunchedEffect(Unit) {
@@ -222,21 +221,9 @@ fun NavGraph(
             pendingShareSessionId = null
             reopenSharePickerAfterConnect = false
 
-            // If we're already in a ChatScreen, target the current session directly
-            val currentRoute = navController.currentDestination?.route
-            if (currentRoute?.startsWith("chat") == true) {
-                val currentSessionId = navController.currentBackStackEntry
-                    ?.arguments?.getString("sessionId")
-                val currentServerId = navController.currentBackStackEntry
-                    ?.arguments?.getString("serverId")
-                if (currentSessionId != null && currentServerId in currentConnectedServerIds) {
-                    Log.i(TAG, "Already in ChatScreen for session $currentSessionId, targeting it directly")
-                    pendingShareSessionId = currentSessionId
-                    return@collect
-                }
-            }
-
-            // Otherwise, show the session picker. Its server/session data stays reactive.
+            // Always show the session picker so the user can choose the target,
+            // even when a ChatScreen is already open — the shared content should
+            // never silently land in the current session.
             showSharePicker = true
         }
     }
