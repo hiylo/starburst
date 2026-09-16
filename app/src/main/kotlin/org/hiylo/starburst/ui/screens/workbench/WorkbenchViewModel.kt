@@ -47,6 +47,7 @@ import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.QuestionInfo
 import org.hiylo.starburst.data.api.QuestionRequest
 import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.backend.BackendPushListener
 import org.hiylo.starburst.data.backend.PushSessionEvent
 import org.hiylo.starburst.data.repository.ServerRepository
@@ -132,6 +133,8 @@ data class DecisionPanelState(
     val sessionId: String,
     val aiSummary: String = "",
     val questions: List<QuestionInfo> = emptyList(),
+    /** 待决提问的 requestId，用于把选项作为问题答案提交（而非当作普通消息发送）。 */
+    val questionRequestId: String? = null,
     val recentMessages: List<PanelMessage> = emptyList(),
     val sessionTitle: String = "",
     val sessionDirectory: String = "",
@@ -663,6 +666,7 @@ class WorkbenchViewModel @Inject constructor(
             sessionId = sessionId,
             aiSummary = buildAiSummary(messages),
             questions = pending?.questions.orEmpty(),
+            questionRequestId = pending?.id,
             recentMessages = buildRecentMessages(messages),
             sessionTitle = session?.title.orEmpty(),
             sessionDirectory = session?.directory.orEmpty(),
@@ -742,6 +746,39 @@ class WorkbenchViewModel @Inject constructor(
                 onResult(false)
             } finally {
                 _sendingSessionId.value = null
+            }
+        }
+    }
+
+    /**
+     * 把决策面板里的问题选项作为问题答案提交（POST /question/{id}/reply），而不是当作普通消息发送。
+     * 成功后重拉面板让该提问消失。
+     */
+    fun replyToQuestion(
+        requestSessionId: String,
+        requestId: String,
+        answers: List<List<String>>,
+        onResult: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            try {
+                val activeConn = conn ?: return@launch
+                val session = _uiState.value.sessions.firstOrNull { it.session.id == requestSessionId }?.session
+                val success = api.replyToQuestion(
+                    conn = activeConn,
+                    requestId = requestId,
+                    answers = answers,
+                    directory = session?.directory?.takeIf { it.isNotBlank() },
+                )
+                if (success && _panel.value?.sessionId == requestSessionId) {
+                    _panel.value = loadPanel(requestSessionId)
+                }
+                onResult(success)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to reply to question $requestId", e)
+                onResult(false)
             }
         }
     }

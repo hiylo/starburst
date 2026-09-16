@@ -1122,6 +1122,8 @@
     <string name="workbench_quick_reply_hint">快捷回复…</string>
     <string name="workbench_quick_reply_sent">已发送快捷回复</string>
     <string name="workbench_quick_reply_failed">快捷回复发送失败</string>
+    <string name="workbench_question_replied">已回答问题</string>
+    <string name="workbench_question_reply_failed">回答问题失败</string>
     <string name="workbench_open_full_session">进入完整会话</string>
     <string name="workbench_menu_enter_session">进入会话</string>
     <string name="workbench_menu_delete_session">删除会话</string>

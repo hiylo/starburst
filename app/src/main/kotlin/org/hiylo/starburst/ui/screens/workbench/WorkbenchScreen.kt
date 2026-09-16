@@ -81,6 +81,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -108,6 +109,7 @@ import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.navigation.serverRoute
 import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusProcessing
 import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusWarning
 import java.time.OffsetDateTime
@@ -155,6 +157,16 @@ fun WorkbenchScreen(
             Toast.makeText(
                 context,
                 context.getString(if (ok) R.string.workbench_quick_reply_sent else R.string.workbench_quick_reply_failed),
+                Toast.LENGTH_SHORT,
+            ).show()
+        }
+    }
+
+    val replyToQuestion: (String, String, List<List<String>>) -> Unit = { sessionId, requestId, answers ->
+        viewModel.replyToQuestion(sessionId, requestId, answers) { ok ->
+            Toast.makeText(
+                context,
+                context.getString(if (ok) R.string.workbench_question_replied else R.string.workbench_question_reply_failed),
                 Toast.LENGTH_SHORT,
             ).show()
         }
@@ -253,6 +265,7 @@ fun WorkbenchScreen(
                     recognizedText = recognizedTextForPanel,
                     onTogglePanel = viewModel::togglePanel,
                     onSendQuickReply = sendQuickReply,
+                    onAnswerQuestion = replyToQuestion,
                     onDeleteSession = deleteSession,
                     onOpenSession = onOpenSession,
                 )
@@ -314,7 +327,7 @@ private fun ProgressHeader(sessions: List<WorkbenchSession>) {
         verticalAlignment = Alignment.CenterVertically,
     ) {
         ProgressChip(color = StatusWarning, count = question, label = stringResource(R.string.workbench_progress_question))
-        ProgressChip(color = StatusConnected, count = busy, label = stringResource(R.string.workbench_progress_busy))
+        ProgressChip(color = StatusProcessing, count = busy, label = stringResource(R.string.workbench_progress_busy))
         ProgressChip(color = MaterialTheme.colorScheme.outline, count = idle, label = stringResource(R.string.workbench_progress_idle))
     }
 }
@@ -461,6 +474,7 @@ private fun AllSessionsSection(
     recognizedText: String?,
     onTogglePanel: (String) -> Unit,
     onSendQuickReply: (String, String) -> Unit,
+    onAnswerQuestion: (String, String, List<List<String>>) -> Unit,
     onDeleteSession: (String) -> Unit,
     onOpenSession: (String) -> Unit,
 ) {
@@ -553,6 +567,9 @@ private fun AllSessionsSection(
                                         onToggleVoice = onToggleVoice,
                                         recognizedText = recognizedText,
                                         onSend = { onSendQuickReply(expandedItem.session.id, it) },
+                                        onAnswerQuestion = { requestId, answers ->
+                                            onAnswerQuestion(expandedItem.session.id, requestId, answers)
+                                        },
                                         onOpenSession = { onOpenSession(expandedItem.session.id) },
                                     )
                                 }
@@ -568,6 +585,7 @@ private fun AllSessionsSection(
                                     onToggleVoice = onToggleVoice,
                                     recognizedText = recognizedText,
                                     onSendQuickReply = { text -> onSendQuickReply(item.session.id, text) },
+                                    onAnswerQuestion = { requestId, answers -> onAnswerQuestion(item.session.id, requestId, answers) },
                                     onDeleteSession = { onDeleteSession(item.session.id) },
                                     onOpenSession = { onOpenSession(item.session.id) },
                                 )
@@ -593,6 +611,7 @@ private fun WorkbenchSessionCard(
     onToggleVoice: () -> Unit,
     recognizedText: String?,
     onSendQuickReply: (String) -> Unit,
+    onAnswerQuestion: (String, List<List<String>>) -> Unit,
     onDeleteSession: (String) -> Unit,
     onOpenSession: () -> Unit,
 ) {
@@ -621,6 +640,7 @@ private fun WorkbenchSessionCard(
                         onToggleVoice = onToggleVoice,
                         recognizedText = recognizedText,
                         onSend = onSendQuickReply,
+                        onAnswerQuestion = onAnswerQuestion,
                         onOpenSession = onOpenSession,
                     )
                 }
@@ -729,12 +749,12 @@ private fun SessionSummaryRow(
     }
 }
 
-/** 状态指示点：提问中(amber) > 处理中(green) > 重试(red) > 空闲(灰)。 */
+/** 状态指示点：提问中(amber) > 处理中(blue) > 重试(red) > 空闲(灰)。 */
 @Composable
 private fun StatusDot(status: SessionStatus) {
     val color = when (status) {
         is SessionStatus.Question -> StatusWarning
-        is SessionStatus.Busy -> StatusConnected
+        is SessionStatus.Busy -> StatusProcessing
         is SessionStatus.Retry -> StatusError
         is SessionStatus.Idle -> MaterialTheme.colorScheme.outlineVariant
     }
@@ -770,7 +790,7 @@ private fun StatusLabel(status: SessionStatus) {
     }
     val color = when (status) {
         is SessionStatus.Question -> StatusWarning
-        is SessionStatus.Busy -> StatusConnected
+        is SessionStatus.Busy -> StatusProcessing
         is SessionStatus.Retry -> StatusError
         is SessionStatus.Idle -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
     }
@@ -791,6 +811,7 @@ private fun DecisionPanelContent(
     onToggleVoice: () -> Unit,
     recognizedText: String?,
     onSend: (String) -> Unit,
+    onAnswerQuestion: (String, List<List<String>>) -> Unit,
     onOpenSession: () -> Unit,
 ) {
     var quickReply by rememberSaveable(panel.sessionId) { mutableStateOf("") }
@@ -907,11 +928,34 @@ private fun DecisionPanelContent(
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            panel.questions.forEach { question ->
-                QuestionOptions(
-                    question = question,
-                    onSelect = { label -> onSend(label) },
-                )
+            val requestId = panel.questionRequestId
+            if (requestId != null) {
+                val single = panel.questions.size == 1 && panel.questions.first().multiple != true
+                if (single) {
+                    panel.questions.forEach { question ->
+                        QuestionOptions(
+                            question = question,
+                            onSelect = { label -> onAnswerQuestion(requestId, listOf(listOf(label))) },
+                        )
+                    }
+                } else {
+                    val answersPerQuestion = remember(panel.sessionId, requestId) {
+                        mutableStateListOf<List<String>>().apply {
+                            repeat(panel.questions.size) { add(emptyList()) }
+                        }
+                    }
+                    panel.questions.forEachIndexed { index, question ->
+                        QuestionOptions(
+                            question = question,
+                            onSelect = { label ->
+                                answersPerQuestion[index] = listOf(label)
+                                if (answersPerQuestion.all { it.isNotEmpty() }) {
+                                    onAnswerQuestion(requestId, answersPerQuestion.toList())
+                                }
+                            },
+                        )
+                    }
+                }
             }
         }
     }

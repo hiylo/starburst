@@ -1158,6 +1158,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="workbench_quick_reply_hint">Quick reply…</string>
     <string name="workbench_quick_reply_sent">Quick reply sent</string>
     <string name="workbench_quick_reply_failed">Failed to send quick reply</string>
+    <string name="workbench_question_replied">Question answered</string>
+    <string name="workbench_question_reply_failed">Failed to answer question</string>
     <string name="workbench_open_full_session">Open full session</string>
     <string name="workbench_menu_enter_session">Enter session</string>
     <string name="workbench_menu_delete_session">Delete session</string>

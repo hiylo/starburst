@@ -57,6 +57,7 @@ import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusProcessing
 import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusWarning
 import java.text.SimpleDateFormat
@@ -97,7 +98,7 @@ fun SessionCardContent(
     val accent = category?.let { sessionCategoryColor(it.color) }
         ?: MaterialTheme.colorScheme.primary
     val statusBadge: Triple<String, Color, ImageVector?>? = when (status) {
-        SessionStatus.Busy -> Triple(stringResource(R.string.session_status_busy), StatusConnected, null)
+        SessionStatus.Busy -> Triple(stringResource(R.string.session_status_busy), StatusProcessing, null)
         is SessionStatus.Retry -> Triple(stringResource(R.string.sessions_retrying), StatusError, null)
         SessionStatus.Question -> Triple(
             stringResource(R.string.session_status_pending_question),
