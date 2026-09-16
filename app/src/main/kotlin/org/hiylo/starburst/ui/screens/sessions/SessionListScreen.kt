@@ -40,6 +40,11 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.foundation.gestures.AnchoredDraggableState
+import androidx.compose.foundation.gestures.DraggableAnchors
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.anchoredDraggable
+import androidx.compose.foundation.gestures.snapTo
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -61,6 +66,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -79,6 +85,7 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.roundToInt
 import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import org.hiylo.starburst.ui.components.AppDialog
@@ -140,6 +147,9 @@ internal fun recentSessionDirectories(
 
 /** Sort order selectable from the session list filter menu. */
 private enum class SessionSortMode { Newest, Oldest, Title }
+
+/** Anchored drag settle positions for the session-row swipe-to-reveal delete action. */
+private enum class SessionReveal { Settled, Revealed }
 
 /** Time range filter selectable from the session list filter menu. */
 internal enum class SessionTimeFilter {
@@ -2328,6 +2338,7 @@ private fun SessionRow(
     val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val density = LocalDensity.current
     var showActions by remember { mutableStateOf(false) }
     var showCategoryPicker by remember { mutableStateOf(false) }
 
@@ -2550,51 +2561,71 @@ private fun SessionRow(
     }
 
     // Swipe left to reveal a delete button; tapping it opens the confirm dialog.
-    // 允许滑回 Settled 复位，点击展开区域也可复位，避免误触展开后无法清理。
+    // 使用 anchoredDraggable 限定滑动距离（仅露出固定宽度删除按钮），而不是整卡完全滑出。
+    // 允许滑回复位，点击展开区域也可复位，避免误触展开后无法清理。
     val dismissGestureEnabled = !isSelectionMode
-    val dismissState = rememberSwipeToDismissBoxState(
-        // Allow the row to settle at EndToStart so the delete button stays visible,
-        // and back to Settled so an accidental swipe can be undone by swiping right.
-        confirmValueChange = { value ->
-            if (dismissGestureEnabled) {
-                value == SwipeToDismissBoxValue.EndToStart || value == SwipeToDismissBoxValue.Settled
-            } else {
-                value == SwipeToDismissBoxValue.Settled
-            }
-        },
-    )
-    SwipeToDismissBox(
-        state = dismissState,
-        enableDismissFromStartToEnd = false,
-        enableDismissFromEndToStart = dismissGestureEnabled,
-        backgroundContent = {
-            if (dismissGestureEnabled) {
-                Box(
+    val deleteRevealWidth = 72.dp
+    val revealState = remember(dismissGestureEnabled) {
+        val widthPx = with(density) { deleteRevealWidth.toPx() }
+        AnchoredDraggableState<SessionReveal>(
+            initialValue = SessionReveal.Settled,
+            anchors = DraggableAnchors {
+                SessionReveal.Settled at 0f
+                SessionReveal.Revealed at -widthPx
+            },
+            positionalThreshold = { totalDistance -> totalDistance * 0.35f },
+            velocityThreshold = { with(density) { 125.dp.toPx() } },
+            snapAnimationSpec = tween(durationMillis = 220),
+            decayAnimationSpec = exponentialDecay(),
+            confirmValueChange = { value ->
+                if (dismissGestureEnabled) {
+                    value == SessionReveal.Revealed || value == SessionReveal.Settled
+                } else {
+                    value == SessionReveal.Settled
+                }
+            },
+        )
+    }
+    LaunchedEffect(dismissGestureEnabled) {
+        if (!dismissGestureEnabled) revealState.snapTo(SessionReveal.Settled)
+    }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (dismissGestureEnabled) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(AppCardShape)
+                    .background(MaterialTheme.colorScheme.errorContainer)
+                    .clickable { scope.launch { revealState.snapTo(SessionReveal.Settled) } },
+                contentAlignment = Alignment.CenterEnd,
+            ) {
+                IconButton(
+                    onClick = {
+                        scope.launch { revealState.snapTo(SessionReveal.Settled) }
+                        onDelete()
+                    },
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clip(AppCardShape)
-                        .background(MaterialTheme.colorScheme.errorContainer)
-                        .clickable { scope.launch { dismissState.reset() } },
-                    contentAlignment = Alignment.CenterEnd,
+                        .padding(end = 12.dp)
+                        .width(deleteRevealWidth),
                 ) {
-                    IconButton(
-                        onClick = {
-                            scope.launch { dismissState.reset() }
-                            onDelete()
-                        },
-                        modifier = Modifier.padding(end = 12.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Delete,
-                            contentDescription = stringResource(R.string.delete),
-                            tint = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    }
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.delete),
+                        tint = MaterialTheme.colorScheme.onErrorContainer,
+                    )
                 }
             }
-        },
-    ) {
-        cardContent()
+        }
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset {
+                    IntOffset(x = revealState.requireOffset().roundToInt(), y = 0)
+                }
+                .anchoredDraggable(revealState, Orientation.Horizontal),
+        ) {
+            cardContent()
+        }
     }
 
     if (showCategoryPicker) {
