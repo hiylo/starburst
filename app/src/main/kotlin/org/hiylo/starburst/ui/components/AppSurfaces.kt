@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialogDefaults
 import androidx.compose.material3.BasicAlertDialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -90,7 +91,11 @@ fun AppDialog(
     shape: Shape = AppDialogShape,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    BasicAlertDialog(onDismissRequest = onDismissRequest) {
+    BasicAlertDialog(
+        onDismissRequest = onDismissRequest,
+        // edge-to-edge 对话框：让 WindowInsets.ime 上报给内容，imePadding 才能把内容/按钮顶到键盘上方。
+        properties = DialogProperties(decorFitsSystemWindows = false),
+    ) {
         Surface(
             modifier = modifier.imePadding(),
             shape = shape,

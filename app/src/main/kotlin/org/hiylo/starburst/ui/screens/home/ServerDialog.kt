@@ -14,13 +14,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -75,6 +79,9 @@ fun ServerDialog(
     val hostInvalidText = stringResource(R.string.server_invalid_host)
 
     val scrollState = rememberScrollState()
+    val focusManager = LocalFocusManager.current
+    // IME 键盘「下一步」逐字段移动焦点；最后一个用「完成」收起。
+    val nextAction = KeyboardActions(onNext = { focusManager.moveFocus(FocusDirection.Next) })
 
     val isAmoled = isAmoledTheme()
     val switchColors = if (isAmoled) {
@@ -117,6 +124,8 @@ fun ServerDialog(
                     label = { Text(stringResource(R.string.server_name)) },
                     placeholder = { Text(stringResource(R.string.server_name_hint)) },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -134,7 +143,8 @@ fun ServerDialog(
                     } else {
                         { Text(stringResource(R.string.server_host_hint)) }
                     },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -144,7 +154,8 @@ fun ServerDialog(
                     onValueChange = { openCodePort = it },
                     label = { Text(stringResource(R.string.server_opencode_port)) },
                     placeholder = { Text(stringResource(R.string.server_opencode_port_hint)) },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -182,6 +193,8 @@ fun ServerDialog(
                     label = { Text(stringResource(R.string.server_username)) },
                     placeholder = { Text(stringResource(R.string.server_username_hint)) },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -190,7 +203,8 @@ fun ServerDialog(
                     onValueChange = { password = it },
                     label = { Text(stringResource(R.string.server_password)) },
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -245,7 +259,8 @@ fun ServerDialog(
                     onValueChange = { sshPortText = it },
                     label = { Text(stringResource(R.string.server_ssh_port)) },
                     placeholder = { Text("22") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -254,6 +269,8 @@ fun ServerDialog(
                     onValueChange = { sshUsername = it },
                     label = { Text(stringResource(R.string.server_ssh_username)) },
                     singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     modifier = Modifier.fillMaxWidth()
                 )
                 OutlinedTextField(
@@ -261,7 +278,8 @@ fun ServerDialog(
                     onValueChange = { sshPassword = it },
                     label = { Text(stringResource(R.string.server_ssh_password)) },
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
