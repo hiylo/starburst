@@ -24,7 +24,6 @@ import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
@@ -62,6 +61,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
@@ -314,10 +314,6 @@ fun ChatScreen(
         }
     }
     val listState = rememberLazyListState()
-    // 加载更早消息时用于滚动锚定的目标消息 id 与基准消息数：加载前记录当前第一条可见消息，
-    // 旧消息合并后按消息 id 找到对应 turn（turn 分组会随旧消息变化，turn key 不稳定），还原滚动位置。
-    var pendingAnchorMessageId by remember { mutableStateOf<String?>(null) }
-    var pendingAnchorBaselineCount by remember { mutableStateOf(0) }
     var showModelPicker by remember { mutableStateOf(false) }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showCustomCommandsDialog by remember { mutableStateOf(false) }
@@ -912,9 +908,10 @@ fun ChatScreen(
         derivedStateOf {
             val info = listState.layoutInfo
             val lastVisible = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            val totalItems = info.totalItemsCount
-            if (lastVisible.index < totalItems - 1) return@derivedStateOf false
-            // Last item is visible — check if its bottom edge is within the viewport
+            // reverseLayout: index 0 is the bottom-most (newest) item. At the bottom of the list,
+            // the item at the bottom of the viewport is index 0.
+            if (lastVisible.index > 0) return@derivedStateOf false
+            // Bottom-most item is visible — check if its bottom edge is within the viewport
             val itemBottom = lastVisible.offset + lastVisible.size
             val viewportEnd = info.viewportEndOffset
             itemBottom <= viewportEnd + 50 // 50px tolerance
@@ -964,16 +961,14 @@ fun ChatScreen(
             lastSeenMessageCount = messageCount
         }
         if (messageCount > 0 && autoScrollEnabled) {
-            val lastIndex = listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1
-            listState.scrollToItem(lastIndex)
+            listState.scrollToItem(0)
         }
     }
 
     // Also auto-scroll when first loading
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading && messageCount > 0) {
-            val lastIndex = listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1
-            listState.scrollToItem(lastIndex)
+            listState.scrollToItem(0)
             autoScrollEnabled = true
         }
     }
@@ -2235,76 +2230,101 @@ fun ChatScreen(
                     val messageSpacing = if (LocalCompactMessages.current) 4.dp else 12.dp
                     val timeline = remember(uiState.messages) { buildChatTimeline(uiState.messages) }
 
-                    // 加载更早消息后，把滚动位置还原到加载前可见的那条消息，避免视口跳到最旧消息。
-                    // 用 isLoadingOlder + timeline 双键 + 「消息数增长」守卫，规避 flush 与 isLoadingOlder 的时序竞态。
-                    LaunchedEffect(uiState.isLoadingOlder, timeline) {
-                        val anchorId = pendingAnchorMessageId ?: return@LaunchedEffect
-                        if (uiState.isLoadingOlder) return@LaunchedEffect
-                        if (uiState.messages.size <= pendingAnchorBaselineCount) return@LaunchedEffect
-                        val index = timeline.indexOfFirst { entry ->
-                            entry is ChatTimelineEntry.Turn && entry.turn.messages.any { it.message.id == anchorId }
-                        }
-                        android.util.Log.d("ChatAnchor", "anchor msgId=$anchorId index=$index hasOlder=${uiState.hasOlderMessages} msgs=${uiState.messages.size}")
-                        if (index >= 0) {
-                            val itemIndex = index + (if (uiState.hasOlderMessages) 1 else 0)
-                            withFrameNanos { }
-                            android.util.Log.d("ChatAnchor", "scrollToItem itemIndex=$itemIndex total=${listState.layoutInfo.totalItemsCount} autoScroll=$autoScrollEnabled first=${listState.firstVisibleItemIndex}")
-                            listState.scrollToItem(itemIndex, 0)
-                            android.util.Log.d("ChatAnchor", "after scroll first=${listState.firstVisibleItemIndex} offset=${listState.firstVisibleItemScrollOffset}")
-                        }
-                        pendingAnchorMessageId = null
-                    }
-
                     LazyColumn(
+                        reverseLayout = true,
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
                         verticalArrangement = Arrangement.spacedBy(messageSpacing)
                     ) {
-                        // "Load earlier messages" button at the top
-                        if (uiState.hasOlderMessages) {
-                            item(key = "load_older") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (uiState.isLoadingOlder) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            PulsingDotsIndicator(
-                                                dotSize = 6.dp,
-                                                dotSpacing = 4.dp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = stringResource(R.string.chat_loading_earlier),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    } else {
-                                        TextButton(onClick = {
-                                            val turnKey = listState.layoutInfo.visibleItemsInfo
-                                                .mapNotNull { it.key as? String }
-                                                .firstOrNull { key -> key != "load_older" && !key.startsWith("day_") }
-                                            pendingAnchorMessageId = turnKey?.removePrefix("t_")?.removePrefix("u_")
-                                            pendingAnchorBaselineCount = uiState.messages.size
-                                            android.util.Log.d("ChatAnchor", "click turnKey=$turnKey anchorId=$pendingAnchorMessageId baseline=$pendingAnchorBaselineCount visible=${listState.layoutInfo.visibleItemsInfo.map { it.key }}")
-                                            viewModel.loadOlderMessages()
-                                        }) {
-                                            Text(stringResource(R.string.chat_load_earlier))
-                                        }
-                                    }
+                        // A stable final item lets scrollToItem clamp to the true content bottom,
+                        // including spacing and padding below a tall or streaming message.
+                        item(key = "conversation_bottom") {
+                            Spacer(Modifier.height(4.dp))
+                        }
+
+                        // Blinking typing cursor while the assistant is generating a reply.
+                        if (isBusy && uiState.messages.isNotEmpty()) {
+                            item(key = "typing_cursor") {
+                                TypingCursorIndicator(
+                                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp),
+                                    size = 8.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                            }
+                        }
+
+                        pendingInteractions.forEachIndexed { index, interaction ->
+                            item(key = "pending_${interaction::class.simpleName}_${interaction.sessionId}_${interaction.id}") {
+                                val position = stringResource(R.string.pending_request_position, index + 1, pendingInteractions.size)
+                                when (interaction) {
+                                    is PendingInteraction.Permission -> PermissionCard(
+                                        permission = interaction.request,
+                                        position = position,
+                                        onReply = { reply, onResult ->
+                                            viewModel.replyToPermission(
+                                                interaction.sessionId,
+                                                interaction.id,
+                                                reply,
+                                            ) { success ->
+                                                onResult(success)
+                                                if (!success) coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        context.getString(R.string.pending_request_reply_failed),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
+                                    is PendingInteraction.Question -> QuestionCard(
+                                        question = interaction.request,
+                                        position = position,
+                                        onSubmit = { answers, onResult ->
+                                            viewModel.replyToQuestion(
+                                                interaction.sessionId,
+                                                interaction.id,
+                                                answers,
+                                            ) { success ->
+                                                onResult(success)
+                                                if (!success) coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        context.getString(R.string.pending_request_reply_failed),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                        onReject = { onResult ->
+                                            viewModel.rejectQuestion(interaction.sessionId, interaction.id) { success ->
+                                                onResult(success)
+                                                if (!success) coroutineScope.launch {
+                                                    snackbarHostState.showSnackbar(
+                                                        context.getString(R.string.pending_request_reply_failed),
+                                                    )
+                                                }
+                                            }
+                                        },
+                                    )
                                 }
                             }
                         }
 
+                        // Revert banner
+                        if (uiState.revert != null) {
+                            item(key = "revert_banner") {
+                                RevertBanner(onRedo = {
+                                    viewModel.redoMessage { ok ->
+                                        coroutineScope.launch {
+                                            snackbarHostState.showSnackbar(
+                                                if (ok) context.getString(R.string.chat_messages_restored) else context.getString(R.string.chat_message_redo_failed)
+                                            )
+                                        }
+                                    }
+                                })
+                            }
+                        }
+
                         items(
-                            timeline,
+                            timeline.asReversed(),
                             key = { it.key },
                         ) { entry ->
                             when (entry) {
@@ -2445,90 +2465,40 @@ fun ChatScreen(
                             }
                         }
 
-                        // Revert banner
-                        if (uiState.revert != null) {
-                            item(key = "revert_banner") {
-                                RevertBanner(onRedo = {
-                                    viewModel.redoMessage { ok ->
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                if (ok) context.getString(R.string.chat_messages_restored) else context.getString(R.string.chat_message_redo_failed)
+                        // "Load earlier messages" button at the top
+                        if (uiState.hasOlderMessages) {
+                            item(key = "load_older") {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(vertical = 4.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    if (uiState.isLoadingOlder) {
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            PulsingDotsIndicator(
+                                                dotSize = 6.dp,
+                                                dotSpacing = 4.dp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Text(
+                                                text = stringResource(R.string.chat_loading_earlier),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
+                                    } else {
+                                        TextButton(onClick = {
+                                            viewModel.loadOlderMessages()
+                                        }) {
+                                            Text(stringResource(R.string.chat_load_earlier))
+                                        }
                                     }
-                                })
-                            }
-                        }
-
-                        pendingInteractions.forEachIndexed { index, interaction ->
-                            item(key = "pending_${interaction::class.simpleName}_${interaction.sessionId}_${interaction.id}") {
-                                val position = stringResource(R.string.pending_request_position, index + 1, pendingInteractions.size)
-                                when (interaction) {
-                                    is PendingInteraction.Permission -> PermissionCard(
-                                        permission = interaction.request,
-                                        position = position,
-                                        onReply = { reply, onResult ->
-                                            viewModel.replyToPermission(
-                                                interaction.sessionId,
-                                                interaction.id,
-                                                reply,
-                                            ) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    )
-                                    is PendingInteraction.Question -> QuestionCard(
-                                        question = interaction.request,
-                                        position = position,
-                                        onSubmit = { answers, onResult ->
-                                            viewModel.replyToQuestion(
-                                                interaction.sessionId,
-                                                interaction.id,
-                                                answers,
-                                            ) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        onReject = { onResult ->
-                                            viewModel.rejectQuestion(interaction.sessionId, interaction.id) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    )
                                 }
                             }
-                        }
-
-                        // Blinking typing cursor while the assistant is generating a reply.
-                        if (isBusy && uiState.messages.isNotEmpty()) {
-                            item(key = "typing_cursor") {
-                                TypingCursorIndicator(
-                                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp),
-                                    size = 8.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-
-                        // A stable final item lets scrollToItem clamp to the true content bottom,
-                        // including spacing and padding below a tall or streaming message.
-                        item(key = "conversation_bottom") {
-                            Spacer(Modifier.height(4.dp))
                         }
                     }
 
@@ -2537,8 +2507,7 @@ fun ChatScreen(
                         SmallFloatingActionButton(
                             onClick = {
                                 coroutineScope.launch {
-                                    val lastIndex = listState.layoutInfo.totalItemsCount.coerceAtLeast(1) - 1
-                                    listState.scrollToItem(lastIndex)
+                                    listState.scrollToItem(0)
                                     autoScrollEnabled = true
                                     hasUnreadMessages = false
                                 }
