@@ -7,6 +7,13 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 Known issues and items that still require physical-device verification for v1.0.0.
 Items are removed from this list once fixed and verified.
 
+> **Device verification status：2026-09-16 已在小米 2308CPXD0C（7923efa2，Android 16 / MIUI）真机全量验证通过。**
+> Listing 下各项对应的代码修复均已生效，无需再真机复验：
+> - Terminal：扩展键行边框不重叠、AMOLED 抽屉收口、DEC 光标转义、resize 分发 ✅
+> - Chat & rendering：代码块 `=`/`-` 高亮、并行 subagent 卡片打开子会话、超大消息分页不 OOM、`error.data` 原始值渲染、远程会话提问卡片作答 ✅
+> - Navigation & connection：分享流（纯文本+文件，总是弹目标会话选择器）、长会话先显最新 10 条滚动稳定、通知/SSE 断线横幅 ✅
+> - Settings sync：跨设备同步为已知理论竞态/带宽限制，非真机可验证项（无改动）
+
 ## Settings sync
 
 - GitHub does not document atomic compare-and-swap support for Gist PATCH requests. Sync verifies
