@@ -27,6 +27,7 @@ import org.hiylo.starburst.data.api.ProviderOauthAuthorization
 import org.hiylo.starburst.data.api.ProviderAuthException
 import org.hiylo.starburst.data.api.ProviderConfigDefinition
 import org.hiylo.starburst.data.api.ProviderModelDefinition
+import org.hiylo.starburst.data.api.ModelCapabilities
 import org.hiylo.starburst.data.api.ServerConfigPatch
 import org.hiylo.starburst.data.api.ServerConfigResponse
 import org.hiylo.starburst.data.api.ServerConnection
@@ -121,7 +122,8 @@ data class ModelGroup(
 data class ModelToggle(
     val modelId: String,
     val modelName: String,
-    val visible: Boolean
+    val visible: Boolean,
+    val capabilities: ModelCapabilities? = null
 )
 
 /**
@@ -673,7 +675,8 @@ class ServerSettingsViewModel @Inject constructor(
                         ModelToggle(
                             modelId = model.id,
                             modelName = model.name,
-                            visible = modelVisible(hidden, provider.id, model)
+                            visible = modelVisible(hidden, provider.id, model),
+                            capabilities = model.capabilities
                         )
                     }
                 if (models.isEmpty()) return@mapNotNull null

@@ -411,6 +411,22 @@ internal fun ModelPickerDialog(
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
+                                val caps = model.capabilities
+                                if (caps != null && (caps.toolcall || caps.reasoning || caps.attachment)) {
+                                    val capLabels = buildList {
+                                        if (caps.toolcall) add(stringResource(R.string.model_cap_toolcall))
+                                        if (caps.reasoning) add(stringResource(R.string.model_cap_reasoning))
+                                        if (caps.attachment) add(stringResource(R.string.model_cap_attachment))
+                                    }
+                                    Spacer(Modifier.height(2.dp))
+                                    Text(
+                                        text = capLabels.joinToString(" · "),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
                                 if (isModelFree(provider.id, model)) {
                                     Text(
                                         text = stringResource(R.string.chat_free_label),

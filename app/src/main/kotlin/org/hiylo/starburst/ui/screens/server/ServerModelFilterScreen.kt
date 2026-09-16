@@ -52,6 +52,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
@@ -196,6 +197,21 @@ fun ServerModelFilterScreen(
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                                                 )
+                                                val caps = model.capabilities
+                                                if (caps != null && (caps.toolcall || caps.reasoning || caps.attachment)) {
+                                                    val capLabels = buildList {
+                                                        if (caps.toolcall) add(stringResource(R.string.model_cap_toolcall))
+                                                        if (caps.reasoning) add(stringResource(R.string.model_cap_reasoning))
+                                                        if (caps.attachment) add(stringResource(R.string.model_cap_attachment))
+                                                    }
+                                                    Text(
+                                                        text = capLabels.joinToString(" · "),
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                        maxLines = 1,
+                                                        overflow = TextOverflow.Ellipsis,
+                                                    )
+                                                }
                                             }
                                             Switch(
                                                 checked = model.visible,
