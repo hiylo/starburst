@@ -1746,8 +1746,8 @@ class ChatViewModel @Inject constructor(
                     directory = sessionDirectory
                 )
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
-                // 新消息覆盖之前的待决提问：旧的提问已不再等待答复，即时移除。
-                eventReducer.clearQuestionsForSession(sessionId)
+                // 新消息覆盖之前的待决提问：服务端驳回 + 本地移除，避免重进会话又出现。
+                dismissPendingQuestions()
                 if (BuildConfig.DEBUG) Log.d(TAG, "Sent prompt to session $sessionId (${parts.size} parts)")
                 reconcilePendingMessage(messageId)
             } catch (e: Exception) {
@@ -1874,8 +1874,8 @@ class ChatViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Aborted session $sessionId")
                 // Optimistically update session status to Idle so UI reflects change immediately
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Idle)
-                // 中止后，之前的待决提问已不再等待答复，即时移除。
-                eventReducer.clearQuestionsForSession(sessionId)
+                // 中止后，之前的待决提问已不再等待答复：服务端驳回 + 本地移除。
+                dismissPendingQuestions()
             } catch (e: Exception) {
                 e.rethrowCancellation()
                 Log.e(TAG, "Failed to abort session", e)
@@ -1891,6 +1891,30 @@ class ChatViewModel @Inject constructor(
     fun continueSession(onResult: (Boolean) -> Unit = {}) {
         val ok = sendMessage(context.getString(R.string.chat_continue_task_prompt))
         onResult(ok)
+    }
+
+    /**
+     * 发送新消息覆盖提问、或中止会话后，把本会话及其子会话的待决提问在服务端驳回并移除本地卡片，
+     * 避免提问只从当前界面消失、重进会话又从 /question 拉回来。
+     */
+    private suspend fun dismissPendingQuestions() {
+        val interactionIds = descendantSessionIds(eventReducer.sessions.value, sessionId)
+        val pending = eventReducer.pendingInteractions.value
+            .filterIsInstance<PendingInteraction.Question>()
+            .filter { it.sessionId == sessionId || it.sessionId in interactionIds }
+        if (pending.isEmpty()) return
+        for (question in pending) {
+            runCatching {
+                api.rejectQuestion(
+                    conn = conn,
+                    requestId = question.id,
+                    directory = requestDirectory(question.sessionId),
+                )
+            }.onFailure { e ->
+                if (BuildConfig.DEBUG) Log.d(TAG, "Failed to reject question ${question.id}: ${e.message}")
+            }
+            eventReducer.removeQuestion(question.sessionId, question.id)
+        }
     }
 
     /**
