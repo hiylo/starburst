@@ -1,0 +1,65 @@
+# gitleaks 配置: 只保留高精度令牌规则，避免构建产物/示例文本误报。
+# 私网 IP / 内网主机由 scripts/check-secrets.sh 负责，此处不重复判定。
+
+[extend]
+useDefault = false
+
+[[rules]]
+description = "GitLab Personal Access Token"
+id = "gitlab-pat"
+regex = '''glpat-[A-Za-z0-9_\-]{20,}'''
+keywords = ["glpat-"]
+
+[[rules]]
+description = "GitHub Personal Access Token"
+id = "github-pat"
+regex = '''gh[pousr]_[A-Za-z0-9_]{36,}'''
+keywords = ["ghp_", "gho_", "ghu_", "ghs_", "ghr_"]
+
+[[rules]]
+description = "GitHub Fine-grained PAT"
+id = "github-fine-grained-pat"
+regex = '''github_pat_[A-Za-z0-9_]{20,}'''
+keywords = ["github_pat_"]
+
+[[rules]]
+description = "OpenAI API Key"
+id = "openai-api-key"
+regex = '''sk-[A-Za-z0-9]{20,}'''
+keywords = ["sk-"]
+
+[[rules]]
+description = "AWS Access Key ID"
+id = "aws-access-key"
+regex = '''\bAKIA[0-9A-Z]{16}\b'''
+keywords = ["AKIA"]
+
+[[rules]]
+description = "Google API Key"
+id = "google-api-key"
+regex = '''\bAIza[0-9A-Za-z\-_]{35}\b'''
+keywords = ["AIza"]
+
+[[rules]]
+description = "Slack Token"
+id = "slack-token"
+regex = '''xox[baprs]-[A-Za-z0-9\-]{10,}'''
+keywords = ["xoxb-", "xoxa-", "xoxp-", "xoxr-", "xoxs-"]
+
+[[rules]]
+description = "Google OAuth Access Token"
+id = "google-oauth"
+regex = '''ya29\.[A-Za-z0-9\-_]{20,}'''
+keywords = ["ya29."]
+
+[[rules]]
+description = "JWT"
+id = "jwt"
+regex = '''eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}'''
+keywords = ["eyJ"]
+
+[[rules]]
+description = "Private Key"
+id = "private-key"
+regex = '''-----BEGIN (RSA|EC|OPENSSH|DSA|PGP) PRIVATE KEY-----'''
+keywords = ["BEGIN RSA PRIVATE KEY", "BEGIN EC PRIVATE KEY", "BEGIN OPENSSH PRIVATE KEY", "BEGIN DSA PRIVATE KEY", "BEGIN PGP PRIVATE KEY"]

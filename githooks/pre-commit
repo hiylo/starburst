@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# pre-commit 钩子: 提交前敏感信息检查
+# 需要一次性启用: git config core.hooksPath githooks
+set -euo pipefail
+root="$(git rev-parse --show-toplevel)"
+if [ -x "$root/scripts/check-secrets.sh" ]; then
+  if ! "$root/scripts/check-secrets.sh"; then
+    echo "敏感信息检查未通过（见上方命中）。确认为误报时可用 git commit --no-verify 跳过。"
+    exit 1
+  fi
+fi
+exit 0
