@@ -211,20 +211,22 @@ object MnnAsr {
         }
     }
 
-    /** 创建一个新的识别流（会话）。 */
-    fun createStream(): OnlineStream? {
-        val r = recognizer ?: return null
-        return runCatching { r.createStream() }.getOrNull()
+    /** 创建一个新的识别流（会话）。串行化避免与 [release] 释放识别器竞态。 */
+    suspend fun createStream(): OnlineStream? = withContext(Dispatchers.IO) {
+        nativeLock.withLock {
+            val r = recognizer ?: return@withLock null
+            runCatching { r.createStream() }.getOrNull()
+        }
     }
 
     /**
      * 输入一段 PCM 样本并解码，返回当前识别到的完整文本（流式累积）。
      * 调用方应持续喂入 16kHz 单声道 float 样本；返回的文本为当前全部已识别内容。
      */
-    suspend fun acceptWaveform(stream: OnlineStream, samples: FloatArray): String? {
-        val r = recognizer ?: return null
-        return withContext(Dispatchers.IO) {
+    suspend fun acceptWaveform(stream: OnlineStream, samples: FloatArray): String? =
+        withContext(Dispatchers.IO) {
             nativeLock.withLock {
+                val r = recognizer ?: return@withLock null
                 runCatching {
                     stream.acceptWaveform(samples, 16000)
                     if (!r.isReady(stream)) return@withLock null
@@ -236,13 +238,12 @@ object MnnAsr {
                 }
             }
         }
-    }
 
     /** 标记输入结束，返回最终完整文本。 */
-    suspend fun finish(stream: OnlineStream): String {
-        val r = recognizer ?: return ""
-        return withContext(Dispatchers.IO) {
+    suspend fun finish(stream: OnlineStream): String =
+        withContext(Dispatchers.IO) {
             nativeLock.withLock {
+                val r = recognizer ?: return@withLock ""
                 runCatching {
                     stream.inputFinished()
                     val text = r.getResult(stream).text
@@ -255,7 +256,6 @@ object MnnAsr {
                 }
             }
         }
-    }
 
     /** 释放识别流（未完成的取消场景）。串行化避免与解码竞态。 */
     suspend fun releaseStream(stream: OnlineStream) {

@@ -211,8 +211,8 @@ object MnnLlm {
                 state = State.NotDownloaded
                 return@withContext false
             }
-            synchronized(this@MnnLlm) {
-                if (loaded && nativePtr != 0L) return@synchronized true
+            nativeLock.withLock {
+                if (loaded && nativePtr != 0L) return@withLock true
                 nativePtr = initNative(dir.absolutePath)
                 loaded = nativePtr != 0L
                 state = if (loaded) State.Ready else State.Failed
@@ -337,8 +337,6 @@ object MnnLlm {
         onDelta: (String) -> Unit,
     ): String {
         return withContext(Dispatchers.IO) {
-            val ptr = nativePtr
-            if (ptr == 0L) return@withContext ""
             val collector = StringBuilder()
             val callback = object : StreamingCallback {
                 override fun onDelta(text: String) {
@@ -350,9 +348,11 @@ object MnnLlm {
             // coroutine does not interrupt the blocking MNN call, and releasing / re-entering
             // MNN while a generation is still running corrupts its buffer allocator (Scudo crash).
             // Generation length is bounded by maxTokens; the lock prevents concurrent native use.
+            // nativePtr 必须在锁内读取，避免与 release() 释放竞态导致 use-after-free。
             val rc = runCatching {
                 nativeLock.withLock {
-                    generateStreamingNative(ptr, prompt, maxTokens, callback)
+                    val ptr = nativePtr
+                    if (ptr == 0L) -1L else generateStreamingNative(ptr, prompt, maxTokens, callback)
                 }
             }.getOrDefault(-1L)
             if (rc != 0L) Log.e(TAG, "generateStreamingNative returned $rc")
