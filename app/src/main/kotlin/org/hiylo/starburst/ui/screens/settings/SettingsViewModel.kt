@@ -61,7 +61,7 @@ class SettingsViewModel @Inject constructor(
     val asrModelDownloadFailed: StateFlow<Boolean> = _asrModelDownloadFailed
 
     /** 当前设备是否支持端侧语音识别（arm64-v8a + JNI 库可用）。 */
-    val asrSupported: Boolean = MnnAsr.isSupported()
+    val asrSupported: Boolean = MnnAsr.isSupported(context)
 
     init {
         prepareModel()

@@ -80,6 +80,25 @@ object MnnAsr {
     /** 串行化 native 调用，避免并发解码破坏内部缓冲。 */
     private val nativeLock = Mutex()
 
+    /** Native：在 sherpa JNI 加载前以 RTLD_GLOBAL 方式 dlopen MNN 核心与 Express 库。 */
+    private external fun loadAsrDeps(nativeLibDir: String): Boolean
+
+    /**
+     * 按依赖顺序加载 ASR 相关原生库（幂等）。`sherpa_helper` 在 native 侧以
+     * RTLD_GLOBAL 依次 dlopen libMNN.so、libMNN_Express.so、libsherpa-mnn-jni.so：
+     * Express 符号在同一命名空间全局可见，sherpa JNI 加载时即可解析 MNN::Express::*。
+     * 注意不能再走 System.loadLibrary("sherpa-mnn-jni")——该路径是 RTLD_LOCAL 的，
+     * 看不到 dlopen 出来的全局符号组，会抛 cannot locate symbol。
+     */
+    private fun loadNativeLibraries(context: Context): Boolean {
+        return runCatching {
+            System.loadLibrary("sherpa_helper")
+            if (!loadAsrDeps(context.applicationInfo.nativeLibraryDir)) {
+                throw IllegalStateException("native loadAsrDeps returned false")
+            }
+        }.onFailure { Log.e(TAG, "loadNativeLibraries failed", it) }.isSuccess
+    }
+
     /**
      * 模型是否已下载（存在于磁盘）。
      */
@@ -89,21 +108,19 @@ object MnnAsr {
     }
 
     /**
-     * 当前设备是否支持语音识别（需 arm64-v8a + JNI 库存在）。
+     * 当前设备是否支持语音识别（需 arm64-v8a + JNI 库可加载）。
      *
-     * `libsherpa-mnn-jni.so` 是按「单体 MNN」编译的（其 DT_NEEDED 只指向 libMNN.so，
-     * 依赖的 MNN::Express 符号位于单体 libMNN.so 内），而本 App 打包的是拆分版 MNN
-     * （core 在 libMNN.so，Express 在 libMNN_Express.so）。因此加载 sherpa JNI 前先加载
-     * libMNN.so 与 libMNN_Express.so，使 MNN::Express 符号在命名空间内可见。
+     * `libsherpa-mnn-jni.so` 按「单体 MNN」编译（DT_NEEDED 只指向 libMNN.so，
+     * 依赖的 MNN::Express 符号位于 libMNN_Express.so），而本 App 打包的是拆分版
+     * MNN。因此由 `sherpa_helper` 以 RTLD_GLOBAL 预加载两个库，再加载 sherpa JNI。
      */
-    fun isSupported(): Boolean {
+    fun isSupported(context: Context): Boolean {
         val abi = android.os.Build.SUPPORTED_ABIS.firstOrNull() ?: return false
-        if (abi != "arm64-v8a") return false
-        return runCatching {
-            System.loadLibrary("MNN")
-            System.loadLibrary("MNN_Express")
-            System.loadLibrary("sherpa-mnn-jni")
-        }.isSuccess
+        if (abi != "arm64-v8a") {
+            Log.w(TAG, "isSupported: ABI=$abi not arm64-v8a")
+            return false
+        }
+        return loadNativeLibraries(context)
     }
 
     /**
@@ -169,12 +186,9 @@ object MnnAsr {
      */
     suspend fun ensureLoaded(context: Context): Boolean {
         if (recognizer != null) return true
-        // 确保原生库已按依赖顺序加载（幂等）。
-        if (!runCatching {
-                System.loadLibrary("MNN")
-                System.loadLibrary("MNN_Express")
-                System.loadLibrary("sherpa-mnn-jni")
-            }.isSuccess) {
+        // 确保原生库已按依赖顺序加载（幂等）。先经 sherpa_helper 以 RTLD_GLOBAL
+        // dlopen MNN 核心与 Express 库，使 MNN::Express 符号对 sherpa JNI 可见。
+        if (!loadNativeLibraries(context)) {
             return false
         }
         return withContext(Dispatchers.IO) {

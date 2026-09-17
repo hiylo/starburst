@@ -9,6 +9,11 @@
     native <methods>;
 }
 
+# sherpa-mnn JNI — libsherpa-mnn-jni.so resolves config field names (e.g.
+# decodingMethod) and class names via JNI reflection, so the whole package must
+# keep its original names / fields.
+-keep class com.k2fsa.sherpa.mnn.** { *; }
+
 # Kotlinx Serialization
 -keepattributes *Annotation*, InnerClasses
 -dontnote kotlinx.serialization.AnnotationsKt

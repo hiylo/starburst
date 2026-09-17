@@ -33,10 +33,25 @@ add_library(starburst_mnn SHARED
 target_link_libraries(starburst_mnn
         android
         log
+        dl
         MNN
         MNN_LLM
         MNN_CL
         MNN_EXPRESS
         MNN_VULKAN
         MNN_OPENCV
+)
+
+# Standalone loader for the sherpa-mnn ASR JNI: dlopens libMNN.so and
+# libMNN_Express.so with RTLD_GLOBAL so the MNN::Express symbols sherpa needs
+# are visible. Deliberately NOT linked against any MNN library to keep this
+# target independent from starburst_mnn.
+add_library(sherpa_helper SHARED
+        sherpa_helper.cpp
+)
+
+target_link_libraries(sherpa_helper
+        android
+        log
+        dl
 )
