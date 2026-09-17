@@ -325,7 +325,9 @@ class ServerRepository @Inject constructor(
         }
         // 旧格式明文 JSON（迁移期兼容）。
         return runCatching { json.decodeFromString<List<ServerConfig>>(encoded) }.getOrElse {
-            Log.e(TAG, "Failed to decode servers", it)
+            // 既非旧明文 JSON，也无法用 Keystore 密钥解密：多为换机/云备份恢复后
+            // Keystore 密钥缺失导致的密文不可解。显式告警，避免「服务器列表静默清空」。
+            Log.e(TAG, "Servers payload is neither plaintext JSON nor decryptable (Keystore key missing after restore?)", it)
             emptyList()
         }
     }

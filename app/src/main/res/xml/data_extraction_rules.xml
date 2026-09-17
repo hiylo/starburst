@@ -1,2 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources />
+<!-- 设备迁移/云备份同样排除 Keystore 加密的设备绑定数据，避免换机后密文不可解导致配置静默丢失。 -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="sync_secrets.xml" />
+        <exclude domain="file" path="datastore/starburst_prefs.preferences_pb" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="sync_secrets.xml" />
+        <exclude domain="file" path="datastore/starburst_prefs.preferences_pb" />
+    </device-transfer>
+</data-extraction-rules>

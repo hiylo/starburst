@@ -1,2 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<resources />
+<!-- 云备份排除用 Android Keystore 密钥加密的设备绑定数据：Keystore 密钥不随云备份/换机迁移，
+     恢复后密文无法解密会导致服务器列表静默清空。跨设备迁移统一走 App 内置的口令加密备份。 -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="sync_secrets.xml" />
+    <exclude domain="file" path="datastore/starburst_prefs.preferences_pb" />
+</full-backup-content>
