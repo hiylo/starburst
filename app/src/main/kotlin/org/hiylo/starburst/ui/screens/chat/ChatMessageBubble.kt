@@ -10,6 +10,7 @@
 package org.hiylo.starburst.ui.screens.chat
 
 import androidx.compose.animation.AnimatedVisibility
+import android.net.Uri
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
@@ -205,6 +206,8 @@ internal fun ErrorPayloadContent(
                         settings.domStorageEnabled = false
                         settings.allowFileAccess = false
                         settings.allowContentAccess = false
+                        settings.blockNetworkLoads = true
+                        settings.blockNetworkImage = true
                         settings.setSupportMultipleWindows(false)
                         settings.useWideViewPort = true
                         settings.loadWithOverviewMode = true
@@ -1208,9 +1211,13 @@ private fun MarkdownContent(
             override fun openUri(uri: String) {
                 if (isSameServerUrl(uri, chatLinkHandler.serverBaseUrl)) {
                     chatLinkHandler.openInApp(uri)
-                } else {
+                    return
+                }
+                val scheme = runCatching { Uri.parse(uri).scheme }.getOrNull()?.lowercase()
+                if (scheme == "http" || scheme == "https") {
                     defaultUriHandler.openUri(uri)
                 }
+                // 其它 scheme（intent:/tel:/自定义）一律忽略，避免不可信内容触发系统能力。
             }
         }
     }

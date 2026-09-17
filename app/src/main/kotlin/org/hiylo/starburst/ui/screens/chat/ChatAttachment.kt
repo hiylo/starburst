@@ -155,7 +155,18 @@ internal fun buildPromptParts(
         }
         // Add file part
         val isDir = mention.path.endsWith("/")
-        val absPath = if (sessionDirectory != null) "$sessionDirectory/${mention.path}" else mention.path
+        val absPath = if (sessionDirectory != null) {
+            val base = java.io.File(sessionDirectory).canonicalPath
+            val resolved = java.io.File(base, mention.path).canonicalPath
+            // 拒绝经 ../ 逃逸到会话目录之外的文件引用。
+            if (!resolved.startsWith(base + java.io.File.separator)) {
+                cursor = mention.end
+                continue
+            }
+            resolved
+        } else {
+            mention.path
+        }
         val displayName = mention.path.trimEnd('/').substringAfterLast('/')
         parts.add(
             PromptPart(

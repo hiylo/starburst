@@ -229,13 +229,20 @@ class ServerSettingsViewModel @Inject constructor(
             }
             _uiState.update { it.copy(isInstallingBackend = true, backendInstallLog = null, error = null) }
             try {
-                val scriptUrl = "https://raw.githubusercontent.com/hiylo/starburst-backend/main/scripts/install.sh"
+                // 随机生成一次性后端 APP token，安装后持久化到服务器配置，替换默认 token ocb_default。
+                val token = randomBackendToken()
+                val scriptUrl =
+                    "https://raw.githubusercontent.com/hiylo/starburst-backend/v${BackendGate.REQUIRED_BACKEND_VERSION}/scripts/install.sh"
                 // 远端以 sudo 执行安装脚本（install.sh 内部需要 root 写 /usr/local/bin、systemd）。
                 // sudo 需可免密（或 SSH 用户本身是 root），否则会返回提示后失败。
-                val command = "curl -fsSL $scriptUrl | sudo bash -- --port 18880 --default-token ocb_default"
+                val command = "curl -fsSL $scriptUrl | sudo bash -- --port 18880 --default-token $token"
                 val output = SshRunner.runCommand(server, command, timeoutMs = 300_000)
+                // 持久化随机 token，使后续后端连接使用同一 token（而非默认 ocb_default）。
+                val updatedServer = server.copy(backendToken = token)
+                serverRepository.updateServer(updatedServer)
+                _serverConfig = updatedServer
                 // 安装完成后再探测一次（health + version），避免把「命令成功但服务未起」误判为可用。
-                val probe = BackendGate.probe(backendApi, server, serverUrl)
+                val probe = BackendGate.probe(backendApi, updatedServer, serverUrl)
                 _uiState.update {
                     it.copy(
                         isInstallingBackend = false,
@@ -262,6 +269,13 @@ class ServerSettingsViewModel @Inject constructor(
         get() = _serverConfig
 
     private var _serverConfig: ServerConfig? = null
+
+    /** 生成 48 位十六进制随机 token（24 字节），用作 starburst-backend 的 APP token。 */
+    private fun randomBackendToken(): String {
+        val bytes = ByteArray(24)
+        java.security.SecureRandom().nextBytes(bytes)
+        return bytes.joinToString("") { "%02x".format(it) }
+    }
 
     fun loadProviders() {
         viewModelScope.launch {

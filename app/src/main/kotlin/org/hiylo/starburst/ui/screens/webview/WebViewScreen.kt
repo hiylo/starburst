@@ -10,6 +10,7 @@
 package org.hiylo.starburst.ui.screens.webview
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
 import android.util.Base64
@@ -151,7 +152,7 @@ fun WebViewScreen(
                             databaseEnabled = true
                             allowContentAccess = true
                             allowFileAccess = false
-                            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+                            mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
                             useWideViewPort = true
                             loadWithOverviewMode = true
                             setSupportZoom(true)
@@ -184,7 +185,8 @@ fun WebViewScreen(
                                 realm: String?
                             ) {
                                 Log.d("WebViewScreen", "HTTP Auth requested for host=$host, realm=$realm")
-                                if (username.isNotBlank()) {
+                                val allowedHost = runCatching { Uri.parse(serverUrl).host }.getOrNull()
+                                if (username.isNotBlank() && host != null && host == allowedHost) {
                                     handler?.proceed(username, password)
                                 } else {
                                     handler?.cancel()
@@ -210,12 +212,14 @@ fun WebViewScreen(
                                 request: WebResourceRequest?
                             ): Boolean {
                                 val requestUrl = request?.url?.toString() ?: return false
-                                // Stay in WebView for same-origin requests
                                 if (requestUrl.startsWith(serverUrl)) {
                                     return false
                                 }
-                                // Also stay for relative URLs (they resolve to same origin)
-                                return false
+                                // 外部链接交给系统浏览器，避免在启用 JS 的 WebView 内加载不可信页面。
+                                runCatching {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(requestUrl)))
+                                }
+                                return true
                             }
                         }
 

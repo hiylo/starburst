@@ -15,6 +15,8 @@ import dagger.hilt.android.HiltAndroidApp
 import org.hiylo.starburst.data.repository.DiagnosticLogRepository
 import org.hiylo.starburst.logging.AppLogger
 import org.hiylo.starburst.ml.MnnLlm
+import org.hiylo.starburst.service.SshRunner
+import java.io.File
 import javax.inject.Inject
 
 /**
@@ -28,6 +30,7 @@ class StarBurstApp : Application() {
     override fun onCreate() {
         super.onCreate()
         AppLogger.initialize(diagnosticLogRepository)
+        SshRunner.knownHostsFile = File(filesDir, "ssh_known_hosts")
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, error ->
             try {

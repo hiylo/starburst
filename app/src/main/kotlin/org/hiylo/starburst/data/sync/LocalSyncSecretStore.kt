@@ -38,7 +38,8 @@ class LocalSyncSecretStore @Inject constructor(
 
     fun clearAll() = preferences.edit().clear().apply()
 
-    private fun encrypt(value: String): String {
+    /** 用 Android Keystore AES-GCM 加密任意字符串（返回 iv+密文的 Base64）。供 [org.hiylo.starburst.data.repository.ServerRepository] 加密整个服务器列表。 */
+    fun encrypt(value: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply {
             init(Cipher.ENCRYPT_MODE, key())
         }
@@ -46,7 +47,8 @@ class LocalSyncSecretStore @Inject constructor(
         return Base64.encodeToString(cipher.iv + encrypted, Base64.NO_WRAP)
     }
 
-    private fun decrypt(value: String): String? = runCatching {
+    /** 解密 [encrypt] 生成的密文；解密失败返回 null。 */
+    fun decrypt(value: String): String? = runCatching {
         val bytes = Base64.decode(value, Base64.NO_WRAP)
         require(bytes.size > 12)
         Cipher.getInstance(TRANSFORMATION).run {

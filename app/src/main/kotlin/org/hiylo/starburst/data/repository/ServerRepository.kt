@@ -15,17 +15,19 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.ServerHealth
 import org.hiylo.starburst.data.sync.SyncServer
+import org.hiylo.starburst.data.sync.LocalSyncSecretStore
+import org.hiylo.starburst.service.SshRunner
 import org.hiylo.starburst.ui.screens.chat.ServerTerminalRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
@@ -97,7 +99,8 @@ internal fun mergeSyncServers(
 class ServerRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
     private val api: OpenCodeApi,
-    private val json: Json
+    private val json: Json,
+    private val secretStore: LocalSyncSecretStore,
 ) {
     
     private val serversKey = stringPreferencesKey(SERVERS_KEY)
@@ -105,15 +108,9 @@ class ServerRepository @Inject constructor(
     /**
      * Get all saved servers as Flow
      */
-    val servers: Flow<List<ServerConfig>> = dataStore.data.map { preferences ->
-        val serversJson = preferences[serversKey] ?: "[]"
-        try {
-            json.decodeFromString<List<ServerConfig>>(serversJson)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to decode servers", e)
-            emptyList()
-        }
-    }
+    val servers: Flow<List<ServerConfig>> = dataStore.data
+        .map { preferences -> decodeServers(preferences[serversKey]) }
+        .flowOn(Dispatchers.IO)
     
     /**
      * Get all servers (alias for servers Flow)
@@ -152,7 +149,7 @@ class ServerRepository @Inject constructor(
         )
         
         dataStore.edit { preferences ->
-            preferences[serversKey] = json.encodeToString(readServers(preferences) + server)
+            preferences[serversKey] = encodeServers(readServers(preferences) + server)
         }
         
         return server
@@ -163,7 +160,7 @@ class ServerRepository @Inject constructor(
      */
     suspend fun updateServer(server: ServerConfig) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = json.encodeToString(readServers(preferences).map {
+            preferences[serversKey] = encodeServers(readServers(preferences).map {
                 if (it.id == server.id) server else it
             })
         }
@@ -171,7 +168,7 @@ class ServerRepository @Inject constructor(
 
     suspend fun setAutoConnect(serverId: String, autoConnect: Boolean) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = json.encodeToString(readServers(preferences).map { server ->
+            preferences[serversKey] = encodeServers(readServers(preferences).map { server ->
                 if (server.id == serverId) server.copy(autoConnect = autoConnect) else server
             })
         }
@@ -182,7 +179,7 @@ class ServerRepository @Inject constructor(
      */
     suspend fun deleteServer(serverId: String) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = json.encodeToString(readServers(preferences).filter { it.id != serverId })
+            preferences[serversKey] = encodeServers(readServers(preferences).filter { it.id != serverId })
         }
         // 释放该服务器对应的终端 workspace（关闭 socket 协程、清理连接凭据），避免泄漏。
         ServerTerminalRegistry.release(serverId)
@@ -229,10 +226,7 @@ class ServerRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             val host = server.host
             val openCodePort = server.openCodePort
-            val jsch = JSch()
-            val session = jsch.getSession(server.sshUsername, host, server.sshPort)
-            session.setPassword(server.sshPassword ?: "")
-            session.setConfig("StrictHostKeyChecking", "no")
+            val session = SshRunner.buildSession(server)
             session.connect(SSH_CONNECT_TIMEOUT_MS)
             val localPort = session.setPortForwardingL(0, host, openCodePort)
             val connection = ServerConnection.from("http://127.0.0.1:$localPort", server.username, server.password)
@@ -275,15 +269,32 @@ class ServerRepository @Inject constructor(
         passwords: Map<String, String>,
     ): Map<String, String> {
         val result = mergeSyncServers(readServers(preferences), remote, passwords)
-        preferences[serversKey] = json.encodeToString(result.servers)
+        preferences[serversKey] = encodeServers(result.servers)
         return result.idMapping
     }
     
     // ============ Private ============
-    
-    private fun readServers(preferences: Preferences): List<ServerConfig> {
-        return preferences[serversKey]?.let { encoded ->
-            runCatching { json.decodeFromString<List<ServerConfig>>(encoded) }.getOrDefault(emptyList())
-        }.orEmpty()
+
+    /** 序列化并加密服务器列表，写入 DataStore。 */
+    private fun encodeServers(servers: List<ServerConfig>): String =
+        secretStore.encrypt(json.encodeToString(servers))
+
+    /** 解密并反序列化服务器列表；兼容旧版明文 JSON（下次写入会自动加密）。 */
+    private fun decodeServers(encoded: String?): List<ServerConfig> {
+        if (encoded.isNullOrEmpty()) return emptyList()
+        secretStore.decrypt(encoded)?.let { plain ->
+            return runCatching { json.decodeFromString<List<ServerConfig>>(plain) }.getOrElse {
+                Log.e(TAG, "Failed to decode servers", it)
+                emptyList()
+            }
+        }
+        // 旧格式明文 JSON（迁移期兼容）。
+        return runCatching { json.decodeFromString<List<ServerConfig>>(encoded) }.getOrElse {
+            Log.e(TAG, "Failed to decode servers", it)
+            emptyList()
+        }
     }
+
+    private fun readServers(preferences: Preferences): List<ServerConfig> =
+        decodeServers(preferences[serversKey])
 }
