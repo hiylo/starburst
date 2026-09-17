@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Backup & restore -->
+    <string name="settings_backup_restore">Backup &amp; restore</string>
+    <string name="settings_backup_restore_desc">Export or restore settings and servers</string>
+
+    <string name="backup_restore_title">Backup &amp; restore</string>
+    <string name="backup_restore_desc">Export your settings, servers and templates to an encrypted file, or restore them on another device.</string>
+    <string name="backup_note">Backup files are encrypted with a passphrase so they can be restored on any device.</string>
+    <string name="backup_passphrase_label">Passphrase</string>
+    <string name="backup_export">Export backup</string>
+    <string name="backup_import">Import backup</string>
+    <string name="backup_working">Working…</string>
+    <string name="backup_export_success">Backup exported</string>
+    <string name="backup_import_success">Backup restored</string>
+    <string name="backup_error_wrong_passphrase">Incorrect passphrase</string>
+    <string name="backup_error_invalid_file">Not a valid backup file</string>
+    <string name="backup_error_unsupported_version">Unsupported backup version</string>
+    <string name="backup_error_io">Could not read or write the file</string>
+    <string name="backup_error_generic">Backup failed</string>
+</resources>

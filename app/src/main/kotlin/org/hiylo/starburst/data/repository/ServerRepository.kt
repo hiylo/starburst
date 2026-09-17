@@ -90,6 +90,31 @@ internal fun mergeSyncServers(
     return ServerMergeResult(mergedServers, idMapping)
 }
 
+internal fun mergeServerConfigs(
+    current: List<ServerConfig>,
+    remote: List<ServerConfig>,
+    idGenerator: () -> String = { UUID.randomUUID().toString() },
+): ServerMergeResult {
+    val mergedServers = current.toMutableList()
+    val usedIds = current.mapTo(mutableSetOf()) { it.id }
+    val idMapping = mutableMapOf<String, String>()
+    remote.filter { isPortableSyncServerUrl(it.url) }.forEach { source ->
+        val normalized = normalizeServerUrl(source.url)
+        val existingIndex = mergedServers.indexOfFirst { normalizeServerUrl(it.url) == normalized }
+        val existing = mergedServers.getOrNull(existingIndex)
+        val merged = if (existing != null) {
+            source.copy(id = existing.id, lastConnected = null, isHealthy = false)
+        } else {
+            val id = source.id.takeIf { it !in usedIds } ?: idGenerator()
+            usedIds += id
+            source.copy(id = id, lastConnected = null, isHealthy = false)
+        }
+        if (existingIndex >= 0) mergedServers[existingIndex] = merged else mergedServers += merged
+        idMapping[source.id] = merged.id
+    }
+    return ServerMergeResult(mergedServers, idMapping)
+}
+
 /**
  * Server Repository - manages saved OpenCode servers
  * 
@@ -269,6 +294,16 @@ class ServerRepository @Inject constructor(
         passwords: Map<String, String>,
     ): Map<String, String> {
         val result = mergeSyncServers(readServers(preferences), remote, passwords)
+        preferences[serversKey] = encodeServers(result.servers)
+        return result.idMapping
+    }
+
+    /** 按规范化 URL 合并并写回完整服务器配置（含密码、SSH、Backend），返回远端 id → 本地 id 映射。 */
+    internal fun importServerConfigsTo(
+        preferences: MutablePreferences,
+        remote: List<ServerConfig>,
+    ): Map<String, String> {
+        val result = mergeServerConfigs(readServers(preferences), remote)
         preferences[serversKey] = encodeServers(result.servers)
         return result.idMapping
     }

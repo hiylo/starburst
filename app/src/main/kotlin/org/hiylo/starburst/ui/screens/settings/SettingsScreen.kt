@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.HorizontalRule
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Label
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.NotificationsOff
 import androidx.compose.material.icons.filled.Palette
@@ -151,6 +152,8 @@ fun SettingsScreen(
     val asrModelDownloadFailed by viewModel.asrModelDownloadFailed.collectAsState()
     val asrSupported = viewModel.asrSupported
 
+    val backupViewModel: BackupViewModel = hiltViewModel()
+
     var showLanguageDialog by remember { mutableStateOf(false) }
     var showThemeDialog by remember { mutableStateOf(false) }
     var showDndStartDialog by remember { mutableStateOf(false) }
@@ -167,6 +170,7 @@ fun SettingsScreen(
     var showTerminalFontSizeDialog by remember { mutableStateOf(false) }
     var showImageMaxSideDialog by remember { mutableStateOf(false) }
     var showImageQualityDialog by remember { mutableStateOf(false) }
+    var showBackupDialog by remember { mutableStateOf(false) }
 
     val isAmoled = isAmoledTheme()
     val settingsView = LocalView.current
@@ -858,6 +862,14 @@ fun SettingsScreen(
             SectionHeader(stringResource(R.string.settings_section_data))
 
             SettingsCard {
+            // Backup & restore (encrypted export/import of local settings and servers)
+            ListItem(
+                headlineContent = { Text(stringResource(R.string.settings_backup_restore)) },
+                supportingContent = { Text(stringResource(R.string.settings_backup_restore_desc)) },
+                leadingContent = { Icon(Icons.Default.Lock, contentDescription = null) },
+                modifier = Modifier.clickable { showBackupDialog = true },
+            )
+
             // Export current session (entry point placeholder — session data lives in ChatScreen)
             val exportHint = stringResource(R.string.settings_export_hint)
             ListItem(
@@ -1064,6 +1076,13 @@ fun SettingsScreen(
                     showImageQualityDialog = false
                 },
                 onDismiss = { showImageQualityDialog = false }
+            )
+        }
+
+        if (showBackupDialog) {
+            BackupDialog(
+                viewModel = backupViewModel,
+                onDismiss = { showBackupDialog = false },
             )
         }
 
