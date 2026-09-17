@@ -31,6 +31,8 @@ data class MessageBookmark(
     val messageText: String,
     /** 添加时间（epoch 毫秒）。 */
     val createdAt: Long,
+    /** 书签标签列表（可为空），用于分类与筛选。 */
+    val tags: List<String> = emptyList(),
 ) {
     companion object {
         /** 分隔符，用于拼接服务器、会话、消息三个 ID 生成稳定书签 ID。 */

@@ -13,8 +13,11 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -50,6 +53,32 @@ class BookmarksViewModel @Inject constructor(
             initialValue = emptyList(),
         )
 
+    /** 全部书签出现过的去重标签（按字典序排列），用于筛选栏。 */
+    val allTags: StateFlow<List<String>> =
+        bookmarks.map { list -> list.flatMap { it.tags }.distinct().sorted() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /** 当前选中的标签；为空表示展示全部书签。 */
+    private val _selectedTag = MutableStateFlow<String?>(null)
+
+    /** 当前选中的标签，供 UI 高亮筛选芯片。 */
+    val selectedTag: StateFlow<String?> = _selectedTag.asStateFlow()
+
+    /** 按选中标签过滤后的书签列表。 */
+    val filteredBookmarks: StateFlow<List<MessageBookmark>> =
+        combine(bookmarks, _selectedTag) { list, tag ->
+            if (tag == null) list else list.filter { tag in it.tags }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    /**
+     * 选中或取消某个标签作为筛选条件。
+     *
+     * @param tag 要筛选的标签，传 `null` 表示清除筛选
+     */
+    fun selectTag(tag: String?) {
+        _selectedTag.value = tag
+    }
+
     /**
      * 加载书签列表。
      *
@@ -67,5 +96,15 @@ class BookmarksViewModel @Inject constructor(
      */
     fun remove(id: String) {
         viewModelScope.launch { bookmarkRepository.remove(id) }
+    }
+
+    /**
+     * 更新指定书签的标签列表。
+     *
+     * @param id 书签 ID
+     * @param tags 新的标签列表
+     */
+    fun updateTags(id: String, tags: List<String>) {
+        viewModelScope.launch { bookmarkRepository.updateTags(id, tags) }
     }
 }

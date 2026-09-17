@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 书签标签与分组 -->
+    <string name="bookmarktags_all">全部</string>
+    <string name="bookmarktags_manage_tags">管理标签</string>
+    <string name="bookmarktags_add_tag">添加标签</string>
+    <string name="bookmarktags_tag_hint">标签名称</string>
+    <string name="bookmarktags_save">保存</string>
+    <string name="bookmarktags_cancel">取消</string>
+    <string name="bookmarktags_no_tags">暂无标签</string>
+    <string name="bookmarktags_remove_tag">移除标签</string>
+    <string name="bookmarktags_empty_filter">该标签下暂无书签</string>
+</resources>

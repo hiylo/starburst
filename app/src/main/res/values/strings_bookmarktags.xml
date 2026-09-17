@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bookmark tags & groups -->
+    <string name="bookmarktags_all">All</string>
+    <string name="bookmarktags_manage_tags">Manage tags</string>
+    <string name="bookmarktags_add_tag">Add tag</string>
+    <string name="bookmarktags_tag_hint">Tag name</string>
+    <string name="bookmarktags_save">Save</string>
+    <string name="bookmarktags_cancel">Cancel</string>
+    <string name="bookmarktags_no_tags">No tags yet</string>
+    <string name="bookmarktags_remove_tag">Remove tag</string>
+    <string name="bookmarktags_empty_filter">No bookmarks with this tag</string>
+</resources>

@@ -115,6 +115,24 @@ class BookmarkRepository @Inject constructor(
     }
 
     /**
+     * 更新指定书签的标签列表（整体替换）。
+     *
+     * @param id 书签 ID
+     * @param tags 新的标签列表，可为空表示清空全部标签
+     */
+    suspend fun updateTags(id: String, tags: List<String>) {
+        mutex.withLock {
+            val current = _bookmarks.value
+            val updated = current.map { bookmark ->
+                if (bookmark.id == id) bookmark.copy(tags = tags.distinct()) else bookmark
+            }
+            if (updated == current) return
+            _bookmarks.value = updated
+            dataStore.edit { preferences -> preferences[BOOKMARKS_KEY] = json.encodeToString(updated) }
+        }
+    }
+
+    /**
      * 判断某条消息是否已被标记为书签。
      *
      * @param serverId 服务器 ID
