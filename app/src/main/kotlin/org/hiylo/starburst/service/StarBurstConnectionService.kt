@@ -319,6 +319,9 @@ class StarBurstConnectionService : Service() {
     /** 上次轮询时各 server 处于 busy 的会话集合，用于检测 busy→idle 完成转场（SSE 假死兜底）。 */
     private val lastBusySessions = ConcurrentHashMap<String, Set<String>>()
 
+    /** 正在执行「后端→直连」回退的 server 集合（并发去重，防止 SSE 循环与推送 job 同时回退互相拆隧道）。 */
+    private val fallbackInFlight = ConcurrentHashMap.newKeySet<String>()
+
     inner class LocalBinder : Binder() {
         fun getService(): StarBurstConnectionService = this@StarBurstConnectionService
     }
@@ -780,8 +783,9 @@ class StarBurstConnectionService : Service() {
         try { session?.disconnect() } catch (_: Exception) { }
     }
 
-    /** 用重建后的 SSH 隧道替换某 server 的连接信息（关闭旧会话），并同步后端本地端口、重启推送 job。 */
-    private fun replaceSshSession(serverId: String, newConn: ServerConnection, newSsh: JschSession?, newBackendLocalPort: Int?) {
+    /** 用重建后的 SSH 隧道替换某 server 的连接信息（关闭旧会话），并同步后端本地端口、重启推送 job。
+     * [newDirectConn] 指向重建后隧道上的直连 opencode 连接，用于后端镜像失败时回退直连。 */
+    private fun replaceSshSession(serverId: String, newConn: ServerConnection, newSsh: JschSession?, newBackendLocalPort: Int?, newDirectConn: ServerConnection) {
         val oldState = connections[serverId] ?: return
         val oldSsh = oldState.sshSession
         val newPush = startBackendPushJob(oldState.config, newConn, newBackendLocalPort)
@@ -792,6 +796,7 @@ class StarBurstConnectionService : Service() {
                 sshSession = newSsh,
                 pushJob = newPush,
                 backendLocalPort = newBackendLocalPort,
+                directConn = newDirectConn,
             )
         }
         if (applied !== oldState) {
@@ -1011,7 +1016,9 @@ class StarBurstConnectionService : Service() {
                         val resolved = resolveConnection(server)
                         val baseConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
                         val newConn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
-                        replaceSshSession(server.id, newConn, resolved.sshSession, resolved.backendLocalPort)
+                        // 直连通道必须指向重建后的新隧道：directConn 陈旧（指向已被 replaceSshSession
+                        // 关闭的旧 127.0.0.1:localPort）会让后端镜像失败后的回退直连永远连不上。
+                        replaceSshSession(server.id, newConn, resolved.sshSession, resolved.backendLocalPort, baseConn)
                         currentConn = newConn
                     } catch (e: CancellationException) {
                         throw e
@@ -1038,8 +1045,11 @@ class StarBurstConnectionService : Service() {
                     sseClient.connectToGlobalEvents(
                         conn = currentConn,
                         onOpen = {
+                            // SSE 流已打开（HTTP 200）即是连接成功的权威信号，无条件标记 connected，
+                            // 避免 job 引用因 forceReconnect/恢复流程被替换后 onOpen 被丢弃而卡在 connecting。
+                            updateServerConnected(server.id, true, currentJob)
+                            // attempt/failureStartedAt 的重置仅对「当前 job」有意义，仍用引用判断。
                             if (connections[server.id]?.sseJob === currentJob) {
-                                updateServerConnected(server.id, true, currentJob)
                                 attempt = 0
                                 failureStartedAt = null
                             }
@@ -1091,6 +1101,21 @@ class StarBurstConnectionService : Service() {
 
                 // If this server was removed from connections, stop the loop
                 if (!connections.containsKey(server.id)) break
+
+                // 后端镜像 SSE 连续失败：回退直连 opencode。镜像 SSE 端点异常（网关反复
+                // 打开后立即断开）时 REST 消息仍走直连、能正常收发，但 SSE 状态会一直卡在
+                // connecting；这里在连续失败达到阈值后主动回退直连，打破无限重连。
+                if (attempt >= BACKEND_FALLBACK_THRESHOLD) {
+                    val st = connections[server.id]
+                    if (st != null && st.directConn != null && st.directConn !== currentConn) {
+                        Log.w(
+                            TAG,
+                            "[${server.displayName}] Backend-mirrored SSE failing repeatedly (attempt=$attempt), falling back to direct opencode",
+                        )
+                        fallbackToDirectConn(server)
+                        return@launch
+                    }
+                }
 
                 val now = SystemClock.elapsedRealtime()
                 val failedSince = failureStartedAt ?: now.also { failureStartedAt = it }
@@ -1226,7 +1251,12 @@ class StarBurstConnectionService : Service() {
         // 否则会出现「isConnected=true 但 connectedServerIds 未含该 server」的失步
         // （表现为会话页显示断开、列表页一直 connecting，却仍能正常收发）。
         connections.computeIfPresent(serverId) { _, state ->
-            if (state.sseJob !== expectedJob) return@computeIfPresent state
+            if (state.sseJob !== expectedJob) {
+                // 过期 job 的信号：不覆盖当前 job 的 isConnected，但「SSE 已打开」（connected=true）
+                // 是连接成功的权威信号，仍应对齐 flags，避免 UI 永久卡在 connecting。
+                if (connected) reconcileConnectionFlags(serverId, true)
+                return@computeIfPresent state
+            }
             if (state.isConnected == connected) {
                 // 状态未变，仍对齐 flags，自愈任何历史失步。
                 reconcileConnectionFlags(serverId, connected)
@@ -1382,7 +1412,11 @@ class StarBurstConnectionService : Service() {
             runBlocking {
                 withTimeoutOrNull(2_500L) {
                     if (!backendApi.isHealthy(backendUrl)) return@withTimeoutOrNull baseConn
+                    // token 无效时 /api/system 鉴权失败返回 {"error":"invalid token"}，会反序列化为
+                    // 字段为空的 BackendSystemInfo（非 null），因此须校验关键字段而非仅判空：
+                    // 不切换镜像，保持直连，避免用一个注定鉴权失败的镜像地址建立 SSE。
                     val info = backendApi.getSystemInfo(backendUrl, backendToken)
+                    if (info == null || info.backend.isBlank()) return@withTimeoutOrNull baseConn
                     OpenCodeGateway.resolve(
                         baseConn,
                         BackendStatus(
@@ -1459,23 +1493,31 @@ class StarBurstConnectionService : Service() {
 
     /** 后端不可用时把该 server 的连接切回直连 opencode（重建 SSE；push 镜像关闭）。 */
     private fun fallbackToDirectConn(server: ServerConfig) {
-        val state = connections[server.id] ?: return
-        val directConn = state.directConn ?: return
-        if (state.conn === directConn) return
-        val job = startSseConnection(state.config, directConn, preload = false)
-        val replacement = state.copy(conn = directConn, sseJob = job, isConnected = false, pushJob = null)
-        if (!connections.replace(server.id, state, replacement)) {
-            job.cancel()
-            return
+        // 并发去重：SSE 失联循环与后端推送 job 都会触发 fallback，且 fallback 内部会取消旧 sseJob
+        // 并启动新 job；若同时执行会互相取消、反复重建隧道，导致两侧都连不上。
+        // 用原子 add 占位：已在回退中则直接返回；回退完成后在 finally 释放，允许后续再次回退。
+        if (!fallbackInFlight.add(server.id)) return
+        try {
+            val state = connections[server.id] ?: return
+            val directConn = state.directConn ?: return
+            if (state.conn === directConn) return
+            val job = startSseConnection(state.config, directConn, preload = false)
+            val replacement = state.copy(conn = directConn, sseJob = job, isConnected = false, pushJob = null)
+            if (!connections.replace(server.id, state, replacement)) {
+                job.cancel()
+                return
+            }
+            state.sseJob.cancel()
+            reconciliationJobs.remove(server.id)?.cancel()
+            _connectedServerIds.update { it - server.id }
+            _connectingServerIds.update { it + server.id }
+            connectStartedAt[server.id] = SystemClock.elapsedRealtime()
+            _serverMetrics.update { it - server.id }
+            job.start()
+            if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct opencode")
+        } finally {
+            fallbackInFlight.remove(server.id)
         }
-        state.sseJob.cancel()
-        reconciliationJobs.remove(server.id)?.cancel()
-        _connectedServerIds.update { it - server.id }
-        _connectingServerIds.update { it + server.id }
-        connectStartedAt[server.id] = SystemClock.elapsedRealtime()
-        _serverMetrics.update { it - server.id }
-        job.start()
-        if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct opencode")
     }
 
     private fun handleBackendPushEvent(server: ServerConfig, ev: PushSessionEvent) {
@@ -1705,7 +1747,7 @@ class StarBurstConnectionService : Service() {
             this,
             notifId,
             replyIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         return NotificationCompat.Action.Builder(
             android.R.drawable.ic_menu_send,
