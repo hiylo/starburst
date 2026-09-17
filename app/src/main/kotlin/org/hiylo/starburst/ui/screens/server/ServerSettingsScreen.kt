@@ -41,16 +41,25 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
@@ -75,6 +84,9 @@ fun ServerSettingsScreen(
 ) {
     val isAmoled = isAmoledTheme()
     val uiState by viewModel.uiState.collectAsState()
+    val systemPrompt by viewModel.systemPrompt.collectAsState()
+    val contextLimit by viewModel.contextLimit.collectAsState()
+    var showSysPromptDialog by remember { mutableStateOf(false) }
     val backendAvailable = uiState.backendAvailable
     val isInstallingBackend = uiState.isInstallingBackend
     // 后端「正常可用」（健康 + 版本达标）时展示依赖后端的入口（Rules/Tokens/Audit）。
@@ -263,6 +275,47 @@ fun ServerSettingsScreen(
                 }
             }
 
+            // 系统提示词与上下文限制：本地每服务器配置，无后端依赖。
+            Card(
+                shape = AppCardShape,
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+                ),
+                border = appAmoledBorder(0.65f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showSysPromptDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Tune, contentDescription = null)
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(horizontal = 12.dp)
+                    ) {
+                        Text(
+                            text = stringResource(R.string.server_settings_sysprompt),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = stringResource(R.string.server_settings_sysprompt_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                        )
+                    }
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+
             // 自动化规则：强依赖后端，仅在「后端正常可用」时显示。
             if (backendReady) {
                 Card(
@@ -405,6 +458,68 @@ fun ServerSettingsScreen(
             )
         }
     }
+
+    if (showSysPromptDialog) {
+        ServerSysPromptDialog(
+            initialPrompt = systemPrompt,
+            initialContextLimit = contextLimit,
+            onDismiss = { showSysPromptDialog = false },
+            onSave = { prompt, limitText ->
+                viewModel.saveSystemPrompt(prompt)
+                viewModel.saveContextLimit(limitText)
+                showSysPromptDialog = false
+            },
+        )
+    }
+}
+
+/**
+ * 系统提示词与上下文限制编辑对话框：本地每服务器配置，保存到 SettingsRepository。
+ */
+@Composable
+private fun ServerSysPromptDialog(
+    initialPrompt: String,
+    initialContextLimit: String,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit,
+) {
+    var prompt by remember { mutableStateOf(initialPrompt) }
+    var contextLimit by remember { mutableStateOf(initialContextLimit) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.server_settings_sysprompt_dialog_title)) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it },
+                    label = { Text(stringResource(R.string.server_settings_sysprompt_label)) },
+                    placeholder = { Text(stringResource(R.string.server_settings_sysprompt_hint)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                )
+                OutlinedTextField(
+                    value = contextLimit,
+                    onValueChange = { contextLimit = it.filter(Char::isDigit).take(9) },
+                    label = { Text(stringResource(R.string.server_settings_context_limit_label)) },
+                    placeholder = { Text(stringResource(R.string.server_settings_context_limit_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(prompt, contextLimit) }) {
+                Text(stringResource(R.string.sysprompt_save))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(stringResource(R.string.cancel))
+            }
+        },
+    )
 }
 
 /**

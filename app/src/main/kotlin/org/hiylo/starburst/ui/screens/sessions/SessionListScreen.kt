@@ -75,6 +75,7 @@ import androidx.activity.compose.BackHandler
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.FileNode
+import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -318,6 +319,8 @@ fun SessionListScreen(
     // Project picker dialog state
     var showOpenProject by remember { mutableStateOf(false) }
     var showQuickNewSession by remember { mutableStateOf(false) }
+    var showSessionTemplates by remember { mutableStateOf(false) }
+    val sessionTemplates by viewModel.sessionTemplates.collectAsState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var collapsedProjects by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -1026,11 +1029,28 @@ fun SessionListScreen(
                 showQuickNewSession = false
                 viewModel.createNewSession(directory = directory)
             },
+            onOpenTemplates = { showSessionTemplates = true },
             onBrowse = {
                 showQuickNewSession = false
                 showOpenProject = true
             },
             onDismiss = { showQuickNewSession = false }
+        )
+    }
+
+    // Session templates management dialog
+    if (showSessionTemplates) {
+        SessionTemplatesDialog(
+            templates = sessionTemplates,
+            onCreate = { template ->
+                showSessionTemplates = false
+                showQuickNewSession = false
+                viewModel.createSessionFromTemplate(template)
+            },
+            onSave = viewModel::saveSessionTemplate,
+            onDelete = viewModel::deleteSessionTemplate,
+            onMove = viewModel::moveSessionTemplate,
+            onDismiss = { showSessionTemplates = false },
         )
     }
 
@@ -2055,6 +2075,7 @@ private fun NewSessionQuickDialog(
     sessions: List<SessionItem>,
     limit: Int,
     onSelectDirectory: (String) -> Unit,
+    onOpenTemplates: () -> Unit,
     onBrowse: () -> Unit,
     onDismiss: () -> Unit
 ) {
@@ -2155,6 +2176,292 @@ private fun NewSessionQuickDialog(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+
+                // "Session templates..." row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { onOpenTemplates() }
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Icon(
+                        Icons.Default.BookmarkBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    )
+                    Text(
+                        text = stringResource(R.string.sessions_session_templates),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** 会话模板管理弹窗：一键新建 + 新增/编辑/删除/排序。 */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SessionTemplatesDialog(
+    templates: List<SettingsRepository.SessionTemplate>,
+    onCreate: (SettingsRepository.SessionTemplate) -> Unit,
+    onSave: (SettingsRepository.SessionTemplate) -> Unit,
+    onDelete: (String) -> Unit,
+    onMove: (String, Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var name by remember { mutableStateOf("") }
+    var directory by remember { mutableStateOf("") }
+    var systemPrompt by remember { mutableStateOf("") }
+    var modelProviderId by remember { mutableStateOf("") }
+    var modelId by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var showBlankError by remember { mutableStateOf(false) }
+
+    fun clearForm() {
+        editingId = null
+        name = ""
+        directory = ""
+        systemPrompt = ""
+        modelProviderId = ""
+        modelId = ""
+        prompt = ""
+        showBlankError = false
+    }
+
+    AppDialog(
+        onDismissRequest = onDismiss,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 20.dp)
+                .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.session_template_title),
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.padding(horizontal = 24.dp),
+            )
+            if (templates.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.session_template_empty),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 220.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    templates.forEachIndexed { index, template ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { onCreate(template) }
+                                .padding(horizontal = 8.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = template.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                val summary = buildString {
+                                    if (template.directory.isNotBlank()) append(template.directory)
+                                    val model = listOf(template.modelProviderId, template.modelId)
+                                        .filter(String::isNotBlank)
+                                        .joinToString(":")
+                                    if (model.isNotBlank()) {
+                                        if (isNotEmpty()) append("  ·  ")
+                                        append(model)
+                                    }
+                                }
+                                if (summary.isNotBlank()) {
+                                    Text(
+                                        text = summary,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
+                                }
+                            }
+                            if (index > 0) {
+                                IconButton(onClick = { onMove(template.id, -1) }, modifier = Modifier.size(26.dp)) {
+                                    Icon(
+                                        Icons.Default.ArrowUpward,
+                                        contentDescription = stringResource(R.string.template_move_up),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (index < templates.lastIndex) {
+                                IconButton(onClick = { onMove(template.id, 1) }, modifier = Modifier.size(26.dp)) {
+                                    Icon(
+                                        Icons.Default.ArrowDownward,
+                                        contentDescription = stringResource(R.string.template_move_down),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    editingId = template.id
+                                    name = template.name
+                                    directory = template.directory
+                                    systemPrompt = template.systemPrompt
+                                    modelProviderId = template.modelProviderId
+                                    modelId = template.modelId
+                                    prompt = template.prompt
+                                    showBlankError = false
+                                },
+                                modifier = Modifier.size(26.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.session_template_edit),
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { onDelete(template.id) }, modifier = Modifier.size(26.dp)) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.session_template_delete),
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            HorizontalDivider(modifier = Modifier.padding(horizontal = 24.dp))
+
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it; showBlankError = false },
+                label = { Text(stringResource(R.string.session_template_name_label)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            OutlinedTextField(
+                value = directory,
+                onValueChange = { directory = it; showBlankError = false },
+                label = { Text(stringResource(R.string.session_template_directory_label)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            OutlinedTextField(
+                value = systemPrompt,
+                onValueChange = { systemPrompt = it },
+                label = { Text(stringResource(R.string.session_template_system_prompt_label)) },
+                minLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    value = modelProviderId,
+                    onValueChange = { modelProviderId = it },
+                    label = { Text(stringResource(R.string.session_template_model_provider_label)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = modelId,
+                    onValueChange = { modelId = it },
+                    label = { Text(stringResource(R.string.session_template_model_id_label)) },
+                    singleLine = true,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = { prompt = it },
+                label = { Text(stringResource(R.string.session_template_prompt_label)) },
+                minLines = 2,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+            )
+            if (showBlankError) {
+                Text(
+                    text = stringResource(R.string.session_template_save_failed),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AppSecondaryButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
+                Spacer(Modifier.width(8.dp))
+                if (editingId != null) {
+                    AppSecondaryButton(onClick = ::clearForm) { Text(stringResource(R.string.cancel)) }
+                    Spacer(Modifier.width(8.dp))
+                }
+                AppPrimaryButton(
+                    onClick = {
+                        val trimmedName = name.trim()
+                        val trimmedDir = directory.trim()
+                        if (trimmedName.isEmpty() || trimmedDir.isEmpty()) {
+                            showBlankError = true
+                        } else {
+                            onSave(
+                                SettingsRepository.SessionTemplate(
+                                    id = editingId.orEmpty(),
+                                    name = trimmedName,
+                                    directory = trimmedDir,
+                                    systemPrompt = systemPrompt,
+                                    modelProviderId = modelProviderId.trim(),
+                                    modelId = modelId.trim(),
+                                    prompt = prompt,
+                                ),
+                            )
+                            clearForm()
+                        }
+                    },
+                    enabled = name.isNotBlank() && directory.isNotBlank(),
+                ) {
+                    Text(stringResource(if (editingId != null) R.string.session_template_save else R.string.session_template_add))
                 }
             }
         }

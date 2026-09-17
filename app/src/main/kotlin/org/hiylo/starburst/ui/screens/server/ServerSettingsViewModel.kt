@@ -170,6 +170,14 @@ class ServerSettingsViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ServerSettingsUiState(serverName = serverName, isLoading = true))
     val uiState: StateFlow<ServerSettingsUiState> = _uiState.asStateFlow()
 
+    /** 每服务器自定义系统提示词（当前值，供对话框编辑）。 */
+    private val _systemPrompt = MutableStateFlow("")
+    val systemPrompt: StateFlow<String> = _systemPrompt.asStateFlow()
+
+    /** 每服务器上下文窗口覆盖值的文本表示（空串表示未设置）。 */
+    private val _contextLimit = MutableStateFlow("")
+    val contextLimit: StateFlow<String> = _contextLimit.asStateFlow()
+
     /** 后端是否「正常可用」（健康 + 版本达标）。后端相关功能入口的显隐统一使用该判定。 */
     val isBackendReady: Boolean
         get() = BackendGate.isReady(_uiState.value.backendAvailable, _uiState.value.backendVersion)
@@ -179,6 +187,16 @@ class ServerSettingsViewModel @Inject constructor(
             settingsRepository.hiddenModels(serverId).collect { hidden ->
                 _hiddenModels.value = hidden
                 rebuildUi()
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.systemPrompt(serverId).collect { prompt ->
+                _systemPrompt.value = prompt
+            }
+        }
+        viewModelScope.launch {
+            settingsRepository.contextLimit(serverId).collect { limit ->
+                _contextLimit.value = if (limit > 0) limit.toString() else ""
             }
         }
         loadProviders()
@@ -626,6 +644,17 @@ class ServerSettingsViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setModelVisibility(serverId, providerId, modelId, visible)
         }
+    }
+
+    /** 保存每服务器自定义系统提示词（空白时清除）。 */
+    fun saveSystemPrompt(prompt: String) {
+        viewModelScope.launch { settingsRepository.setSystemPrompt(serverId, prompt) }
+    }
+
+    /** 保存每服务器上下文窗口覆盖值（非法或非正值时清除）。 */
+    fun saveContextLimit(limitText: String) {
+        val limit = limitText.trim().toIntOrNull() ?: 0
+        viewModelScope.launch { settingsRepository.setContextLimit(serverId, limit) }
     }
 
     private fun rebuildUi() {

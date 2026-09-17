@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Session timeline (agent decision-process visualization) -->
+    <string name="menu_session_timeline">Session timeline</string>
+    <string name="timeline_title">Session timeline</string>
+    <string name="timeline_reconstructed_note">Reconstructed from current in-memory state (best effort)</string>
+    <string name="timeline_empty">No timeline events available for this session</string>
+
+    <!-- Timeline entry status -->
+    <string name="timeline_status_running">running</string>
+    <string name="timeline_status_completed">completed</string>
+    <string name="timeline_status_failed">failed</string>
+    <string name="timeline_status_pending">awaiting</string>
+    <string name="timeline_status_recorded">recorded</string>
+
+    <!-- Timeline todo snapshot -->
+    <string name="timeline_todo_title">Todo progress</string>
+    <string name="timeline_todo_progress">%1$d/%2$d completed</string>
+</resources>

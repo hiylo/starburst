@@ -97,6 +97,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
          private val LLM_PROVIDER_BASE_URL_KEY = stringPreferencesKey("llm_provider_base_url")
          private val LLM_PROVIDER_MODEL_KEY = stringPreferencesKey("llm_provider_model")
          private val CUSTOM_COMMANDS_KEY = stringPreferencesKey("custom_commands")
+         private val PROMPT_TEMPLATES_KEY = stringPreferencesKey("prompt_templates")
 
         /** SharedPreferences name used for synchronous locale reads in attachBaseContext. */
         private const val LOCALE_PREFS = "locale_prefs"
@@ -107,8 +108,11 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         private const val SERVER_FAVORITE_SESSIONS_PREFIX = "server_favorite_sessions_"
         private const val SERVER_SESSION_CATEGORY_PREFIX = "server_session_category_"
         private const val SERVER_PINNED_IDS_PREFIX = "server_pinned_ids_"
-        private const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
-        private const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
+         private const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
+         private const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
+         private const val SERVER_SESSION_TEMPLATES_PREFIX = "server_session_templates_"
+         private const val SERVER_SYSTEM_PROMPT_PREFIX = "server_system_prompt_"
+         private const val SERVER_CONTEXT_LIMIT_PREFIX = "server_context_limit_"
 
         internal fun dynamicColorEnabled(preferences: Preferences): Boolean =
             preferences[DYNAMIC_COLOR_KEY] ?: DEFAULT_DYNAMIC_COLOR
@@ -146,6 +150,15 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
 
     private fun serverSavedPathsKey(serverId: String) =
         stringPreferencesKey(SERVER_SAVED_PATHS_PREFIX + serverId)
+
+    private fun serverSessionTemplatesKey(serverId: String) =
+        stringPreferencesKey(SERVER_SESSION_TEMPLATES_PREFIX + serverId)
+
+    private fun serverSystemPromptKey(serverId: String) =
+        stringPreferencesKey(SERVER_SYSTEM_PROMPT_PREFIX + serverId)
+
+    private fun serverContextLimitKey(serverId: String) =
+        intPreferencesKey(SERVER_CONTEXT_LIMIT_PREFIX + serverId)
 
     val sessionCategories: Flow<List<SessionCategory>> = dataStore.data.map { preferences ->
         preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
@@ -547,6 +560,129 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     private fun decodeCustomCommands(preferences: Preferences): List<CustomCommand> {
         val raw = preferences[CUSTOM_COMMANDS_KEY] ?: return emptyList()
         return runCatching { Json.decodeFromString<List<CustomCommand>>(raw) }.getOrDefault(emptyList())
+    }
+
+    /** 用户自定义的命名 Prompt 模板（全局共享，跨服务器复用）。 */
+    @kotlinx.serialization.Serializable
+    data class PromptTemplate(
+        val id: String,
+        val name: String,
+        val prompt: String,
+    )
+
+    /** 可复用的「新会话」预设模板：目录 + 系统提示词 + 模型 + Prompt 模板（每服务器独立）。 */
+    @kotlinx.serialization.Serializable
+    data class SessionTemplate(
+        val id: String,
+        val name: String,
+        val directory: String = "",
+        val systemPrompt: String = "",
+        val modelProviderId: String = "",
+        val modelId: String = "",
+        val prompt: String = "",
+    )
+
+    val promptTemplates: Flow<List<PromptTemplate>> = dataStore.data.map { preferences ->
+        decodePromptTemplates(preferences)
+    }
+
+    /** 新增或更新一个 Prompt 模板，id 为空时生成新 id；返回保存后的模板。 */
+    suspend fun savePromptTemplate(id: String?, name: String, prompt: String): PromptTemplate {
+        val trimmedName = name.trim()
+        val target = PromptTemplate(
+            id = id?.takeIf(String::isNotBlank) ?: java.util.UUID.randomUUID().toString(),
+            name = trimmedName,
+            prompt = prompt,
+        )
+        dataStore.edit { preferences ->
+            val current = decodePromptTemplates(preferences).toMutableList()
+            val index = current.indexOfFirst { it.id == target.id }
+            if (index >= 0) current[index] = target else current.add(target)
+            preferences[PROMPT_TEMPLATES_KEY] = json.encodeToString(current)
+        }
+        return target
+    }
+
+    suspend fun deletePromptTemplate(id: String) {
+        dataStore.edit { preferences ->
+            val current = decodePromptTemplates(preferences).filterNot { it.id == id }
+            preferences[PROMPT_TEMPLATES_KEY] = json.encodeToString(current)
+        }
+    }
+
+    /** 上移/下移一个 Prompt 模板（在用户模板列表内交换相邻项）。 */
+    suspend fun movePromptTemplate(id: String, offset: Int) {
+        if (offset == 0) return
+        dataStore.edit { preferences ->
+            val current = decodePromptTemplates(preferences).toMutableList()
+            val from = current.indexOfFirst { it.id == id }
+            if (from < 0) return@edit
+            val to = (from + offset).coerceIn(0, current.lastIndex)
+            if (from == to) return@edit
+            val tmp = current[from]
+            current[from] = current[to]
+            current[to] = tmp
+            preferences[PROMPT_TEMPLATES_KEY] = json.encodeToString(current)
+        }
+    }
+
+    fun sessionTemplates(serverId: String): Flow<List<SessionTemplate>> = dataStore.data.map { preferences ->
+        decodeSessionTemplates(preferences, serverSessionTemplatesKey(serverId))
+    }
+
+    /** 新增或更新一个会话模板，id 为空时生成新 id；返回保存后的模板。 */
+    suspend fun saveSessionTemplate(serverId: String, template: SessionTemplate): SessionTemplate {
+        val target = if (template.id.isBlank()) {
+            template.copy(id = java.util.UUID.randomUUID().toString())
+        } else {
+            template
+        }
+        dataStore.edit { preferences ->
+            val key = serverSessionTemplatesKey(serverId)
+            val current = decodeSessionTemplates(preferences, key).toMutableList()
+            val index = current.indexOfFirst { it.id == target.id }
+            if (index >= 0) current[index] = target else current.add(target)
+            preferences[key] = json.encodeToString(current)
+        }
+        return target
+    }
+
+    suspend fun deleteSessionTemplate(serverId: String, id: String) {
+        dataStore.edit { preferences ->
+            val key = serverSessionTemplatesKey(serverId)
+            val current = decodeSessionTemplates(preferences, key).filterNot { it.id == id }
+            preferences[key] = json.encodeToString(current)
+        }
+    }
+
+    /** 上移/下移一个会话模板（在模板列表内交换相邻项）。 */
+    suspend fun moveSessionTemplate(serverId: String, id: String, offset: Int) {
+        if (offset == 0) return
+        dataStore.edit { preferences ->
+            val key = serverSessionTemplatesKey(serverId)
+            val current = decodeSessionTemplates(preferences, key).toMutableList()
+            val from = current.indexOfFirst { it.id == id }
+            if (from < 0) return@edit
+            val to = (from + offset).coerceIn(0, current.lastIndex)
+            if (from == to) return@edit
+            val tmp = current[from]
+            current[from] = current[to]
+            current[to] = tmp
+            preferences[key] = json.encodeToString(current)
+        }
+    }
+
+    private fun decodePromptTemplates(preferences: Preferences): List<PromptTemplate> {
+        val raw = preferences[PROMPT_TEMPLATES_KEY] ?: return emptyList()
+        return runCatching { json.decodeFromString<List<PromptTemplate>>(raw) }.getOrDefault(emptyList())
+    }
+
+    private fun decodeSessionTemplates(
+        preferences: Preferences,
+        key: Preferences.Key<String>,
+    ): List<SessionTemplate> {
+        val raw = preferences[key] ?: return emptyList()
+        return runCatching { json.decodeFromString<List<SessionTemplate>>(raw) }.getOrDefault(emptyList())
     }
 
     /**
@@ -963,6 +1099,59 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
+    /**
+     * 用户为某服务器配置的自定义系统提示词（空串表示未设置）。
+     *
+     * @param serverId 服务器 ID
+     * @return 该服务器的系统提示词（未设置时为空串）
+     */
+    fun systemPrompt(serverId: String): Flow<String> = dataStore.data.map { preferences ->
+        preferences[serverSystemPromptKey(serverId)].orEmpty()
+    }
+
+    /**
+     * 保存（或清除）某服务器的自定义系统提示词。
+     *
+     * @param serverId 服务器 ID
+     * @param prompt 新的系统提示词；空白时清除
+     */
+    suspend fun setSystemPrompt(serverId: String, prompt: String) {
+        val trimmed = prompt.trim()
+        dataStore.edit { preferences ->
+            if (trimmed.isEmpty()) {
+                preferences.remove(serverSystemPromptKey(serverId))
+            } else {
+                preferences[serverSystemPromptKey(serverId)] = trimmed
+            }
+        }
+    }
+
+    /**
+     * 用户为某服务器覆盖的上下文窗口大小（token 数，0 表示未覆盖）。
+     *
+     * @param serverId 服务器 ID
+     * @return 覆盖的上下文窗口 token 数（未设置时为 0）
+     */
+    fun contextLimit(serverId: String): Flow<Int> = dataStore.data.map { preferences ->
+        preferences[serverContextLimitKey(serverId)] ?: 0
+    }
+
+    /**
+     * 保存（或清除）某服务器的上下文窗口覆盖值。
+     *
+     * @param serverId 服务器 ID
+     * @param limit 覆盖的上下文窗口 token 数；小于等于 0 时清除
+     */
+    suspend fun setContextLimit(serverId: String, limit: Int) {
+        dataStore.edit { preferences ->
+            if (limit <= 0) {
+                preferences.remove(serverContextLimitKey(serverId))
+            } else {
+                preferences[serverContextLimitKey(serverId)] = limit
+            }
+        }
+    }
+
     suspend fun syncSettingsSnapshot(): SyncSettings = syncSettingsSnapshotFrom(dataStore.data.first())
 
     internal fun syncSettingsSnapshotFrom(preferences: Preferences): SyncSettings {
@@ -1087,6 +1276,49 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         preferences[serverModelHiddenKey(serverId)] ?: emptySet()
     }
 
+    internal fun syncChatLineHeightFrom(preferences: Preferences): Float =
+        (preferences[LINE_HEIGHT_KEY] ?: 1f).coerceIn(1f, 2f)
+
+    internal fun syncPromptTemplatesFrom(preferences: Preferences): List<PromptTemplate> =
+        decodePromptTemplates(preferences)
+
+    internal fun syncCustomCommandsFrom(preferences: Preferences): List<CustomCommand> =
+        decodeCustomCommands(preferences)
+
+    internal fun syncLlmProviderFrom(preferences: Preferences): Pair<String, String> =
+        (preferences[LLM_PROVIDER_BASE_URL_KEY] ?: "") to (preferences[LLM_PROVIDER_MODEL_KEY] ?: "")
+
+    internal fun syncSavedPathsFrom(
+        preferences: Preferences,
+        serverIds: Collection<String>,
+    ): Map<String, List<String>> = serverIds.associateWith { serverId ->
+        preferences[serverSavedPathsKey(serverId)]
+            ?.lineSequence()
+            ?.filter(String::isNotBlank)
+            ?.distinct()
+            ?.toList()
+            .orEmpty()
+    }
+
+    internal fun syncSessionTemplatesFrom(
+        preferences: Preferences,
+        serverIds: Collection<String>,
+    ): Map<String, List<SessionTemplate>> = serverIds.associateWith { serverId ->
+        decodeSessionTemplates(preferences, serverSessionTemplatesKey(serverId))
+    }
+
+    internal fun syncRecentProjectsFrom(
+        preferences: Preferences,
+        serverIds: Collection<String>,
+    ): Map<String, List<String>> = serverIds.associateWith { serverId ->
+        preferences[serverRecentProjectsKey(serverId)]
+            ?.lineSequence()
+            ?.filter(String::isNotBlank)
+            ?.distinct()
+            ?.toList()
+            .orEmpty()
+    }
+
     suspend fun applySyncSessionCategoryAssignments(
         assignments: Map<String, Map<String, String>>,
         serverIdMapping: Map<String, String>,
@@ -1197,6 +1429,62 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
                 remapServerScopedKey(key, serverIdMapping)?.let { it to snapshot }
             }.toMap()
             preferences[FAVORITE_SESSION_SNAPSHOTS_KEY] = json.encodeToString(preservedLocalOnly + mapped)
+        }
+    }
+
+    internal fun applyChatLineHeightTo(preferences: MutablePreferences, value: Float) {
+        preferences[LINE_HEIGHT_KEY] = value.coerceIn(1f, 2f)
+    }
+
+    internal fun applyPromptTemplatesTo(preferences: MutablePreferences, templates: List<PromptTemplate>) {
+        preferences[PROMPT_TEMPLATES_KEY] = json.encodeToString(templates)
+    }
+
+    internal fun applyCustomCommandsTo(preferences: MutablePreferences, commands: List<CustomCommand>) {
+        preferences[CUSTOM_COMMANDS_KEY] = Json.encodeToString(commands)
+    }
+
+    internal fun applyLlmProviderTo(preferences: MutablePreferences, baseUrl: String, model: String) {
+        preferences[LLM_PROVIDER_BASE_URL_KEY] = baseUrl.trim()
+        preferences[LLM_PROVIDER_MODEL_KEY] = model.trim()
+    }
+
+    internal fun applySyncSavedPathsTo(
+        preferences: MutablePreferences,
+        savedPaths: Map<String, List<String>>,
+        serverIdMapping: Map<String, String>,
+    ) {
+        savedPaths.forEach { (remoteServerId, paths) ->
+            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
+            preferences[serverSavedPathsKey(localServerId)] = paths
+                .filter(String::isNotBlank)
+                .distinct()
+                .joinToString("\n")
+        }
+    }
+
+    internal fun applySyncSessionTemplatesTo(
+        preferences: MutablePreferences,
+        templates: Map<String, List<SessionTemplate>>,
+        serverIdMapping: Map<String, String>,
+    ) {
+        templates.forEach { (remoteServerId, list) ->
+            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
+            preferences[serverSessionTemplatesKey(localServerId)] = json.encodeToString(list)
+        }
+    }
+
+    internal fun applySyncRecentProjectsTo(
+        preferences: MutablePreferences,
+        projects: Map<String, List<String>>,
+        serverIdMapping: Map<String, String>,
+    ) {
+        projects.forEach { (remoteServerId, paths) ->
+            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
+            preferences[serverRecentProjectsKey(localServerId)] = paths
+                .filter(String::isNotBlank)
+                .distinct()
+                .joinToString("\n")
         }
     }
 

@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import org.hiylo.starburst.domain.model.*
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ProviderModel
+import org.hiylo.starburst.data.repository.SettingsRepository
 import java.util.Locale
 import java.text.SimpleDateFormat
 import kotlin.math.roundToInt
@@ -1129,58 +1130,50 @@ private fun SessionFileDiffContent(before: String, after: String) {
     }
 }
 
-/** 快捷模板：标题资源 + 预设 prompt。 */
-data class PromptTemplate(
-    val id: String,
+/** 内置快捷模板：标题资源 + 预设 prompt（不可编辑、不可删除，始终置顶）。 */
+private data class BuiltinPromptTemplate(
     val titleRes: Int,
     val promptRes: Int,
 )
 
-/** 预设的快捷模板列表。 */
-private val promptTemplates = listOf(
-    PromptTemplate(
-        id = "code_review",
-        titleRes = R.string.chat_template_code_review,
-        promptRes = R.string.chat_template_code_review_prompt,
-    ),
-    PromptTemplate(
-        id = "generate_tests",
-        titleRes = R.string.chat_template_generate_tests,
-        promptRes = R.string.chat_template_generate_tests_prompt,
-    ),
-    PromptTemplate(
-        id = "explain_code",
-        titleRes = R.string.chat_template_explain_code,
-        promptRes = R.string.chat_template_explain_code_prompt,
-    ),
-    PromptTemplate(
-        id = "fix_bug",
-        titleRes = R.string.chat_template_fix_bug,
-        promptRes = R.string.chat_template_fix_bug_prompt,
-    ),
-    PromptTemplate(
-        id = "continue_task",
-        titleRes = R.string.chat_template_continue_task,
-        promptRes = R.string.chat_template_continue_task_prompt,
-    ),
+/** 预设的内置快捷模板列表。 */
+private val builtinPromptTemplates = listOf(
+    BuiltinPromptTemplate(R.string.chat_template_code_review, R.string.chat_template_code_review_prompt),
+    BuiltinPromptTemplate(R.string.chat_template_generate_tests, R.string.chat_template_generate_tests_prompt),
+    BuiltinPromptTemplate(R.string.chat_template_explain_code, R.string.chat_template_explain_code_prompt),
+    BuiltinPromptTemplate(R.string.chat_template_fix_bug, R.string.chat_template_fix_bug_prompt),
+    BuiltinPromptTemplate(R.string.chat_template_continue_task, R.string.chat_template_continue_task_prompt),
 )
 
-/** 快捷模板选择弹窗。 */
+/** 快捷模板选择与管理弹窗（内置模板 + 用户自定义模板）。 */
 @Composable
 internal fun TemplatePickerDialog(
+    userTemplates: List<SettingsRepository.PromptTemplate>,
     onSelect: (String) -> Unit,
+    onAdd: (String, String) -> Boolean,
+    onEdit: (String, String, String) -> Unit,
+    onDelete: (String) -> Unit,
+    onMove: (String, Int) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
+    var name by remember { mutableStateOf("") }
+    var prompt by remember { mutableStateOf("") }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var showBlankError by remember { mutableStateOf(false) }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chat_template_title)) },
         text = {
             Column(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 340.dp)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                promptTemplates.forEach { template ->
+                builtinPromptTemplates.forEach { template ->
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1202,9 +1195,150 @@ internal fun TemplatePickerDialog(
                         )
                     }
                 }
+                if (userTemplates.isNotEmpty()) {
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                }
+                userTemplates.forEachIndexed { index, template ->
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = { onSelect(template.prompt) })
+                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp),
+                        ) {
+                            Text(
+                                text = template.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.weight(1f),
+                            )
+                            if (index > 0) {
+                                IconButton(onClick = { onMove(template.id, -1) }, modifier = Modifier.size(26.dp)) {
+                                    Icon(
+                                        Icons.Default.ArrowUpward,
+                                        contentDescription = stringResource(R.string.template_move_up),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (index < userTemplates.lastIndex) {
+                                IconButton(onClick = { onMove(template.id, 1) }, modifier = Modifier.size(26.dp)) {
+                                    Icon(
+                                        Icons.Default.ArrowDownward,
+                                        contentDescription = stringResource(R.string.template_move_down),
+                                        modifier = Modifier.size(14.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            IconButton(
+                                onClick = {
+                                    editingId = template.id
+                                    name = template.name
+                                    prompt = template.prompt
+                                    showBlankError = false
+                                },
+                                modifier = Modifier.size(26.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = stringResource(R.string.template_edit),
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                            IconButton(onClick = { onDelete(template.id) }, modifier = Modifier.size(26.dp)) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = stringResource(R.string.template_delete),
+                                    modifier = Modifier.size(14.dp),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                        Text(
+                            text = template.prompt.take(48) + "…",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; showBlankError = false },
+                    label = { Text(stringResource(R.string.template_name_label)) },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = prompt,
+                    onValueChange = { prompt = it; showBlankError = false },
+                    label = { Text(stringResource(R.string.template_prompt_label)) },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                if (showBlankError) {
+                    Text(
+                        text = stringResource(R.string.template_save_failed),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
             }
         },
         confirmButton = {
+            Row {
+                if (editingId != null) {
+                    TextButton(
+                        onClick = {
+                            editingId = null
+                            name = ""
+                            prompt = ""
+                            showBlankError = false
+                        },
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        if (editingId != null) {
+                            if (name.isBlank() || prompt.isBlank()) {
+                                showBlankError = true
+                            } else {
+                                onEdit(editingId!!, name, prompt)
+                                editingId = null
+                                name = ""
+                                prompt = ""
+                                showBlankError = false
+                            }
+                        } else {
+                            val added = onAdd(name, prompt)
+                            if (added) {
+                                name = ""
+                                prompt = ""
+                                showBlankError = false
+                            } else {
+                                showBlankError = true
+                            }
+                        }
+                    },
+                    enabled = name.isNotBlank() && prompt.isNotBlank(),
+                ) {
+                    Text(stringResource(if (editingId != null) R.string.template_save else R.string.template_add))
+                }
+            }
+        },
+        dismissButton = {
             TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
         },
     )

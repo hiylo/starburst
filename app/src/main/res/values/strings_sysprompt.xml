@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Context budget indicator -->
+    <string name="sysprompt_context_budget">%1$s / %2$s tokens</string>
+
+    <!-- Per-server system prompt &amp; context limit -->
+    <string name="server_settings_sysprompt">System prompt</string>
+    <string name="server_settings_sysprompt_desc">Custom instructions applied when starting a new session</string>
+    <string name="server_settings_sysprompt_dialog_title">System prompt &amp; context limit</string>
+    <string name="server_settings_sysprompt_label">System prompt</string>
+    <string name="server_settings_sysprompt_hint">Injected when sending the first message</string>
+    <string name="server_settings_context_limit_label">Context limit (tokens)</string>
+    <string name="server_settings_context_limit_hint">Override the context window when the model does not report one (default 32768)</string>
+    <string name="sysprompt_save">Save</string>
+</resources>

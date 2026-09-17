@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 会话时间线（agent 决策过程可视化） -->
+    <string name="menu_session_timeline">会话时间线</string>
+    <string name="timeline_title">会话时间线</string>
+    <string name="timeline_reconstructed_note">由当前内存状态重建（尽力而为）</string>
+    <string name="timeline_empty">该会话暂无时间线事件</string>
+
+    <!-- 时间线条目状态 -->
+    <string name="timeline_status_running">运行中</string>
+    <string name="timeline_status_completed">已完成</string>
+    <string name="timeline_status_failed">失败</string>
+    <string name="timeline_status_pending">待答复</string>
+    <string name="timeline_status_recorded">已记录</string>
+
+    <!-- 时间线 todo 快照 -->
+    <string name="timeline_todo_title">任务进度</string>
+    <string name="timeline_todo_progress">%1$d/%2$d 已完成</string>
+</resources>

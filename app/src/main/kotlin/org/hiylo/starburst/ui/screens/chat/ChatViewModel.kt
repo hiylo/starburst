@@ -111,6 +111,12 @@ private const val STREAM_THROTTLE_MS = 50L
 /** SSE 假死（心跳仍在但不再推消息）时，busy 期间通过 REST 拉取最新消息兜底的间隔。 */
 private const val BUSY_MESSAGE_POLL_MS = 10_000L
 
+/** 上下文预算估算的字符/token 折算比（约 4 字符折合 1 token）。 */
+private const val CHARS_PER_TOKEN = 4.0
+
+/** 当模型元数据与每服务器覆盖都缺失时使用的默认上下文窗口（token 数）。 */
+private const val DEFAULT_CONTEXT_WINDOW = 32768
+
 /** 后端流式 ASR 引擎可用性的进程级缓存（按 serverId）。避免每次打开会话都发一次探测请求。 */
 private val backendAsrAvailableCache = java.util.concurrent.ConcurrentHashMap<String, Pair<Boolean, Long>>()
 
@@ -176,6 +182,10 @@ data class ChatUiState(
     val contextWindow: Int = 0,
     /** Total tokens from the last assistant message with output > 0 (current context usage). */
     val lastContextTokens: Int = 0,
+    /** 基于消息文本长度的保守上下文 token 估算（约 4 字符/token）。 */
+    val estimatedContextTokens: Int = 0,
+    /** 解析后的有效上下文窗口（模型元数据 > 每服务器覆盖 > 默认 32k）。 */
+    val effectiveContextWindow: Int = 0,
     val contextUsage: ContextUsageDetails = ContextUsageDetails(),
     /** True while suggestions are being generated server-side. */
     val isGeneratingSuggestions: Boolean = false,
@@ -338,6 +348,27 @@ internal fun computeContextBreakdown(
     ).filter { it.tokens > 0 }
 }
 
+/**
+ * 基于当前会话消息文本长度做保守的 token 估算（约 4 字符/token）。
+ * 服务端未提供精确 token 计数时，供上下文预算指示器做轻量估算，
+ * 只统计文本/推理/快照等文本型 part，忽略工具调用等难以折算的部分。
+ */
+internal fun estimateContextTokens(messages: List<ChatMessage>): Int {
+    var chars = 0
+    for (msg in messages) {
+        for (part in msg.parts) {
+            when (part) {
+                is Part.Text -> chars += part.text.length
+                is Part.Reasoning -> chars += part.text.length
+                is Part.Snapshot -> chars += part.snapshot.length
+                is Part.StepStart -> chars += part.snapshot?.length ?: 0
+                else -> {}
+            }
+        }
+    }
+    return Math.ceil(chars / CHARS_PER_TOKEN).toInt()
+}
+
 internal fun sessionAcceptsPrompts(session: Session?): Boolean = session != null && session.parentId == null
 
 internal fun needsOlderHistoryForRevert(messageIds: Collection<String>, revertMessageId: String?): Boolean {
@@ -484,6 +515,8 @@ class ChatViewModel @Inject constructor(
     private val _modelNeedsDownload = MutableStateFlow(false)
     private val _modelDownloading = MutableStateFlow(false)
     private val _modelDownloadProgress = MutableStateFlow(0)
+    /** 每服务器覆盖的上下文窗口（token 数，0 表示未覆盖），来自 SettingsRepository。 */
+    private val _serverContextLimitOverride = MutableStateFlow(0)
     /** Whether the current project is a Git repository (Project.vcs == "git"). */
     private val _isGitRepository = MutableStateFlow(false)
     val isGitRepository: StateFlow<Boolean> = _isGitRepository
@@ -578,6 +611,11 @@ class ChatViewModel @Inject constructor(
         eventReducer.sessionDiffs.map { it[sessionId].orEmpty() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    /** 当前会话的最新 Todo 快照（agent 任务进度），用于「会话时间线」重建 todo 进度。 */
+    val sessionTodos: StateFlow<List<SseEvent.TodoUpdated.Todo>> =
+        eventReducer.todos.map { it[sessionId].orEmpty() }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     /** 用户自定义 Slash 命令。 */
     val customCommands: StateFlow<List<CustomSlashCommand>> =
         settingsRepository.customCommands.map { list ->
@@ -594,6 +632,33 @@ class ChatViewModel @Inject constructor(
 
     fun removeCustomCommand(name: String) {
         viewModelScope.launch { settingsRepository.removeCustomCommand(name) }
+    }
+
+    /** 用户自定义的命名 Prompt 模板（全局共享，内置模板由 UI 层以字符串资源提供）。 */
+    val promptTemplates: StateFlow<List<SettingsRepository.PromptTemplate>> =
+        settingsRepository.promptTemplates
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    fun addPromptTemplate(name: String, prompt: String): Boolean {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || prompt.isBlank()) return false
+        if (promptTemplates.value.any { it.name == trimmed }) return false
+        viewModelScope.launch { settingsRepository.savePromptTemplate(null, trimmed, prompt) }
+        return true
+    }
+
+    fun updatePromptTemplate(id: String, name: String, prompt: String) {
+        val trimmed = name.trim()
+        if (trimmed.isEmpty() || prompt.isBlank()) return
+        viewModelScope.launch { settingsRepository.savePromptTemplate(id, trimmed, prompt) }
+    }
+
+    fun deletePromptTemplate(id: String) {
+        viewModelScope.launch { settingsRepository.deletePromptTemplate(id) }
+    }
+
+    fun movePromptTemplate(id: String, offset: Int) {
+        viewModelScope.launch { settingsRepository.movePromptTemplate(id, offset) }
     }
 
     // ============ Settings (exposed for ChatScreen) ============
@@ -698,6 +763,7 @@ class ChatViewModel @Inject constructor(
         _modelNeedsDownload,
         _modelDownloading,
         _modelDownloadProgress,
+        _serverContextLimitOverride,
     ) { args ->
         @Suppress("UNCHECKED_CAST")
         val allSessions = args[0] as List<Session>
@@ -732,6 +798,7 @@ class ChatViewModel @Inject constructor(
         val modelNeedsDownload = args[26] as Boolean
         val modelDownloading = args[27] as Boolean
         val modelDownloadProgress = args[28] as Int
+        val serverContextLimitOverride = args[29] as Int
         fun deliveryFor(messageId: String) = when (promptDeliveries[messageId]?.state) {
             PromptDeliveryState.PROMOTED -> MessageDelivery.PROMOTED
             else -> MessageDelivery.QUEUED
@@ -876,6 +943,12 @@ class ChatViewModel @Inject constructor(
         // Match the Web UI by preserving the variant order supplied by the server.
         val availableVariants = currentModel?.variants?.keys?.toList() ?: emptyList()
 
+        // 上下文预算：估算当前会话 token 用量与有效上下文窗口（模型元数据 > 每服务器覆盖 > 默认 32k）。
+        val estimatedContextTokens = estimateContextTokens(chatMessages)
+        val effectiveContextWindow = currentModel?.limit?.context?.takeIf { it > 0 }
+            ?: serverContextLimitOverride.takeIf { it > 0 }
+            ?: DEFAULT_CONTEXT_WINDOW
+
         ChatUiState(
             sessionTitle = session?.title ?: "Chat",
             sessionLoaded = session != null,
@@ -907,6 +980,8 @@ class ChatViewModel @Inject constructor(
             shareUrl = session?.share?.url,
             contextWindow = currentModel?.limit?.context ?: 0,
             lastContextTokens = lastContextTokens,
+            estimatedContextTokens = estimatedContextTokens,
+            effectiveContextWindow = effectiveContextWindow,
             contextUsage = contextUsage,
             suggestions = suggestions,
             suggestionsSource = suggestionsSource,
@@ -990,6 +1065,12 @@ class ChatViewModel @Inject constructor(
             settingsRepository.hiddenModels(serverId).collect { hidden ->
                 _hiddenModels.value = hidden
                 applyProviderFilter()
+            }
+        }
+
+        viewModelScope.launch {
+            settingsRepository.contextLimit(serverId).collect { limit ->
+                _serverContextLimitOverride.value = limit
             }
         }
 
@@ -1712,6 +1793,8 @@ class ChatViewModel @Inject constructor(
         } else {
             null
         }
+        // 仅在会话首条用户消息注入自定义系统提示词（后续消息沿用服务端已持久化的 system）。
+        val injectSystemPrompt = uiState.value.messages.none { it.isUser }
         val messageId = MessageIdGenerator.next()
         val draftSnapshot = Draft(
             text = _draftText.value,
@@ -1735,6 +1818,11 @@ class ChatViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
+                val systemPrompt = if (injectSystemPrompt) {
+                    settingsRepository.systemPrompt(serverId).first().takeIf { it.isNotBlank() }
+                } else {
+                    null
+                }
                 api.promptAsync(
                     conn = conn,
                     sessionId = sessionId,
@@ -1743,7 +1831,8 @@ class ChatViewModel @Inject constructor(
                     model = model,
                     agent = uiState.value.selectedAgent,
                     variant = _selectedVariant.value,
-                    directory = sessionDirectory
+                    directory = sessionDirectory,
+                    system = systemPrompt
                 )
                 eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
                 // 新消息覆盖之前的待决提问：服务端驳回 + 本地移除，避免重进会话又出现。

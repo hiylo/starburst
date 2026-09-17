@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 上下文预算指示器 -->
+    <string name="sysprompt_context_budget">%1$s / %2$s tokens</string>
+
+    <!-- 每服务器系统提示词与上下文限制 -->
+    <string name="server_settings_sysprompt">系统提示词</string>
+    <string name="server_settings_sysprompt_desc">新建会话时注入的自定义指令</string>
+    <string name="server_settings_sysprompt_dialog_title">系统提示词与上下文限制</string>
+    <string name="server_settings_sysprompt_label">系统提示词</string>
+    <string name="server_settings_sysprompt_hint">发送首条消息时注入的指令</string>
+    <string name="server_settings_context_limit_label">上下文限制（tokens）</string>
+    <string name="server_settings_context_limit_hint">模型未上报上下文窗口时使用的覆盖值（默认 32768）</string>
+    <string name="sysprompt_save">保存</string>
+</resources>

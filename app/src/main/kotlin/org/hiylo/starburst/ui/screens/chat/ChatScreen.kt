@@ -319,6 +319,7 @@ fun ChatScreen(
     var showCustomCommandsDialog by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showSessionDiffDialog by remember { mutableStateOf(false) }
+    var showTimelineDialog by remember { mutableStateOf(false) }
     var showAttachmentOptions by remember { mutableStateOf(false) }
     var showTemplatePicker by remember { mutableStateOf(false) }
     var showSubagentContextDetails by remember { mutableStateOf(false) }
@@ -338,6 +339,7 @@ fun ChatScreen(
     // 麦克风按钮：端侧 MNN 模型已下载，或后端流式识别引擎可用（服务端回退）。
     val backendAsrAvailable by viewModel.backendAsrAvailable.collectAsState()
     val sessionDiffs by viewModel.sessionDiffs.collectAsState()
+    val sessionTodos by viewModel.sessionTodos.collectAsState()
     val voiceEnabled = remember { MnnAsr.modelDirectory(context) != null } || backendAsrAvailable
 
     // 录音开始前输入框里已有的文字。识别引擎返回的是「累积全文」而不是增量片段，
@@ -409,7 +411,7 @@ fun ChatScreen(
     val fileSearchResults by viewModel.fileSearchResults.collectAsState()
     val confirmedFilePaths by viewModel.confirmedFilePaths.collectAsState()
     val customCommands by viewModel.customCommands.collectAsState()
-
+    val promptTemplates by viewModel.promptTemplates.collectAsState()
     // Settings
     val chatFontSize by viewModel.chatFontSize.collectAsState()
     val chatLineHeight by viewModel.chatLineHeight.collectAsState()
@@ -1190,6 +1192,16 @@ fun ChatScreen(
                                 )
                             }
                             DropdownMenuItem(
+                                text = { Text(stringResource(R.string.menu_session_timeline)) },
+                                onClick = {
+                                    showMenu = false
+                                    showTimelineDialog = true
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Timeline, contentDescription = null)
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(stringResource(R.string.menu_new_session)) },
                                 onClick = {
                                     showMenu = false
@@ -1703,6 +1715,8 @@ fun ChatScreen(
                 },
                 contextWindow = uiState.contextWindow,
                 lastContextTokens = uiState.lastContextTokens,
+                estimatedContextTokens = uiState.estimatedContextTokens,
+                effectiveContextWindow = uiState.effectiveContextWindow,
                 contextUsage = uiState.contextUsage,
                 contextMessages = uiState.messages,
                 suggestions = uiState.suggestions,
@@ -2685,10 +2699,15 @@ fun ChatScreen(
 
     if (showTemplatePicker) {
         TemplatePickerDialog(
+            userTemplates = promptTemplates,
             onSelect = { template ->
                 showTemplatePicker = false
                 pendingTemplatePrompt = template
             },
+            onAdd = viewModel::addPromptTemplate,
+            onEdit = viewModel::updatePromptTemplate,
+            onDelete = viewModel::deletePromptTemplate,
+            onMove = viewModel::movePromptTemplate,
             onDismiss = { showTemplatePicker = false },
         )
     }
@@ -2752,6 +2771,20 @@ fun ChatScreen(
         SessionDiffDialog(
             diffs = sessionDiffs,
             onDismiss = { showSessionDiffDialog = false },
+        )
+    }
+
+    if (showTimelineDialog) {
+        SessionTimelineDialog(
+            entries = remember(uiState.messages, uiState.pendingInteractions, uiState.childSessions, sessionTodos) {
+                buildSessionTimeline(
+                    messages = uiState.messages,
+                    pendingInteractions = uiState.pendingInteractions,
+                    childSessions = uiState.childSessions,
+                    todos = sessionTodos,
+                )
+            },
+            onDismiss = { showTimelineDialog = false },
         )
     }
 
@@ -3261,6 +3294,8 @@ private fun ChatInputBar(
     onInputModeChange: (ChatInputMode) -> Unit = {},
     contextWindow: Int = 0,
     lastContextTokens: Int = 0,
+    estimatedContextTokens: Int = 0,
+    effectiveContextWindow: Int = 0,
     contextUsage: ContextUsageDetails = ContextUsageDetails(),
     contextMessages: List<ChatMessage> = emptyList(),
     suggestions: List<String> = emptyList(),
@@ -3494,6 +3529,17 @@ private fun ChatInputBar(
             contextPercentage >= 70 -> MaterialTheme.colorScheme.tertiary.copy(alpha = 0.7f)
             else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.75f)
         }
+        // 上下文预算指示器：基于文本长度的估算用量 vs 有效窗口，>80% 时告警色。
+        val budgetRatio = if (effectiveContextWindow > 0) {
+            estimatedContextTokens.toDouble() / effectiveContextWindow
+        } else {
+            0.0
+        }
+        val budgetColor = when {
+            budgetRatio >= 0.9 -> MaterialTheme.colorScheme.error
+            budgetRatio > 0.8 -> MaterialTheme.colorScheme.tertiary
+            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        }
         if (isBusy && retryStatus == null) {
             val lastRunningTool = if (isBusy) {
                 messages.asReversed().firstNotNullOfOrNull { message ->
@@ -3724,6 +3770,19 @@ private fun ChatInputBar(
                                     maxLines = 1,
                                 )
                             }
+                        }
+
+                        if (effectiveContextWindow > 0) {
+                            Text(
+                                text = stringResource(
+                                    R.string.sysprompt_context_budget,
+                                    formatTokenCount(estimatedContextTokens),
+                                    formatTokenCount(effectiveContextWindow),
+                                ),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = budgetColor,
+                                maxLines = 1,
+                            )
                         }
                     }
                 }

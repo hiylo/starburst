@@ -277,6 +277,47 @@ class SessionListViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.removeSavedPath(serverId, path) }
     }
 
+    val sessionTemplates: StateFlow<List<SettingsRepository.SessionTemplate>> =
+        settingsRepository.sessionTemplates(serverId).stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList(),
+        )
+
+    fun saveSessionTemplate(template: SettingsRepository.SessionTemplate) {
+        viewModelScope.launch { settingsRepository.saveSessionTemplate(serverId, template) }
+    }
+
+    fun deleteSessionTemplate(id: String) {
+        viewModelScope.launch { settingsRepository.deleteSessionTemplate(serverId, id) }
+    }
+
+    fun moveSessionTemplate(id: String, offset: Int) {
+        viewModelScope.launch { settingsRepository.moveSessionTemplate(serverId, id, offset) }
+    }
+
+    /** 一键按会话模板新建会话：应用目录与标题预设，随后跳转到新会话。 */
+    fun createSessionFromTemplate(template: SettingsRepository.SessionTemplate) {
+        viewModelScope.launch {
+            try {
+                val directory = template.directory.trim().takeIf(String::isNotBlank)
+                val session = api.createSession(
+                    conn,
+                    title = template.name.trim().takeIf(String::isNotBlank),
+                    directory = directory,
+                )
+                eventReducer.upsertSession(serverId, session)
+                directory?.let { settingsRepository.recordRecentProject(serverId, it) }
+                if (BuildConfig.DEBUG) Log.d(TAG, "Created session from template: ${session.id}")
+                _navigateToSession.tryEmit(session.id)
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e(TAG, "Failed to create session from template", e)
+                _error.value = e.message ?: "Failed to create session"
+            }
+        }
+    }
+
     private val sessionCategories: StateFlow<List<SessionCategory>> = settingsRepository.sessionCategories.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
