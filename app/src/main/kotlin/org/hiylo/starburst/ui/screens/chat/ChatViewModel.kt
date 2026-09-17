@@ -112,7 +112,10 @@ private const val STREAM_THROTTLE_MS = 50L
 private const val BUSY_MESSAGE_POLL_MS = 10_000L
 
 /** 上下文预算估算的字符/token 折算比（约 4 字符折合 1 token）。 */
-private const val CHARS_PER_TOKEN = 4.0
+private const val ASCII_CHARS_PER_TOKEN = 4.0
+
+/** 中文等 CJK 字符的粗略 token 密度（约 1.5 字符/token），比 ASCII 的 4 字符/token 更贴合中文场景。 */
+private const val CJK_CHARS_PER_TOKEN = 1.5
 
 /** 当模型元数据与每服务器覆盖都缺失时使用的默认上下文窗口（token 数）。 */
 private const val DEFAULT_CONTEXT_WINDOW = 32768
@@ -349,24 +352,37 @@ internal fun computeContextBreakdown(
 }
 
 /**
- * 基于当前会话消息文本长度做保守的 token 估算（约 4 字符/token）。
+ * 基于当前会话消息文本长度做保守的 token 估算：ASCII 约 4 字符/token，CJK 约 1.5 字符/token。
  * 服务端未提供精确 token 计数时，供上下文预算指示器做轻量估算，
  * 只统计文本/推理/快照等文本型 part，忽略工具调用等难以折算的部分。
  */
 internal fun estimateContextTokens(messages: List<ChatMessage>): Int {
-    var chars = 0
+    var asciiChars = 0
+    var cjkChars = 0
     for (msg in messages) {
         for (part in msg.parts) {
-            when (part) {
-                is Part.Text -> chars += part.text.length
-                is Part.Reasoning -> chars += part.text.length
-                is Part.Snapshot -> chars += part.snapshot.length
-                is Part.StepStart -> chars += part.snapshot?.length ?: 0
-                else -> {}
+            val text = when (part) {
+                is Part.Text -> part.text
+                is Part.Reasoning -> part.text
+                is Part.Snapshot -> part.snapshot
+                is Part.StepStart -> part.snapshot ?: ""
+                else -> ""
+            }
+            for (c in text) {
+                if (isCjk(c)) cjkChars++ else asciiChars++
             }
         }
     }
-    return Math.ceil(chars / CHARS_PER_TOKEN).toInt()
+    return Math.ceil(asciiChars / ASCII_CHARS_PER_TOKEN + cjkChars / CJK_CHARS_PER_TOKEN).toInt()
+}
+
+/** 粗略判定 CJK 字符（中日韩统一表意文字 + 假名 + 谚文），用于区分 token 密度。 */
+private fun isCjk(c: Char): Boolean {
+    val code = c.code
+    return code in 0x2E80..0x9FFF ||
+        code in 0xF900..0xFAFF ||
+        code in 0x3040..0x30FF ||
+        code in 0xAC00..0xD7AF
 }
 
 internal fun sessionAcceptsPrompts(session: Session?): Boolean = session != null && session.parentId == null

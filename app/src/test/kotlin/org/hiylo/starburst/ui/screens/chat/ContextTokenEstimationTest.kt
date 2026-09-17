@@ -33,12 +33,12 @@ class ContextTokenEstimationTest {
     }
 
     @Test
-    fun cjkAndAsciiAreCountedPerCharacter() {
+    fun cjkWeightsHigherThanAscii() {
         val ascii = estimateContextTokens(listOf(user("u-1", textPart("p-1", "u-1", "abcd"))))
         val cjk = estimateContextTokens(listOf(user("u-1", textPart("p-1", "u-1", "你好世界"))))
 
         assertEquals(1, ascii)
-        assertEquals(1, cjk)
+        assertEquals(3, cjk)
     }
 
     @Test
