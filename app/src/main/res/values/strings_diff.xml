@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- File diff -->
+    <string name="diff_show_changes">Show changes</string>
+    <string name="diff_loading">Computing diff…</string>
+    <string name="diff_no_changes">No changes</string>
+    <string name="diff_failed">Failed to compute diff</string>
+    <string name="diff_truncated">Diff is too large, showing the first %1$d lines</string>
+    <string name="diff_close">Close diff</string>
+</resources>

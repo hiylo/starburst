@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- In-editor AI actions -->
+    <string name="ai_action_title">AI</string>
+    <string name="ai_action_explain">Explain</string>
+    <string name="ai_action_refactor">Refactor</string>
+    <string name="ai_action_write_tests">Write tests</string>
+    <string name="ai_dialog_explain_title">Explain code</string>
+    <string name="ai_dialog_refactor_title">Refactor code</string>
+    <string name="ai_dialog_write_tests_title">Write tests</string>
+    <string name="ai_dialog_loading">Generating…</string>
+    <string name="ai_dialog_copy">Copy</string>
+    <string name="ai_dialog_apply">Apply</string>
+    <string name="ai_dialog_close">Close</string>
+    <string name="ai_no_model">No AI model is available. Configure an LLM provider or download the on-device model.</string>
+    <string name="ai_failed">AI action failed. Please try again.</string>
+</resources>

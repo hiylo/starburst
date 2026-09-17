@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- In-editor AI actions -->
+    <string name="ai_action_title">AI</string>
+    <string name="ai_action_explain">解释代码</string>
+    <string name="ai_action_refactor">重构代码</string>
+    <string name="ai_action_write_tests">编写测试</string>
+    <string name="ai_dialog_explain_title">解释代码</string>
+    <string name="ai_dialog_refactor_title">重构代码</string>
+    <string name="ai_dialog_write_tests_title">编写测试</string>
+    <string name="ai_dialog_loading">正在生成…</string>
+    <string name="ai_dialog_copy">复制</string>
+    <string name="ai_dialog_apply">应用</string>
+    <string name="ai_dialog_close">关闭</string>
+    <string name="ai_no_model">没有可用的 AI 模型。请配置 LLM 提供商或下载端侧模型。</string>
+    <string name="ai_failed">AI 操作失败，请重试。</string>
+</resources>

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- File diff -->
+    <string name="diff_show_changes">查看变更</string>
+    <string name="diff_loading">正在计算差异…</string>
+    <string name="diff_no_changes">无变更</string>
+    <string name="diff_failed">计算差异失败</string>
+    <string name="diff_truncated">差异过大，仅显示前 %1$d 行</string>
+    <string name="diff_close">关闭差异</string>
+</resources>

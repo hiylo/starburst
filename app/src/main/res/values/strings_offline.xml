@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- In-editor offline (on-device) code assist -->
+    <string name="offline_action_title">On-device</string>
+    <string name="offline_action_complete">Complete code</string>
+    <string name="offline_action_rewrite">Rewrite code</string>
+    <string name="offline_dialog_complete_title">Complete code (on-device)</string>
+    <string name="offline_dialog_rewrite_title">Rewrite code (on-device)</string>
+    <string name="offline_dialog_loading">Generating on-device…</string>
+    <string name="offline_model_unavailable">On-device model is unavailable. It loads automatically on first use; if it is not bundled, download it from Settings.</string>
+    <string name="offline_failed">On-device generation failed. Please try again.</string>
+</resources>

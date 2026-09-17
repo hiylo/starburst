@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,7 +36,10 @@ import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.automirrored.filled.WrapText
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Code
+import androidx.compose.material.icons.filled.CompareArrows
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
@@ -47,8 +51,11 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -78,11 +85,13 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -103,6 +112,9 @@ import org.hiylo.starburst.ui.screens.chat.buildSafeHighlightedAnnotatedString
 import org.hiylo.starburst.ui.screens.chat.horizontallyScrollableMarkdownTable
 import org.hiylo.starburst.ui.screens.chat.safeHighlightedCodeBlock
 import org.hiylo.starburst.ui.screens.chat.safeHighlightedCodeFence
+import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusError
+import org.hiylo.starburst.ui.theme.StatusWarning
 import dev.snipme.highlights.Highlights
 import dev.snipme.highlights.model.SyntaxThemes
 import org.intellij.markdown.IElementType
@@ -119,6 +131,10 @@ fun WorkspaceFilesScreen(
     val editing by viewModel.editing.collectAsState()
     val editContent by viewModel.editContent.collectAsState()
     val saveState by viewModel.saveState.collectAsState()
+    val diffVisible by viewModel.diffVisible.collectAsState()
+    val diffState by viewModel.diffState.collectAsState()
+    val aiState by viewModel.aiState.collectAsState()
+    val offlineState by viewModel.offlineState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val fileSavedMessage = stringResource(R.string.workspace_file_saved)
     val fileSaveFailedMessage = stringResource(R.string.workspace_file_save_failed)
@@ -139,7 +155,9 @@ fun WorkspaceFilesScreen(
         if (uri != null) viewModel.savePreview(uri)
     }
     val navigateBack = {
-        if (editing) {
+        if (diffVisible) {
+            viewModel.closeDiff()
+        } else if (editing) {
             viewModel.cancelEdit()
         } else if (!viewModel.navigateUp()) {
             onNavigateBack()
@@ -201,7 +219,7 @@ fun WorkspaceFilesScreen(
                 },
                 actions = {
                     val preview = state.preview
-                    if (!editing) {
+                    if (!editing && !diffVisible) {
                         if (isTextPreview) {
                             IconButton(onClick = { viewModel.setWordWrap(!wordWrap) }) {
                                 Icon(
@@ -231,6 +249,12 @@ fun WorkspaceFilesScreen(
                             }
                         }
                         if (isTextPreview) {
+                            IconButton(onClick = viewModel::showDiff) {
+                                Icon(
+                                    Icons.Default.CompareArrows,
+                                    contentDescription = stringResource(R.string.diff_show_changes),
+                                )
+                            }
                             IconButton(onClick = viewModel::startEdit) {
                                 Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.file_edit))
                             }
@@ -256,12 +280,24 @@ fun WorkspaceFilesScreen(
                         TextButton(onClick = viewModel::retry) { Text(stringResource(R.string.retry)) }
                     }
                 }
+                diffVisible -> WorkspaceDiffView(
+                    content = diffState.content,
+                    truncated = diffState.truncated,
+                    isLoading = diffState.isLoading,
+                    error = diffState.error,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 editing -> WorkspaceFileEditor(
-                    content = editContent.orEmpty(),
+                    value = editContent ?: TextFieldValue(""),
                     saving = saveState.status == FileSaveStatus.Saving,
-                    onContentChange = viewModel::updateEditContent,
+                    aiBusy = aiState.loading,
+                    offlineBusy = offlineState.loading,
+                    onValueChange = viewModel::updateEditContent,
                     onSave = viewModel::saveEdit,
                     onCancel = viewModel::cancelEdit,
+                    onShowDiff = viewModel::showDiff,
+                    onAiAction = viewModel::runAiAction,
+                    onOfflineAction = viewModel::runOfflineAction,
                     modifier = Modifier.fillMaxSize(),
                 )
                 state.preview != null -> WorkspaceFileContent(
@@ -309,6 +345,22 @@ fun WorkspaceFilesScreen(
                         }
                     }
                 }
+            }
+
+            if (aiState.action != null) {
+                AiResultDialog(
+                    state = aiState,
+                    onApply = viewModel::applyAiResult,
+                    onDismiss = viewModel::dismissAiResult,
+                )
+            }
+
+            if (offlineState.action != null) {
+                OfflineResultDialog(
+                    state = offlineState,
+                    onApply = viewModel::applyOfflineResult,
+                    onDismiss = viewModel::dismissOfflineResult,
+                )
             }
 
             if (state.isLoading) {
@@ -391,11 +443,16 @@ private fun WorkspaceFileContent(
 
 @Composable
 private fun WorkspaceFileEditor(
-    content: String,
+    value: TextFieldValue,
     saving: Boolean,
-    onContentChange: (String) -> Unit,
+    aiBusy: Boolean,
+    offlineBusy: Boolean,
+    onValueChange: (TextFieldValue) -> Unit,
     onSave: () -> Unit,
     onCancel: () -> Unit,
+    onShowDiff: () -> Unit,
+    onAiAction: (AiAction) -> Unit,
+    onOfflineAction: (OfflineAction) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(modifier = modifier) {
@@ -411,6 +468,72 @@ private fun WorkspaceFileEditor(
                 style = MaterialTheme.typography.titleSmall,
                 modifier = Modifier.weight(1f),
             )
+            var aiMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { aiMenuOpen = true },
+                    enabled = !saving && !aiBusy,
+                ) {
+                    Icon(
+                        Icons.Default.AutoAwesome,
+                        contentDescription = stringResource(R.string.ai_action_title),
+                    )
+                }
+                DropdownMenu(expanded = aiMenuOpen, onDismissRequest = { aiMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_action_explain)) },
+                        onClick = {
+                            aiMenuOpen = false
+                            onAiAction(AiAction.Explain)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_action_refactor)) },
+                        onClick = {
+                            aiMenuOpen = false
+                            onAiAction(AiAction.Refactor)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.ai_action_write_tests)) },
+                        onClick = {
+                            aiMenuOpen = false
+                            onAiAction(AiAction.WriteTests)
+                        },
+                    )
+                }
+            }
+            var offlineMenuOpen by remember { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { offlineMenuOpen = true },
+                    enabled = !saving && !offlineBusy,
+                ) {
+                    Icon(
+                        Icons.Default.CloudOff,
+                        contentDescription = stringResource(R.string.offline_action_title),
+                    )
+                }
+                DropdownMenu(expanded = offlineMenuOpen, onDismissRequest = { offlineMenuOpen = false }) {
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.offline_action_complete)) },
+                        onClick = {
+                            offlineMenuOpen = false
+                            onOfflineAction(OfflineAction.Complete)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.offline_action_rewrite)) },
+                        onClick = {
+                            offlineMenuOpen = false
+                            onOfflineAction(OfflineAction.Rewrite)
+                        },
+                    )
+                }
+            }
+            TextButton(onClick = onShowDiff, enabled = !saving) {
+                Text(stringResource(R.string.diff_show_changes))
+            }
             OutlinedButton(onClick = onCancel, enabled = !saving) {
                 Text(stringResource(R.string.file_cancel))
             }
@@ -428,13 +551,237 @@ private fun WorkspaceFileEditor(
             }
         }
         OutlinedTextField(
-            value = content,
-            onValueChange = onContentChange,
+            value = value,
+            onValueChange = onValueChange,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 12.dp, vertical = 8.dp),
             textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
         )
+    }
+}
+
+@Composable
+private fun AiResultDialog(
+    state: AiEditState,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val action = state.action ?: return
+    val clipboard = LocalClipboardManager.current
+    val result = state.result
+    val title = when (action) {
+        AiAction.Explain -> stringResource(R.string.ai_dialog_explain_title)
+        AiAction.Refactor -> stringResource(R.string.ai_dialog_refactor_title)
+        AiAction.WriteTests -> stringResource(R.string.ai_dialog_write_tests_title)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            when {
+                state.loading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .height(20.dp)
+                                .width(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(stringResource(R.string.ai_dialog_loading))
+                    }
+                }
+                state.error != null -> {
+                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                }
+                else -> {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Box(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState()),
+                        ) {
+                            Text(
+                                text = result.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (result != null && action != AiAction.Explain) {
+                TextButton(onClick = onApply) {
+                    Text(stringResource(R.string.ai_dialog_apply))
+                }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (result != null) {
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
+                        Text(stringResource(R.string.ai_dialog_copy))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.ai_dialog_close))
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun OfflineResultDialog(
+    state: OfflineEditState,
+    onApply: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    val action = state.action ?: return
+    val clipboard = LocalClipboardManager.current
+    val result = state.result
+    val title = when (action) {
+        OfflineAction.Complete -> stringResource(R.string.offline_dialog_complete_title)
+        OfflineAction.Rewrite -> stringResource(R.string.offline_dialog_rewrite_title)
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            when {
+                state.loading -> {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier
+                                .height(20.dp)
+                                .width(20.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Text(stringResource(R.string.offline_dialog_loading))
+                    }
+                }
+                state.error != null -> {
+                    Text(state.error, color = MaterialTheme.colorScheme.error)
+                }
+                else -> {
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Box(
+                            modifier = Modifier
+                                .verticalScroll(rememberScrollState())
+                                .horizontalScroll(rememberScrollState()),
+                        ) {
+                            Text(
+                                text = result.orEmpty(),
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            if (result != null) {
+                TextButton(onClick = onApply) {
+                    Text(stringResource(R.string.ai_dialog_apply))
+                }
+            }
+        },
+        dismissButton = {
+            Row {
+                if (result != null) {
+                    TextButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
+                        Text(stringResource(R.string.ai_dialog_copy))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.ai_dialog_close))
+                }
+            }
+        },
+    )
+}
+
+@Composable
+private fun WorkspaceDiffView(
+    content: String,
+    truncated: Boolean,
+    isLoading: Boolean,
+    error: String?,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .verticalScroll(rememberScrollState())
+            .horizontalScroll(rememberScrollState())
+            .padding(12.dp),
+    ) {
+        when {
+            isLoading -> {
+                Text(
+                    text = stringResource(R.string.diff_loading),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            error != null -> {
+                Text(
+                    text = stringResource(R.string.diff_failed) + error?.let { ": $it" }.orEmpty(),
+                    color = MaterialTheme.colorScheme.error,
+                )
+            }
+            truncated -> {
+                Column {
+                    Text(
+                        text = stringResource(R.string.diff_truncated, MAX_DIFF_LINES),
+                        color = StatusWarning,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    WorkspaceDiffLines(content)
+                }
+            }
+            content.isBlank() -> {
+                Text(
+                    text = stringResource(R.string.diff_no_changes),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> WorkspaceDiffLines(content)
+        }
+    }
+}
+
+@Composable
+private fun WorkspaceDiffLines(content: String) {
+    androidx.compose.foundation.text.selection.SelectionContainer {
+        Column {
+            content.lines().forEach { line ->
+                val color = when {
+                    line.startsWith("+") -> StatusConnected
+                    line.startsWith("-") -> StatusError
+                    line.startsWith("@@") || line.startsWith("diff") || line.startsWith("index") ->
+                        MaterialTheme.colorScheme.primary
+                    else -> Color.Unspecified
+                }
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.bodySmall.copy(
+                        fontFamily = FontFamily.Monospace,
+                        color = if (color == Color.Unspecified) {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        } else {
+                            color
+                        },
+                    ),
+                )
+            }
+        }
     }
 }
 

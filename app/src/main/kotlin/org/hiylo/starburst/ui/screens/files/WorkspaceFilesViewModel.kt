@@ -11,21 +11,26 @@ package org.hiylo.starburst.ui.screens.files
 
 import android.content.Context
 import android.net.Uri
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.FileContent
 import org.hiylo.starburst.data.api.FileNode
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
+import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.readFile
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.data.shell.ShellCommandResult
+import org.hiylo.starburst.data.sync.LocalSyncSecretStore
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ml.MnnLlm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -33,6 +38,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -63,6 +69,45 @@ data class FileSaveState(
     val status: FileSaveStatus = FileSaveStatus.Idle,
     val message: String? = null,
 )
+
+/** 单文件 diff 的展示状态：内容、是否被截断、加载中与错误信息。 */
+data class WorkspaceDiffState(
+    val content: String = "",
+    val truncated: Boolean = false,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+)
+
+/** 编辑器内可执行的 AI 动作。 */
+enum class AiAction { Explain, Refactor, WriteTests }
+
+/** 编辑器内可执行的端侧（离线）代码辅助动作，完全依赖设备上的 MNN 模型。 */
+enum class OfflineAction { Complete, Rewrite }
+
+/** 编辑器 AI 动作的状态：当前动作、是否加载中、结果文本与错误信息。 */
+data class AiEditState(
+    val action: AiAction? = null,
+    val loading: Boolean = false,
+    val result: String? = null,
+    val error: String? = null,
+)
+
+/** 编辑器端侧代码辅助动作的状态：当前动作、是否加载中、结果文本与错误信息。 */
+data class OfflineEditState(
+    val action: OfflineAction? = null,
+    val loading: Boolean = false,
+    val result: String? = null,
+    val error: String? = null,
+)
+
+/** AI 生成内部结果：文本与「是否至少有一个模型可用」。 */
+private data class AiRunResult(
+    val text: String?,
+    val anyModelAvailable: Boolean,
+)
+
+/** diff 视图单次最多展示的行数，超出部分截断并提示。 */
+internal const val MAX_DIFF_LINES = 500
 
 internal enum class WorkspaceFileKind {
     Directory,
@@ -150,6 +195,8 @@ class WorkspaceFilesViewModel @Inject constructor(
     private val api: OpenCodeApi,
     private val settingsRepository: SettingsRepository,
     private val shellRegistry: ServerShellRegistry,
+    private val suggestionProvider: SuggestionProvider,
+    private val secretStore: LocalSyncSecretStore,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val connection = ServerConnection.from(
@@ -170,11 +217,21 @@ class WorkspaceFilesViewModel @Inject constructor(
     )
     private val _editing = MutableStateFlow(false)
     val editing = _editing.asStateFlow()
-    private val _editContent = MutableStateFlow<String?>(null)
+    private val _editContent = MutableStateFlow<TextFieldValue?>(null)
     val editContent = _editContent.asStateFlow()
     private val _saveState = MutableStateFlow(FileSaveState())
     val saveState = _saveState.asStateFlow()
+    private val _diffVisible = MutableStateFlow(false)
+    val diffVisible = _diffVisible.asStateFlow()
+    private val _diffState = MutableStateFlow(WorkspaceDiffState())
+    val diffState = _diffState.asStateFlow()
+    private val _aiState = MutableStateFlow(AiEditState())
+    val aiState = _aiState.asStateFlow()
+    private val _offlineState = MutableStateFlow(OfflineEditState())
+    val offlineState = _offlineState.asStateFlow()
     private var loadJob: Job? = null
+    private var aiJob: Job? = null
+    private var offlineJob: Job? = null
 
     /** 连接级共享 PTY 会话：按 server 复用，与 Git 页、服务器管理页共用同一条 PTY。 */
     private var ptySessionAcquired = false
@@ -272,18 +329,18 @@ class WorkspaceFilesViewModel @Inject constructor(
     fun startEdit() {
         val preview = _uiState.value.preview ?: return
         if (!isTextPreview(preview)) return
-        _editContent.value = preview.content.content
+        _editContent.value = TextFieldValue(preview.content.content)
         _editing.value = true
         _saveState.value = FileSaveState()
     }
 
     /**
-     * 更新正在编辑的文本内容。
+     * 更新正在编辑的文本内容与选区。
      *
-     * @param text 编辑框最新内容
+     * @param value 编辑框最新的文本与选区
      */
-    fun updateEditContent(text: String) {
-        _editContent.value = text
+    fun updateEditContent(value: TextFieldValue) {
+        _editContent.value = value
     }
 
     /** 取消编辑，丢弃未保存的修改。 */
@@ -298,7 +355,7 @@ class WorkspaceFilesViewModel @Inject constructor(
      */
     fun saveEdit() {
         val preview = _uiState.value.preview ?: return
-        val content = _editContent.value ?: return
+        val content = _editContent.value?.text ?: return
         if (_saveState.value.status == FileSaveStatus.Saving) return
         viewModelScope.launch {
             _saveState.value = FileSaveState(status = FileSaveStatus.Saving)
@@ -339,6 +396,331 @@ class WorkspaceFilesViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 展示当前文件的变更 diff：
+     * - 编辑态：对比编辑框中的未保存内容与服务器上已保存的原始内容（写入临时文件后
+     *   用 `git diff --no-index` / `diff -u` 计算）。
+     * - 浏览态：对比工作区文件与 HEAD/暂存区（`git diff HEAD --` / `git diff --cached --`）。
+     */
+    fun showDiff() {
+        val preview = _uiState.value.preview ?: return
+        if (!isTextPreview(preview)) return
+        if (_diffState.value.isLoading) return
+        val editing = _editing.value
+        val pending = _editContent.value?.text
+        viewModelScope.launch {
+            _diffVisible.value = true
+            _diffState.value = WorkspaceDiffState(isLoading = true)
+            val result = withContext(Dispatchers.IO) {
+                runCatching {
+                    if (editing && pending != null) diffPending(preview, pending)
+                    else diffWorkingTree(preview)
+                }
+            }
+            result.onSuccess { raw ->
+                val lines = raw.lines()
+                _diffState.value = WorkspaceDiffState(
+                    content = lines.take(MAX_DIFF_LINES).joinToString("\n"),
+                    truncated = lines.size > MAX_DIFF_LINES,
+                    isLoading = false,
+                )
+            }.onFailure { e ->
+                Log.e(TAG, "Failed to compute file diff", e)
+                _diffState.value = WorkspaceDiffState(error = e.message, isLoading = false)
+            }
+        }
+    }
+
+    /** 关闭 diff 视图，回到编辑/浏览界面。 */
+    fun closeDiff() {
+        _diffVisible.value = false
+        _diffState.value = WorkspaceDiffState()
+    }
+
+    /**
+     * 在编辑器内执行 AI 动作：取当前选区（无选区时回退为整个文件）作为输入，
+     * 优先调用配置的云端 LLM，失败或未配置时回退端侧 MNN 模型。结果写入 [AiEditState]。
+     *
+     * @param action 要执行的 AI 动作（解释 / 重构 / 写测试）
+     */
+    fun runAiAction(action: AiAction) {
+        val preview = _uiState.value.preview ?: return
+        if (!isTextPreview(preview)) return
+        aiJob?.cancel()
+        aiJob = viewModelScope.launch {
+            _aiState.value = AiEditState(action = action, loading = true)
+            val (selected, whole) = currentSelection()
+            val code = selected.ifBlank { whole }
+            val language = workspaceSyntaxLanguage(preview.node.name)
+            val result = withContext(Dispatchers.IO) {
+                generateAiText(action, code, language)
+            }
+            _aiState.value = when {
+                result.text != null -> AiEditState(action = action, result = result.text)
+                result.anyModelAvailable -> AiEditState(action = action, error = aiFailedMessage())
+                else -> AiEditState(action = action, error = aiNoModelMessage())
+            }
+        }
+    }
+
+    /**
+     * 应用 AI 结果：把结果写入编辑框并进入编辑模式，随后打开 diff 预览
+     * （对比服务器已保存的原文件与 AI 结果）。用户确认后通过既有的「保存」按钮
+     * （[saveEdit] 的 chunked base64 PTY 写回路径）落盘。
+     */
+    fun applyAiResult() {
+        val result = _aiState.value.result ?: return
+        if (_uiState.value.preview == null) return
+        _editContent.value = TextFieldValue(result)
+        _editing.value = true
+        _saveState.value = FileSaveState()
+        _aiState.value = AiEditState()
+        showDiff()
+    }
+
+    /** 关闭 AI 结果对话框，并取消仍在进行中的生成任务。 */
+    fun dismissAiResult() {
+        aiJob?.cancel()
+        _aiState.value = AiEditState()
+    }
+
+    /**
+     * 在编辑器内执行端侧（离线）代码辅助动作：完全通过端侧 MNN 模型生成，
+     * 不访问任何服务器。取当前选区（无选区时回退为整个文件）作为输入。
+     * 模型未加载时给出不可用提示，生成失败时给出失败提示。
+     *
+     * @param action 要执行的端侧动作（补全 / 重写）
+     */
+    fun runOfflineAction(action: OfflineAction) {
+        val preview = _uiState.value.preview ?: return
+        if (!isTextPreview(preview)) return
+        offlineJob?.cancel()
+        offlineJob = viewModelScope.launch {
+            _offlineState.value = OfflineEditState(action = action, loading = true)
+            val (selected, whole) = currentSelection()
+            val code = selected.ifBlank { whole }
+            val language = workspaceSyntaxLanguage(preview.node.name)
+            val result = withContext(Dispatchers.IO) {
+                generateOfflineText(action, code, language)
+            }
+            _offlineState.value = when {
+                result.text != null -> OfflineEditState(action = action, result = result.text)
+                result.anyModelAvailable -> OfflineEditState(action = action, error = offlineFailedMessage())
+                else -> OfflineEditState(action = action, error = offlineUnavailableMessage())
+            }
+        }
+    }
+
+    /**
+     * 应用端侧结果：把结果写入编辑框并进入编辑模式，随后打开 diff 预览
+     * （对比服务器已保存的原文件与端侧结果），用户确认后通过既有的「保存」按钮落盘。
+     */
+    fun applyOfflineResult() {
+        val result = _offlineState.value.result ?: return
+        if (_uiState.value.preview == null) return
+        _editContent.value = TextFieldValue(result)
+        _editing.value = true
+        _saveState.value = FileSaveState()
+        _offlineState.value = OfflineEditState()
+        showDiff()
+    }
+
+    /** 关闭端侧结果对话框，并取消仍在进行中的生成任务。 */
+    fun dismissOfflineResult() {
+        offlineJob?.cancel()
+        _offlineState.value = OfflineEditState()
+    }
+
+    /** 返回当前编辑框的选中文本（未选中时为空）与完整文本。 */
+    private fun currentSelection(): Pair<String, String> {
+        val preview = _uiState.value.preview
+        val whole = preview?.content?.content.orEmpty()
+        val field = _editContent.value
+        val text = field?.text ?: whole
+        val selection = field?.selection
+        val selected = if (selection != null && !selection.collapsed) {
+            val start = selection.min.coerceIn(0, text.length)
+            val end = selection.max.coerceIn(0, text.length)
+            if (end > start) text.substring(start, end) else ""
+        } else {
+            ""
+        }
+        return selected to text
+    }
+
+    /**
+     * 生成 AI 回复：优先云端 LLM，失败或未配置时回退端侧 MNN 模型。
+     * 返回文本与「是否至少有一个模型可用」，用于区分「无模型」与「生成失败」。
+     */
+    private suspend fun generateAiText(action: AiAction, code: String, language: String?): AiRunResult {
+        var attempted = false
+        val baseUrl = settingsRepository.llmProviderBaseUrl.first()
+        val model = settingsRepository.llmProviderModel.first()
+        if (baseUrl.isNotBlank() && model.isNotBlank()) {
+            attempted = true
+            val apiKey = secretStore.get(LocalSyncSecretStore.SecretKey.LLM_PROVIDER_API_KEY).orEmpty()
+            val text = runCatching {
+                suggestionProvider.complete(
+                    SuggestionProvider.Config(baseUrl = baseUrl, apiKey = apiKey, model = model),
+                    systemPrompt = aiSystemPrompt(action, language),
+                    userContent = aiUserContent(code, language),
+                    maxTokens = AI_MAX_TOKENS,
+                ).trim().takeIf { it.isNotBlank() }
+            }.getOrNull()
+            if (text != null) return AiRunResult(text, true)
+        }
+        val loaded = MnnLlm.ensureLoaded(context)
+        if (!loaded) return AiRunResult(null, attempted)
+        MnnLlm.reset()
+        val text = MnnLlm.generate(aiMnnPrompt(action, code, language), maxTokens = AI_MNN_MAX_TOKENS)
+            .trim().takeIf { it.isNotBlank() }
+        return AiRunResult(text, true)
+    }
+
+    private fun aiNoModelMessage(): String = context.getString(R.string.ai_no_model)
+
+    private fun aiFailedMessage(): String = context.getString(R.string.ai_failed)
+
+    private fun offlineUnavailableMessage(): String = context.getString(R.string.offline_model_unavailable)
+
+    private fun offlineFailedMessage(): String = context.getString(R.string.offline_failed)
+
+    /**
+     * 仅通过端侧 MNN 模型生成代码辅助结果，不访问任何服务器。
+     * 返回文本与「模型是否可用」，用于区分「模型不可用」与「生成失败」。
+     * 补全动作会把续写内容追加到原代码后，作为完整结果返回。
+     */
+    private suspend fun generateOfflineText(action: OfflineAction, code: String, language: String?): AiRunResult {
+        val loaded = MnnLlm.ensureLoaded(context)
+        if (!loaded) return AiRunResult(null, false)
+        MnnLlm.reset()
+        val generated = MnnLlm.generate(offlineMnnPrompt(action, code, language), maxTokens = AI_MNN_MAX_TOKENS)
+            .trim().takeIf { it.isNotBlank() }
+        if (generated == null) return AiRunResult(null, true)
+        val text = if (action == OfflineAction.Complete) code + "\n" + generated else generated
+        return AiRunResult(text, true)
+    }
+
+    /** 构造端侧模型的系统指令（按当前语言本地化）。 */
+    private fun offlineSystemPrompt(action: OfflineAction, language: String?): String {
+        val isZh = context.resources.configuration.locales[0].language == "zh"
+        return when (action) {
+            OfflineAction.Complete -> if (isZh) {
+                "你是一名资深软件工程师。请续写下面的代码，补全剩余实现。" +
+                    "只输出续写部分，不要使用 markdown 代码块，不要解释。"
+            } else {
+                "You are a senior software engineer. Continue the provided code and complete the " +
+                    "remaining implementation. Output ONLY the continuation, no markdown fences, " +
+                    "no explanation."
+            }
+            OfflineAction.Rewrite -> if (isZh) {
+                "你是一名资深软件工程师。请重写下面的代码，提升可读性、正确性与可维护性。" +
+                    "只输出重写后的代码，不要使用 markdown 代码块，不要解释。"
+            } else {
+                "You are a senior software engineer. Rewrite the following code for clarity, " +
+                    "correctness and maintainability. Output ONLY the rewritten code, no markdown " +
+                    "fences, no explanation."
+            }
+        }
+    }
+
+    /** 构造端侧 MNN 模型的单条提示词（系统指令 + 代码拼接）。 */
+    private fun offlineMnnPrompt(action: OfflineAction, code: String, language: String?): String =
+        offlineSystemPrompt(action, language) + "\n\n" + aiUserContent(code, language)
+
+    /** 构造云端 LLM 的系统指令（按当前语言本地化）。 */
+    private fun aiSystemPrompt(action: AiAction, language: String?): String {
+        val isZh = context.resources.configuration.locales[0].language == "zh"
+        return when (action) {
+            AiAction.Explain -> if (isZh) {
+                "你是一名资深软件工程师。请清晰、简洁地解释下面这段代码的作用、关键逻辑与值得注意的边界情况。"
+            } else {
+                "You are a senior software engineer. Explain the provided code clearly and " +
+                    "concisely, covering its purpose, key logic, and notable edge cases."
+            }
+            AiAction.Refactor -> if (isZh) {
+                "你是一名资深软件工程师。请重构下面的代码，提升可读性、正确性与可维护性。" +
+                    "只输出重构后的代码，不要使用 markdown 代码块，不要解释。"
+            } else {
+                "You are a senior software engineer. Refactor the following code for clarity, " +
+                    "correctness and maintainability. Output ONLY the refactored code, no markdown " +
+                    "fences, no explanation."
+            }
+            AiAction.WriteTests -> if (isZh) {
+                "你是一名资深软件工程师。请为下面的代码编写聚焦的单元测试。" +
+                    "只输出测试代码，不要使用 markdown 代码块，不要解释。"
+            } else {
+                "You are a senior software engineer. Write focused unit tests for the following " +
+                    "code. Output ONLY the test code, no markdown fences, no explanation."
+            }
+        }
+    }
+
+    /** 构造云端 LLM 的用户内容：以代码围栏包裹选中代码。 */
+    private fun aiUserContent(code: String, language: String?): String {
+        val lang = language ?: ""
+        val snippet = code.take(AI_MAX_CODE_CHARS)
+        return "```$lang\n$snippet\n```"
+    }
+
+    /** 构造端侧 MNN 模型的单条提示词（系统指令 + 代码拼接）。 */
+    private fun aiMnnPrompt(action: AiAction, code: String, language: String?): String {
+        val snippet = code.take(AI_MAX_CODE_CHARS)
+        return aiSystemPrompt(action, language) + "\n\n" + aiUserContent(snippet, language)
+    }
+
+    /**
+     * 计算编辑态 diff：把未保存内容 base64 写入临时文件，与服务器上的原始文件做
+     * `git diff --no-index`（git 不可用时退化为 `diff -u`），结束后清理临时文件。
+     */
+    private suspend fun diffPending(preview: WorkspaceFilePreview, pending: String): String {
+        val saved = preview.content.content
+        if (pending == saved) return ""
+        val target = preview.node.absolute ?: preview.node.path
+        val temp = "$target.starburst-diff-${System.currentTimeMillis()}"
+        return try {
+            val encoded = Base64.getEncoder().encodeToString(pending.toByteArray(Charsets.UTF_8))
+            var first = true
+            var offset = 0
+            var ok = true
+            while (offset < encoded.length) {
+                val end = minOf(offset + DIFF_CHUNK_SIZE, encoded.length)
+                val chunk = encoded.substring(offset, end)
+                val redirect = if (first) ">" else ">>"
+                val r = ptySession.runCommandResult("printf '%s' '$chunk' | base64 -d $redirect ${shellQuote(temp)}")
+                if (r.exitCode != 0) {
+                    ok = false
+                    break
+                }
+                first = false
+                offset = end
+            }
+            if (ok) ptySession.runCommand(noIndexDiffCmd(target, temp), timeoutMs = 60_000) else ""
+        } finally {
+            runCatching { ptySession.runCommand("rm -f ${shellQuote(temp)}") }
+        }
+    }
+
+    /** 计算浏览态 diff：展示文件相对 HEAD（或暂存区）的变更。 */
+    private suspend fun diffWorkingTree(preview: WorkspaceFilePreview): String {
+        val path = preview.node.absolute ?: preview.node.path
+        val root = directory.trimEnd('/').ifBlank { workspaceParentPath(path) }
+        val git = "git -c color.ui=false --no-pager -C ${shellQuote(root)}"
+        val head = ptySession.runCommand("$git diff HEAD -- ${shellQuote(path)}", timeoutMs = 60_000)
+        if (head.isNotBlank()) return head.filterGitError()
+        val cached = ptySession.runCommand("$git diff --cached -- ${shellQuote(path)}", timeoutMs = 60_000)
+        return cached.filterGitError()
+    }
+
+    /** 过滤 git 致命错误输出（如非仓库目录），避免把错误文本当作 diff 展示。 */
+    private fun String.filterGitError(): String =
+        if (lineSequence().any { it.startsWith("fatal:") || it.startsWith("error:") }) "" else this
+
+    /** 构造 `git diff --no-index`（git 不可用时退化为 `diff -u`）的命令串。 */
+    private fun noIndexDiffCmd(old: String, new: String): String =
+        "if command -v git >/dev/null 2>&1; then git -c color.ui=false --no-pager diff --no-index -- " +
+            "${shellQuote(old)} ${shellQuote(new)}; else diff -u ${shellQuote(old)} ${shellQuote(new)}; fi"
+
     /** 判断预览是否为可编辑的文本类文件（排除二进制与图片）。 */
     private fun isTextPreview(preview: WorkspaceFilePreview): Boolean {
         if (workspaceFileBytes(preview.content) == null) return false
@@ -350,6 +732,18 @@ class WorkspaceFilesViewModel @Inject constructor(
 
     private companion object {
         const val TAG = "WorkspaceFilesVM"
+
+        /** 写入临时文件时每条命令的 base64 片段上限（4 的倍数，可独立解码）。 */
+        const val DIFF_CHUNK_SIZE = 3000
+
+        /** 云端 LLM 生成的最大 token 数。 */
+        const val AI_MAX_TOKENS = 4096
+
+        /** 端侧 MNN 模型生成的最大 token 数。 */
+        const val AI_MNN_MAX_TOKENS = 1024
+
+        /** 送入模型的代码片段最大字符数，超出截断。 */
+        const val AI_MAX_CODE_CHARS = 32_000
     }
 }
 

@@ -82,6 +82,32 @@ class SuggestionProvider @Inject constructor(
         return postCompletion(config, messages, maxTokens = maxTokens)
     }
 
+    /**
+     * 发送一条 system + user 对话并返回原始回复文本。
+     * 供「AI 编辑」（解释 / 重构 / 写测试）等需要系统指令约束输出内容的场景复用，
+     * 复用 [postCompletion] 而非新建客户端。
+     * @param config 外部 LLM 提供商配置
+     * @param systemPrompt 系统指令
+     * @param userContent 用户内容（通常为选中的代码）
+     * @param maxTokens 最大生成 token 数
+     * @return 模型原始回复文本
+     * @throws Exception 请求失败或响应不可用时抛出
+     * @author Hsi Chu
+     * @since V1.0
+     */
+    suspend fun complete(
+        config: Config,
+        systemPrompt: String,
+        userContent: String,
+        maxTokens: Int = COMPLETE_MAX_TOKENS,
+    ): String {
+        val messages = listOf(
+            ChatMessage(role = "system", content = systemPrompt),
+            ChatMessage(role = "user", content = userContent),
+        )
+        return postCompletion(config, messages, maxTokens = maxTokens)
+    }
+
     /** Posts a chat completion and returns the raw reply content. */
     private suspend fun postCompletion(
         config: Config,
@@ -131,6 +157,7 @@ class SuggestionProvider @Inject constructor(
     private companion object {
         const val SUGGESTION_MAX_TOKENS = 100
         const val CHAT_TEST_MAX_TOKENS = 50
+        const val COMPLETE_MAX_TOKENS = 4096
     }
 }
 
