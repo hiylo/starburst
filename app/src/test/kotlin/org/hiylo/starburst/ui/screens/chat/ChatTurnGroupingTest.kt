@@ -10,6 +10,7 @@
 package org.hiylo.starburst.ui.screens.chat
 
 import org.hiylo.starburst.domain.model.Message
+import org.hiylo.starburst.domain.model.Part
 import org.hiylo.starburst.domain.model.TimeInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -43,6 +44,6 @@ class ChatTurnGroupingTest {
 
     private fun assistant(id: String, parentId: String) = ChatMessage(
         message = Message.Assistant(id, "session", time = TimeInfo(1), parentId = parentId),
-        parts = emptyList(),
+        parts = listOf(Part.Text(id = "$id-text", sessionId = "session", messageId = id, text = "reply")),
     )
 }
