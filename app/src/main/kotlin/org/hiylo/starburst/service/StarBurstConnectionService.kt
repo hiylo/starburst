@@ -25,6 +25,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import org.hiylo.starburst.logging.AppLogger as Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.RemoteInput
 import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.MainActivity
 import org.hiylo.starburst.R
@@ -44,13 +45,20 @@ import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
+import org.hiylo.starburst.data.api.MessageIdGenerator
+import org.hiylo.starburst.data.api.PromptPart
+import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.repository.EventReducer
+import org.hiylo.starburst.data.repository.PendingPromptRecord
+import org.hiylo.starburst.data.repository.PendingPromptRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.normalizeServerUrl
 import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.domain.model.Message
 import org.hiylo.starburst.domain.model.Part
+import org.hiylo.starburst.domain.model.PendingInteraction
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -194,6 +202,9 @@ class StarBurstConnectionService : Service() {
 
     @Inject
     lateinit var serverConnectionStateRepository: ServerConnectionStateRepository
+
+    @Inject
+    lateinit var pendingPromptRepository: PendingPromptRepository
 
     @Inject
     lateinit var backendApi: BackendApi
@@ -399,6 +410,21 @@ class StarBurstConnectionService : Service() {
                 if (serverId != null) {
                     Log.i(TAG, "Disconnect requested for server $serverId")
                     disconnect(serverId)
+                }
+                return START_NOT_STICKY
+            }
+            ACTION_HANDLE_REPLY -> {
+                val serverId = intent.getStringExtra(EXTRA_SERVER_ID)
+                val sessionId = intent.getStringExtra(EXTRA_SESSION_ID)
+                val replyText = intent.getStringExtra(EXTRA_REPLY_TEXT)
+                val kind = intent.getStringExtra(EXTRA_REPLY_KIND)
+                if (!serverId.isNullOrBlank() && !sessionId.isNullOrBlank() && !replyText.isNullOrBlank()) {
+                    ensureForegroundStarted()
+                    serviceScope.launch {
+                        handleNotificationReply(serverId, sessionId, replyText, kind)
+                    }
+                } else {
+                    Log.w(TAG, "Reply ignored: missing server/session/reply extras")
                 }
                 return START_NOT_STICKY
             }
@@ -1655,6 +1681,130 @@ class StarBurstConnectionService : Service() {
         )
     }
 
+    /**
+     * 构造通知内嵌「回复」RemoteInput 动作：携带 serverId/sessionId/通知 ID/回复类型等非敏感 extras，
+     * 由 [NotificationReplyReceiver] 接收用户输入的文本并转发给本服务处理。
+     */
+    private fun buildReplyAction(
+        server: ServerConfig,
+        sessionId: String,
+        notifId: Int,
+        kind: String,
+    ): NotificationCompat.Action {
+        val remoteInput = RemoteInput.Builder(KEY_NOTIFICATION_REPLY)
+            .setLabel(getString(R.string.notification_reply_label))
+            .build()
+        val replyIntent = Intent(ACTION_NOTIFICATION_REPLY).apply {
+            setPackage(packageName)
+            putExtra(EXTRA_SERVER_ID, server.id)
+            putExtra(EXTRA_SESSION_ID, sessionId)
+            putExtra(EXTRA_REPLY_NOTIFICATION_ID, notifId)
+            putExtra(EXTRA_REPLY_KIND, kind)
+        }
+        val replyPendingIntent = PendingIntent.getBroadcast(
+            this,
+            notifId,
+            replyIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+        return NotificationCompat.Action.Builder(
+            android.R.drawable.ic_menu_send,
+            getString(R.string.notification_reply_label),
+            replyPendingIntent
+        ).addRemoteInput(remoteInput).build()
+    }
+
+    /**
+     * 处理来自通知内嵌回复的文本：回答问题或给会话发送后续 prompt。
+     * 仅通过非敏感 extras（serverId/sessionId）路由，绝不携带密码。
+     */
+    private suspend fun handleNotificationReply(serverId: String, sessionId: String, replyText: String, kind: String?) {
+        val state = connections[serverId]
+        if (state == null) {
+            Log.w(TAG, "Notification reply ignored: server $serverId not connected (session=$sessionId)")
+            return
+        }
+        Log.i(TAG, "Notification reply: server=$serverId session=$sessionId kind=$kind text='${replyText.take(80)}'")
+        when (kind) {
+            REPLY_KIND_QUESTION -> answerQuestionFromReply(state, sessionId, replyText)
+            REPLY_KIND_COMPLETION -> sendFollowUpPrompt(state, sessionId, replyText)
+            else -> storeReplyAsPendingPrompt(state, sessionId, replyText)
+        }
+    }
+
+    /**
+     * 复用既有问题回答路径：查会话待决问题并以回复文本作为答案提交；
+     * 找不到待决问题或提交失败时，降级为把回复存为待发 prompt，保证文本不丢失。
+     */
+    private suspend fun answerQuestionFromReply(state: ServerConnectionState, sessionId: String, replyText: String) {
+        val question = eventReducer.pendingInteractions.value
+            .filterIsInstance<PendingInteraction.Question>()
+            .firstOrNull { it.sessionId == sessionId }
+        if (question == null) {
+            Log.w(TAG, "No pending question for session $sessionId; storing reply as pending prompt")
+            storeReplyAsPendingPrompt(state, sessionId, replyText)
+            return
+        }
+        val directory = sessionDirectoryOf(sessionId)
+        val ok = try {
+            api.replyToQuestion(state.conn, question.id, listOf(listOf(replyText)), directory)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to reply to question ${question.id}", e)
+            false
+        }
+        if (ok) {
+            eventReducer.removeQuestion(sessionId, question.id)
+            Log.i(TAG, "Question ${question.id} answered via notification reply")
+        } else {
+            storeReplyAsPendingPrompt(state, sessionId, replyText)
+        }
+    }
+
+    /** 给会话发送后续 prompt（继续会话），失败时降级为待发 prompt。 */
+    private suspend fun sendFollowUpPrompt(state: ServerConnectionState, sessionId: String, replyText: String) {
+        val directory = sessionDirectoryOf(sessionId)
+        val messageId = MessageIdGenerator.next()
+        val parts = listOf(PromptPart(type = "text", text = replyText))
+        try {
+            api.promptAsync(
+                conn = state.conn,
+                sessionId = sessionId,
+                messageId = messageId,
+                parts = parts,
+                directory = directory,
+            )
+            eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
+            Log.i(TAG, "Follow-up prompt sent to session $sessionId via notification reply")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to send follow-up prompt to session $sessionId", e)
+            storeReplyAsPendingPrompt(state, sessionId, replyText)
+        }
+    }
+
+    /** 回复无法立即投递时，存为待发 prompt，由会话界面读取并展示。 */
+    private fun storeReplyAsPendingPrompt(state: ServerConnectionState, sessionId: String, replyText: String) {
+        pendingPromptRepository.save(
+            PendingPromptRecord(
+                messageId = MessageIdGenerator.next(),
+                sessionId = sessionId,
+                parts = listOf(PromptPart(type = "text", text = replyText)),
+                directory = sessionDirectoryOf(sessionId),
+                createdAt = System.currentTimeMillis(),
+            )
+        )
+        Log.i(TAG, "Reply stored as pending prompt for session $sessionId (server=${state.config.id})")
+    }
+
+    /** 取会话工作目录（供回答问题/发送 prompt 的 directory 参数使用）。 */
+    private fun sessionDirectoryOf(sessionId: String): String? =
+        eventReducer.sessions.value.firstOrNull { it.id == sessionId }
+            ?.directory
+            ?.takeIf { it.isNotBlank() }
+
     companion object {
         const val ACTION_OPEN_SESSION = "org.hiylo.starburst.OPEN_SESSION"
         const val ACTION_DISCONNECT = "org.hiylo.starburst.DISCONNECT"
@@ -1662,6 +1812,22 @@ class StarBurstConnectionService : Service() {
         const val ACTION_APP_EXIT = "org.hiylo.starburst.APP_EXIT"
         /** 通知「重试」按钮触发的广播 action，由后续的 BroadcastReceiver 负责实际重试逻辑。 */
         const val ACTION_RETRY_SESSION = "org.hiylo.starburst.RETRY_SESSION"
+        /** 通知内嵌「回复」按钮触发的广播 action，由 [NotificationReplyReceiver] 接收并转发给本服务处理。 */
+        const val ACTION_NOTIFICATION_REPLY = "org.hiylo.starburst.NOTIFICATION_REPLY"
+        /** 转发到本服务的「处理回复」action。 */
+        const val ACTION_HANDLE_REPLY = "org.hiylo.starburst.HANDLE_REPLY"
+        /** RemoteInput 结果键。 */
+        const val KEY_NOTIFICATION_REPLY = "notification_reply_text"
+        /** 回复正文 extra。 */
+        const val EXTRA_REPLY_TEXT = "reply_text"
+        /** 回复类型 extra（question / completion）。 */
+        const val EXTRA_REPLY_KIND = "reply_kind"
+        /** 待取消的通知 ID extra。 */
+        const val EXTRA_REPLY_NOTIFICATION_ID = "reply_notification_id"
+        /** 回复类型常量：回答问题。 */
+        const val REPLY_KIND_QUESTION = "question"
+        /** 回复类型常量：继续会话。 */
+        const val REPLY_KIND_COMPLETION = "completion"
         const val EXTRA_SERVER_URL = "server_url"
         const val EXTRA_SERVER_USERNAME = "server_username"
         const val EXTRA_SERVER_PASSWORD = "server_password"
@@ -1863,6 +2029,7 @@ class StarBurstConnectionService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
 
         builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), pendingIntent)
+        builder.addAction(buildReplyAction(server, sessionId, notifId, REPLY_KIND_COMPLETION))
 
         if (!silent) {
             builder.setDefaults(NotificationCompat.DEFAULT_ALL)
@@ -1918,7 +2085,7 @@ class StarBurstConnectionService : Service() {
         val notifId = eventNotificationId(server.id, sessionId, 2000)
         val pendingIntent = createSessionPendingIntent(server, sessionId, notifId)
 
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_PERMISSIONS_ID)
+        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_PERMISSIONS_ID)
             .setContentTitle(getString(R.string.notification_question))
             .setContentText(body)
             .setSubText(server.displayName)
@@ -1931,9 +2098,10 @@ class StarBurstConnectionService : Service() {
             .setCategory(NotificationCompat.CATEGORY_STATUS)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setGroup("server_${server.id}")
-            .build()
 
-        postEventNotification(server, sessionId, notifId, notification)
+        builder.addAction(buildReplyAction(server, sessionId, notifId, REPLY_KIND_QUESTION))
+
+        postEventNotification(server, sessionId, notifId, builder.build())
     }
 
     private fun showErrorNotification(server: ServerConfig, sessionId: String?, error: String) {
