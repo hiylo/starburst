@@ -9,6 +9,51 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.0.0] - 2026-09-17
+
+### Added
+- **Prompt & session templates** — an editable prompt-template library (add/edit/delete/reorder) and
+  reusable session templates (directory + system prompt + model + prompt) for one-tap new sessions.
+- **Session timeline** — a per-session timeline reconstructing tool calls, permission requests,
+  questions, sub-agent spawns, and todo progress from in-memory event state.
+- **Custom system prompt + context budget** — per-server system prompt (injected on first message) and
+  a live token-usage estimate with a warning when approaching the model's context window.
+- **File diff viewer** — syntax-highlighted diff of working-tree and pending-vs-saved edits in the
+  workspace file browser.
+- **In-editor AI actions** — explain / refactor / write tests on selected code (backend LLM with
+  on-device MNN fallback), with copy/apply and a diff preview.
+- **On-device code assist** — an offline complete/rewrite action via the on-device MNN model.
+- **Service log live tail** — a streaming server-log viewer with keyword filter and auto-scroll.
+- **Bookmark tags & groups** — tag bookmarks and filter/group the bookmark list by tag.
+- **Encrypted backup & restore** — export/import settings + server configs as a passphrase-encrypted
+  bundle (AES-256-GCM + PBKDF2) via the Storage Access Framework.
+- **Token usage card** — a workbench card surfacing `/api/stats` (token usage / tasks / archives).
+- **Notification quick actions** — inline RemoteInput reply from question/completion notifications.
+
+### Security
+- SSH host-key verification via known_hosts TOFU (previously `StrictHostKeyChecking=no`).
+- Server config stored encrypted at rest (Android Keystore AES-GCM) with legacy plaintext migration.
+- Passwords removed from Intents/PendingIntents (service resolves config by server id).
+- WebView hardening (no mixed content, external links open in browser, HTTP-auth host check,
+  block network loads for HTML previews).
+- Install script pinned to a release tag with a randomized backend token.
+
+### Fixed
+- Server connection could hang on "connecting" and block disconnect; blocking SSH/gateway work now
+  runs outside the connection lock.
+- Connection state could desync (working but shown as disconnected/connecting); flags now reconcile
+  atomically with the connection state.
+- MnnLlm/MnnAsr native access serialized under one lock (use-after-free guard).
+- ASR recorder now stops on ViewModel clear (no more leaked microphone).
+
+### Engineering
+- Unit tests for backup payload, bookmark-tag backward compat, template serialization, and token
+  estimation (15 cases).
+
+### Backend (starburst-backend, non-intel)
+- Hardware threshold alerts (CPU/memory/disk → `alert.hardware` push).
+- Multi-device sync (`GET/PUT /api/sync`, last-write-wins).
+
 ## [2.0.0] - 2026-09-16
 
 ### Added
