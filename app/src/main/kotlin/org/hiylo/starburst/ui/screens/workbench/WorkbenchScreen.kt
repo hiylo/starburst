@@ -103,6 +103,7 @@ import kotlinx.coroutines.launch
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.QuestionInfo
 import org.hiylo.starburst.data.api.SessionEventRecord
+import org.hiylo.starburst.data.api.BackendTokenUsage
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppPrimaryButton
@@ -115,6 +116,7 @@ import org.hiylo.starburst.ui.theme.StatusWarning
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /** AI 工作台路由定义（导航注册与创建路由都与现有 Screen 模式保持一致）。 */
 object WorkbenchScreen {
@@ -252,6 +254,11 @@ fun WorkbenchScreen(
                 sessions = uiState.sessions,
                 error = uiState.eventsError,
             )
+            UsageSection(
+                usage = uiState.tokenUsage,
+                loading = uiState.loadingUsage,
+                error = uiState.usageError,
+            )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
             Box(modifier = Modifier.weight(1f)) {
                 AllSessionsSection(
@@ -382,6 +389,90 @@ private fun EmptyHint(text: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
         )
     }
+}
+
+/** 用量统计卡片展示的最大 token 条目数。 */
+private const val USAGE_DISPLAY_LIMIT = 6
+
+/** 后端 token 用量统计卡片：最近各 token 的调用量（只读）。 */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun UsageSection(
+    usage: List<BackendTokenUsage>,
+    loading: Boolean,
+    error: String?,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        SectionHeader(
+            title = stringResource(R.string.usage_title),
+            count = usage.size,
+        )
+        when {
+            loading -> {
+                EmptyHint(text = stringResource(R.string.usage_loading))
+            }
+            error != null && usage.isEmpty() -> {
+                EmptyHint(text = error)
+            }
+            usage.isEmpty() -> {
+                EmptyHint(text = stringResource(R.string.usage_empty))
+            }
+            else -> {
+                FlowRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    usage.take(USAGE_DISPLAY_LIMIT).forEach { item ->
+                        UsageChip(item)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** 单个 token 用量条目：token 名 + 人化后的调用量。 */
+@Composable
+private fun UsageChip(usage: BackendTokenUsage) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = usage.tokenName.ifBlank { usage.tokenId }
+                    .ifBlank { stringResource(R.string.usage_unknown_token) },
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = humanizeCount(usage.calls),
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+    }
+}
+
+/** 把调用量人化为短格式：>=1M 用 M，>=1k 用 k，否则原样。 */
+private fun humanizeCount(value: Int): String = when {
+    value >= 1_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0)
+    value >= 1_000 -> String.format(Locale.US, "%.1fk", value / 1_000.0)
+    else -> value.toString()
 }
 
 /** 单条动态行：状态点 + 会话名 + 「动作 · 路径」摘要 + 时间。 */

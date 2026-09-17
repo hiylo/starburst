@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Token usage statistics -->
+    <string name="usage_title">Usage</string>
+    <string name="usage_loading">Loading usage…</string>
+    <string name="usage_empty">No token usage recorded yet</string>
+    <string name="usage_error">Failed to load usage</string>
+    <string name="usage_no_backend">Backend unavailable for usage stats</string>
+    <string name="usage_unknown_token">Unknown token</string>
+</resources>

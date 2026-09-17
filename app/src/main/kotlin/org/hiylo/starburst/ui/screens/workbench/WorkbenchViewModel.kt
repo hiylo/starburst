@@ -33,6 +33,7 @@ import kotlinx.coroutines.launch
 import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
+import org.hiylo.starburst.data.api.BackendTokenUsage
 import org.hiylo.starburst.data.api.MessageIdGenerator
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.OpenCodeGateway
@@ -80,6 +81,8 @@ private const val TAG = "WorkbenchViewModel"
 private const val EVENT_POLL_INTERVAL_MS = 5_000L
 /** 会话列表 / 状态轮询间隔（毫秒）。 */
 private const val SESSION_POLL_INTERVAL_MS = 10_000L
+/** 用量统计轮询间隔（毫秒）。 */
+private const val USAGE_POLL_INTERVAL_MS = 60_000L
 /** 事件流单页大小与本地保留上限。 */
 private const val EVENT_PAGE_LIMIT = 100
 private const val MAX_EVENTS = 100
@@ -121,6 +124,9 @@ data class WorkbenchUiState(
     val loadingSessions: Boolean = true,
     val eventsError: String? = null,
     val sessionsError: String? = null,
+    val tokenUsage: List<BackendTokenUsage> = emptyList(),
+    val loadingUsage: Boolean = true,
+    val usageError: String? = null,
 )
 
 /** 决策面板里的一条最近对话消息。 */
@@ -321,6 +327,7 @@ class WorkbenchViewModel @Inject constructor(
             }
             refreshSessions()
             refreshEvents()
+            refreshUsage()
             startPushStream()
             // 推送断线时的轮询兜底。
             viewModelScope.launch {
@@ -333,6 +340,12 @@ class WorkbenchViewModel @Inject constructor(
                 while (isActive) {
                     delay(SESSION_POLL_INTERVAL_MS)
                     refreshSessions()
+                }
+            }
+            viewModelScope.launch {
+                while (isActive) {
+                    delay(USAGE_POLL_INTERVAL_MS)
+                    refreshUsage()
                 }
             }
         }
@@ -489,6 +502,27 @@ class WorkbenchViewModel @Inject constructor(
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.d(TAG, "refresh events failed: ${e.message}")
             _uiState.update { it.copy(eventsError = it.eventsError ?: e.message ?: context.getString(R.string.workbench_error_events)) }
+        }
+    }
+
+    /** 拉取后端用量统计（`GET /api/stats`）：token 调用量，读多写少，慢轮询。 */
+    private suspend fun refreshUsage() {
+        if (backendUrl.isBlank()) {
+            _uiState.update { it.copy(loadingUsage = false, usageError = context.getString(R.string.usage_no_backend)) }
+            return
+        }
+        try {
+            val stats = backendApi.getStats(backendUrl, backendToken)
+            _uiState.update {
+                it.copy(tokenUsage = stats.tokenUsage, loadingUsage = false, usageError = null)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "refresh usage failed: ${e.message}")
+            _uiState.update {
+                it.copy(loadingUsage = false, usageError = e.message ?: context.getString(R.string.usage_error))
+            }
         }
     }
 

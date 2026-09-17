@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Token 用量统计 -->
+    <string name="usage_title">用量统计</string>
+    <string name="usage_loading">加载用量中…</string>
+    <string name="usage_empty">暂无 token 用量记录</string>
+    <string name="usage_error">加载用量失败</string>
+    <string name="usage_no_backend">后端不可用，无法获取用量统计</string>
+    <string name="usage_unknown_token">未知 token</string>
+</resources>

@@ -64,6 +64,7 @@ data class BackendStats(
     val tasks: BackendTaskStats = BackendTaskStats(),
     val tokenUsage: List<BackendTokenUsage> = emptyList(),
     val archives: Int = 0,
+    val maxConcurrency: Int = 0,
 )
 
 /** `POST /api/tasks` 的请求体。 */
