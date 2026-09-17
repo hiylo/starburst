@@ -80,7 +80,6 @@ fun NavGraphBuilder.SessionsRoutes(
                     putExtra("server_name", server.name)
                     putExtra("server_url", server.url)
                     putExtra("server_username", server.username)
-                    putExtra("server_password", server.password)
                 }
                 ContextCompat.startForegroundService(context, intent)
             },
@@ -244,8 +243,12 @@ fun NavGraphBuilder.SessionsRoutes(
         }
 
         fun paneChatRoute(sessionId: String, openTerminal: Boolean): String =
-            "pane_chat?serverUrl=$serverUrl&username=$username&password=$password" +
-                "&serverName=$serverName&serverId=$serverId&sessionId=$sessionId" +
+            "pane_chat?serverUrl=${encodeNavigationArgument(serverUrl)}" +
+                "&username=${encodeNavigationArgument(username)}" +
+                "&password=${encodeNavigationArgument(password)}" +
+                "&serverName=${encodeNavigationArgument(serverName)}" +
+                "&serverId=${encodeNavigationArgument(serverId)}" +
+                "&sessionId=${encodeNavigationArgument(sessionId)}" +
                 "&openTerminal=$openTerminal"
 
         /**

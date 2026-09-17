@@ -329,7 +329,6 @@ class MainActivity : ComponentActivity() {
                     putExtra("server_name", savedServer.name)
                     putExtra("server_url", savedServer.url)
                     putExtra("server_username", savedServer.username)
-                    putExtra("server_password", savedServer.password)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(serviceIntent)
@@ -397,7 +396,6 @@ class MainActivity : ComponentActivity() {
         val serverId = intent.getStringExtra(StarBurstConnectionService.EXTRA_SERVER_ID) ?: ""
         val serverUrl = intent.getStringExtra(StarBurstConnectionService.EXTRA_SERVER_URL) ?: return
         val username = intent.getStringExtra(StarBurstConnectionService.EXTRA_SERVER_USERNAME) ?: ""
-        val password = intent.getStringExtra(StarBurstConnectionService.EXTRA_SERVER_PASSWORD) ?: ""
         val serverName = intent.getStringExtra(StarBurstConnectionService.EXTRA_SERVER_NAME) ?: serverUrl
         val sessionPath = intent.getStringExtra(StarBurstConnectionService.EXTRA_SESSION_PATH) ?: ""
         val sessionId = intent.getStringExtra(StarBurstConnectionService.EXTRA_SESSION_ID) ?: ""
@@ -411,7 +409,6 @@ class MainActivity : ComponentActivity() {
                     putExtra("server_name", savedServer.name)
                     putExtra("server_url", savedServer.url)
                     putExtra("server_username", savedServer.username)
-                    putExtra("server_password", savedServer.password)
                 }
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     startForegroundService(serviceIntent)
@@ -428,7 +425,7 @@ class MainActivity : ComponentActivity() {
                     serverId = resolvedServerId,
                     serverUrl = savedServer?.url ?: serverUrl,
                     username = savedServer?.username ?: username,
-                    password = savedServer?.password ?: password,
+                    password = savedServer?.password ?: "",
                     serverName = savedServer?.displayName ?: serverName,
                     sessionPath = sessionPath,
                     sessionId = sessionId,

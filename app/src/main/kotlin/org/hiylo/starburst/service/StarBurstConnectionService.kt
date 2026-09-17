@@ -57,7 +57,6 @@ import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.domain.model.SseEvent
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeoutOrNull
-import com.jcraft.jsch.JSch
 import com.jcraft.jsch.Session as JschSession
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.*
@@ -281,6 +280,7 @@ class StarBurstConnectionService : Service() {
     }
 
     private lateinit var notificationManager: NotificationManager
+    @Volatile
     private var foregroundStarted: Boolean = false
 
     /** Observable set of server IDs that are actually connected (SSE stream active). */
@@ -404,22 +404,15 @@ class StarBurstConnectionService : Service() {
             }
         }
 
-        // Read server details from intent and connect
+        // Read server details from intent and connect. Prefer resolving the full config
+        // (including credentials) from the repository by serverId, so passwords are never
+        // carried in Intent extras. Fall back to intent extras only for legacy callers.
         val serverId = intent?.getStringExtra("server_id")
-        val serverUrl = intent?.getStringExtra("server_url")
-        if (serverId != null && serverUrl != null) {
-            val config = ServerConfig(
-                id = serverId,
-                url = serverUrl,
-                username = intent.getStringExtra("server_username") ?: "opencode",
-                password = intent.getStringExtra("server_password"),
-                name = intent.getStringExtra("server_name"),
-                sshPort = intent.getIntExtra("server_ssh_port", 22),
-                sshUsername = intent.getStringExtra("server_ssh_username") ?: "",
-                sshPassword = intent.getStringExtra("server_ssh_password"),
-            )
-            // SSH tunnel establishment is blocking; run off the main thread.
-            serviceScope.launch { connect(config) }
+        if (serverId != null) {
+            serviceScope.launch {
+                val config = serverRepository.getServer(serverId) ?: buildConfigFromIntent(intent)
+                if (config != null) connect(config)
+            }
             return START_NOT_STICKY
         }
 
@@ -441,6 +434,22 @@ class StarBurstConnectionService : Service() {
         return binder
     }
 
+    /** 从 Intent extras 兜底构建 [ServerConfig]（仅供兼容仍传完整参数的旧调用方）。 */
+    private fun buildConfigFromIntent(intent: Intent?): ServerConfig? {
+        val serverId = intent?.getStringExtra("server_id") ?: return null
+        val serverUrl = intent.getStringExtra("server_url") ?: return null
+        return ServerConfig(
+            id = serverId,
+            url = serverUrl,
+            username = intent.getStringExtra("server_username") ?: "opencode",
+            password = intent.getStringExtra("server_password"),
+            name = intent.getStringExtra("server_name"),
+            sshPort = intent.getIntExtra("server_ssh_port", 22),
+            sshUsername = intent.getStringExtra("server_ssh_username") ?: "",
+            sshPassword = intent.getStringExtra("server_ssh_password"),
+        )
+    }
+
     override fun onDestroy() {
         serverConnectionStateRepository.updateConnectedServerIds(emptySet())
         unregisterReceiver(wakeReceiver)
@@ -456,18 +465,18 @@ class StarBurstConnectionService : Service() {
     /**
      * Connect to an OpenCode server. If already connected to this server, no-op.
      * Multiple servers can be connected simultaneously.
+     *
+     * 注意：不加 @Synchronized——阻塞的 SSH 建连/网关探测放在 [connectInternal] 的锁外执行，
+     * 否则某台服务器 TCP 卡住会长时间持有 this 监视器，导致 disconnect 无法进入（停不下）。
      */
-    @Synchronized
     fun connect(server: ServerConfig) {
         explicitlyDisconnectedServerIds.remove(server.id)
         persistDisconnectedServers()
         connectInternal(server)
     }
 
-    @Synchronized
     private fun connectInternal(server: ServerConfig) {
-        // Re-check inside the lock: a concurrent disconnect() may have marked this
-        // server as explicitly disconnected while autoConnect waited for the lock.
+        // 快速判定（精确判定在下方锁内二次确认）。
         if (server.id in explicitlyDisconnectedServerIds) {
             if (BuildConfig.DEBUG) Log.d(TAG, "Server ${server.id} explicitly disconnected, skipping auto-connect")
             return
@@ -481,8 +490,8 @@ class StarBurstConnectionService : Service() {
             }
             return
         }
-        var replacement: ServerConnectionState? = null
-        var replaced: ServerConnectionState? = null
+
+        // 阻塞的 SSH 隧道建立（最长 15s+）与网关探测（最长 2.5s）放到锁外，避免卡住其它连接的 connect/disconnect。
         val resolved = try {
             resolveConnection(server)
         } catch (e: Exception) {
@@ -490,44 +499,61 @@ class StarBurstConnectionService : Service() {
             _connectionErrors.update { it + (server.id to (e.message ?: getString(R.string.home_server_not_responding))) }
             return
         }
-        connections.compute(server.id) { _, existing ->
-            if (existing != null && !existing.sseJob.isCompleted) return@compute existing
-            replaced = existing
-            val baseConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
-            val conn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
-            val sseJob = startSseConnection(server, conn)
-            val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
-            // SSE 结束（正常/异常/被 cancel）时取消「当前」push job。用 state 实时取值，
-            // 避免替换 pushJob（如 replaceSshSession 后）仍取消旧 job 导致新推送停不掉。
-            sseJob.invokeOnCompletion { connections[server.id]?.pushJob?.cancel() }
-            ServerConnectionState(
-                config = server,
-                conn = conn,
-                sseJob = sseJob,
-                isConnected = false,
-                sshSession = resolved.sshSession,
-                pushJob = pushJob,
-                directConn = baseConn,
-                backendLocalPort = resolved.backendLocalPort,
-            ).also { replacement = it }
+        val baseConn = ServerConnection.from(resolved.baseUrl, server.username, server.password)
+        val conn = buildGatewayConn(server, baseConn, resolved.backendLocalPort)
+
+        // 仅对共享状态变更加锁，保持 connect/disconnect 语义不变。
+        val state = synchronized(this) {
+            // 建连期间用户可能已 disconnect：此时关闭刚建立的隧道并放弃。
+            if (server.id in explicitlyDisconnectedServerIds) {
+                closeSshSession(resolved.sshSession)
+                return@synchronized null
+            }
+            var replacedState: ServerConnectionState? = null
+            var created: ServerConnectionState? = null
+            connections.compute(server.id) { _, existing ->
+                if (existing != null && !existing.sseJob.isCompleted) return@compute existing
+                replacedState = existing
+                val sseJob = startSseConnection(server, conn)
+                val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
+                // SSE 结束（正常/异常/被 cancel）时取消「当前」push job。用 state 实时取值，
+                // 避免替换 pushJob（如 replaceSshSession 后）仍取消旧 job 导致新推送停不掉。
+                sseJob.invokeOnCompletion { connections[server.id]?.pushJob?.cancel() }
+                ServerConnectionState(
+                    config = server,
+                    conn = conn,
+                    sseJob = sseJob,
+                    isConnected = false,
+                    sshSession = resolved.sshSession,
+                    pushJob = pushJob,
+                    directConn = baseConn,
+                    backendLocalPort = resolved.backendLocalPort,
+                ).also { created = it }
+            }
+            // 未创建新连接（已存在活跃连接）：关闭本次刚建立的隧道，避免泄漏。
+            if (created == null) {
+                closeSshSession(resolved.sshSession)
+            } else {
+                replacedState?.let {
+                    it.sseJob.cancel()
+                    closeSshSession(it.sshSession)
+                }
+                if (BuildConfig.DEBUG) Log.d(TAG, "Connecting to configured server")
+                ensureForegroundStarted()
+                acquireWakeLock()
+                // 连接中状态写入也放进锁内，与 disconnect 串行，避免「disconnect 后仍显示 connecting」。
+                _connectingServerIds.update { it + server.id }
+                _connectionErrors.update { it - server.id }
+                connectStartedAt[server.id] = SystemClock.elapsedRealtime()
+                _serverMetrics.update { it - server.id }
+                updatePersistentNotification()
+            }
+            created
         }
-        val state = replacement
         if (state == null) {
             if (BuildConfig.DEBUG) Log.d(TAG, "Already connected to server ${server.id}, skipping")
             return
         }
-        replaced?.sseJob?.cancel()
-        closeSshSession(replaced?.sshSession)
-
-        if (BuildConfig.DEBUG) Log.d(TAG, "Connecting to configured server")
-
-        ensureForegroundStarted()
-        acquireWakeLock()
-        _connectingServerIds.update { it + server.id }
-        _connectionErrors.update { it - server.id }
-        connectStartedAt[server.id] = SystemClock.elapsedRealtime()
-        _serverMetrics.update { it - server.id }
-        updatePersistentNotification()
         state.sseJob.start()
     }
 
@@ -692,10 +718,7 @@ class StarBurstConnectionService : Service() {
         val openCodePort = server.openCodePort
         var session: JschSession? = null
         return try {
-            val jsch = JSch()
-            session = jsch.getSession(server.sshUsername, host, server.sshPort)
-            session.setPassword(server.sshPassword ?: "")
-            session.setConfig("StrictHostKeyChecking", "no")
+            session = SshRunner.buildSession(server)
             // SSH 保活：防止会话因空闲/网络波动被中间设备掐断，降低隧道断连概率。
             session.setServerAliveInterval(15_000)
             session.setServerAliveCountMax(3)
@@ -1172,28 +1195,39 @@ class StarBurstConnectionService : Service() {
     }
 
     private fun updateServerConnected(serverId: String, connected: Boolean, expectedJob: Job) {
-        var changed = false
+        var transitioned = false
+        // flags 与 isConnected 必须在同一原子操作内更新：并发 true/false 交错时，
+        // 否则会出现「isConnected=true 但 connectedServerIds 未含该 server」的失步
+        // （表现为会话页显示断开、列表页一直 connecting，却仍能正常收发）。
         connections.computeIfPresent(serverId) { _, state ->
             if (state.sseJob !== expectedJob) return@computeIfPresent state
             if (state.isConnected == connected) {
-                state
-            } else {
-                changed = true
-                state.copy(isConnected = connected)
+                // 状态未变，仍对齐 flags，自愈任何历史失步。
+                reconcileConnectionFlags(serverId, connected)
+                return@computeIfPresent state
             }
+            transitioned = true
+            reconcileConnectionFlags(serverId, connected)
+            state.copy(isConnected = connected)
         }
-        if (!changed) return
+        if (!transitioned) return
         if (connected) {
-            _connectingServerIds.update { it - serverId }
-            _connectedServerIds.update { it + serverId }
             val latencyMs = connectStartedAt.remove(serverId)?.let { SystemClock.elapsedRealtime() - it }
             recordServerHeartbeat(serverId)
             if (latencyMs != null) recordServerLatency(serverId, latencyMs)
+        }
+        updatePersistentNotification()
+    }
+
+    /** 让 connected/connecting 两个 StateFlow 与 [ServerConnectionState.isConnected] 保持一致。 */
+    private fun reconcileConnectionFlags(serverId: String, connected: Boolean) {
+        if (connected) {
+            _connectingServerIds.update { it - serverId }
+            _connectedServerIds.update { it + serverId }
         } else {
             _connectedServerIds.update { it - serverId }
             _connectingServerIds.update { it + serverId }
         }
-        updatePersistentNotification()
     }
 
     private fun recordServerHeartbeat(serverId: String) {
@@ -1585,7 +1619,6 @@ class StarBurstConnectionService : Service() {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
             putExtra(EXTRA_SERVER_URL, server.url)
             putExtra(EXTRA_SERVER_USERNAME, server.username)
-            putExtra(EXTRA_SERVER_PASSWORD, server.password ?: "")
             putExtra(EXTRA_SERVER_NAME, server.displayName)
             putExtra(EXTRA_SERVER_ID, server.id)
             sessionPath?.let { putExtra(EXTRA_SESSION_PATH, it) }

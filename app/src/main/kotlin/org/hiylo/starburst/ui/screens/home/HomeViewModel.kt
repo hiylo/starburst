@@ -378,10 +378,8 @@ class HomeViewModel @Inject constructor(
                     putExtra("server_name", server.name)
                     putExtra("server_url", server.url)
                     putExtra("server_username", server.username)
-                    putExtra("server_password", server.password)
                     putExtra("server_ssh_port", server.sshPort)
                     putExtra("server_ssh_username", server.sshUsername)
-                    putExtra("server_ssh_password", server.sshPassword)
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
