@@ -16,6 +16,9 @@ import android.content.Context
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -193,6 +196,9 @@ class WorkbenchViewModel @Inject constructor(
 
     private var asrRecorder: AsrSession? = null
 
+    /** 独立作用域，专用于停止录音会话：ViewModel 清理时 viewModelScope 已取消，须用独立作用域避免麦克风常驻。 */
+    private val asrCleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     /** start 进行中的门控，防止快速双击并发创建 recorder / 录音常驻后无法停止。 */
     private var voiceStarting = false
 
@@ -255,7 +261,7 @@ class WorkbenchViewModel @Inject constructor(
         asrRecorder = null
         _voiceActive.value = false
         if (recorder != null) {
-            viewModelScope.launch { recorder.stop() }
+            asrCleanupScope.launch { recorder.stop() }
         }
         super.onCleared()
     }

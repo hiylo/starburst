@@ -197,13 +197,17 @@ object MnnAsr {
                 enableEndpoint = false,
                 decodingMethod = "greedy_search",
             )
-            val r = runCatching { OnlineRecognizer(config) }.getOrElse {
-                Log.e(TAG, "OnlineRecognizer init failed", it)
-                return@withContext false
+            // 加锁避免并发 start() 同时构建两个 OnlineRecognizer（原生内存泄漏）。
+            nativeLock.withLock {
+                if (recognizer != null) return@withLock true
+                val r = runCatching { OnlineRecognizer(config) }.getOrElse {
+                    Log.e(TAG, "OnlineRecognizer init failed", it)
+                    return@withLock false
+                }
+                recognizer = r
+                state = State.Ready
+                true
             }
-            recognizer = r
-            state = State.Ready
-            true
         }
     }
 
@@ -253,15 +257,23 @@ object MnnAsr {
         }
     }
 
-    /** 释放识别流（未完成的取消场景）。 */
-    fun releaseStream(stream: OnlineStream) {
-        runCatching { stream.release() }
+    /** 释放识别流（未完成的取消场景）。串行化避免与解码竞态。 */
+    suspend fun releaseStream(stream: OnlineStream) {
+        withContext(Dispatchers.IO) {
+            nativeLock.withLock {
+                runCatching { stream.release() }
+            }
+        }
     }
 
-    /** 释放识别器资源。 */
-    fun release() {
-        runCatching { recognizer?.release() }
-        recognizer = null
+    /** 释放识别器资源。串行化避免与解码竞态。 */
+    suspend fun release() {
+        withContext(Dispatchers.IO) {
+            nativeLock.withLock {
+                runCatching { recognizer?.release() }
+                recognizer = null
+            }
+        }
     }
 
     private fun isModelPresent(dir: File): Boolean {

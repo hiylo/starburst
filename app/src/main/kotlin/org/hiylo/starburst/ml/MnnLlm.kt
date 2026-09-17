@@ -11,7 +11,10 @@ package org.hiylo.starburst.ml
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -129,6 +132,9 @@ object MnnLlm {
 
     /** Serializes native calls so reset()/generate() never overlap with MNN internals. */
     private val nativeLock = Mutex()
+
+    /** Dedicated scope used only to serialize [release] through [nativeLock] without blocking callers. */
+    private val releaseScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private external fun initNative(configDir: String): Long
     private external fun generateNative(ptr: Long, prompt: String, maxTokens: Int): String
@@ -310,11 +316,13 @@ object MnnLlm {
     /** Generates a full response synchronously (blocking). Assumes [ensureLoaded] succeeded. */
     suspend fun generate(prompt: String, maxTokens: Int = 256): String {
         return withContext(Dispatchers.IO) {
-            val ptr = nativePtr
-            if (ptr == 0L) return@withContext ""
-            runCatching { generateNative(ptr, prompt, maxTokens) }.getOrElse {
-                Log.e(TAG, "generate failed", it)
-                ""
+            nativeLock.withLock {
+                val ptr = nativePtr
+                if (ptr == 0L) return@withLock ""
+                runCatching { generateNative(ptr, prompt, maxTokens) }.getOrElse {
+                    Log.e(TAG, "generate failed", it)
+                    ""
+                }
             }
         }
     }
@@ -361,13 +369,16 @@ object MnnLlm {
         }
     }
 
-    /** Releases native resources. Idempotent. */
+    /** Releases native resources. Idempotent; serialized behind [nativeLock] to avoid freeing
+     *  memory while a generation is still in flight (use-after-free). */
     fun release() {
-        synchronized(this) {
-            if (nativePtr != 0L) {
-                runCatching { releaseNative(nativePtr) }
-                nativePtr = 0L
-                loaded = false
+        releaseScope.launch {
+            nativeLock.withLock {
+                if (nativePtr != 0L) {
+                    runCatching { releaseNative(nativePtr) }
+                    nativePtr = 0L
+                    loaded = false
+                }
             }
         }
     }
