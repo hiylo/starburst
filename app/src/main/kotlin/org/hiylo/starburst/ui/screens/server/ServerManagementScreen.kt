@@ -28,6 +28,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -81,6 +82,7 @@ fun ServerManagementScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isAmoled = isAmoledTheme()
     var showRestartConfirm by rememberSaveable { mutableStateOf(false) }
+    var showLogTail by rememberSaveable { mutableStateOf(false) }
 
     var modelText by rememberSaveable { mutableStateOf("") }
     var agentText by rememberSaveable { mutableStateOf("") }
@@ -259,6 +261,19 @@ fun ServerManagementScreen(
                 }
             }
 
+            // 服务日志（实时跟踪）
+            SectionCard(isAmoled = isAmoled) {
+                SectionHeader(stringResource(R.string.log_tail_section_title))
+                AppPrimaryButton(
+                    onClick = { showLogTail = true },
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Icon(Icons.Default.Terminal, contentDescription = null, modifier = Modifier.width(18.dp).height(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.log_tail_open))
+                }
+            }
+
             // 服务重启
             SectionCard(isAmoled = isAmoled) {
                 SectionHeader(stringResource(R.string.server_mgmt_restart))
@@ -315,6 +330,10 @@ fun ServerManagementScreen(
                 }
             }
         }
+    }
+
+    if (showLogTail) {
+        LogTailDialog(onDismiss = { showLogTail = false })
     }
 }
 

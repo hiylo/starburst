@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Live service log tail -->
+    <string name="log_tail_section_title">Service log</string>
+    <string name="log_tail_open">Open live log</string>
+    <string name="log_tail_title">Live log</string>
+    <string name="log_tail_path_label">Log file path</string>
+    <string name="log_tail_path_hint">~/.local/share/opencode/log/opencode.log</string>
+    <string name="log_tail_keyword_label">Keyword filter</string>
+    <string name="log_tail_keyword_hint">Filter lines…</string>
+    <string name="log_tail_start">Start</string>
+    <string name="log_tail_stop">Stop</string>
+    <string name="log_tail_loading">Reading log…</string>
+    <string name="log_tail_empty">No log content</string>
+    <string name="log_tail_path_blank">Please enter a log file path</string>
+</resources>

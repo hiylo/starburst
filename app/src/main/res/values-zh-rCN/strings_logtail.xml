@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 服务日志实时跟踪 -->
+    <string name="log_tail_section_title">服务日志</string>
+    <string name="log_tail_open">打开实时日志</string>
+    <string name="log_tail_title">实时日志</string>
+    <string name="log_tail_path_label">日志文件路径</string>
+    <string name="log_tail_path_hint">~/.local/share/opencode/log/opencode.log</string>
+    <string name="log_tail_keyword_label">关键字过滤</string>
+    <string name="log_tail_keyword_hint">过滤日志行…</string>
+    <string name="log_tail_start">开始</string>
+    <string name="log_tail_stop">停止</string>
+    <string name="log_tail_loading">读取日志中…</string>
+    <string name="log_tail_empty">暂无日志内容</string>
+    <string name="log_tail_path_blank">请输入日志文件路径</string>
+</resources>
