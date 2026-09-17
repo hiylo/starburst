@@ -85,7 +85,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] R8 stripped JSch JCE classes → SSH tunnels broken in release builds (keep rules added)
 - [x] Release startup crash from stale incremental build artifacts (Hilt classes)
 
-## Now — 1.4.0 (In development)
+## 1.4.0 (Released ✅)
 
 > 2026-09-14. Server management, AGENTS.md 工作流与工程重构。
 
@@ -112,6 +112,53 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Server-side ASR preferred over on-device model
 - [x] Source split: ChatScreen / NavGraph / OpenCodeApi broken into per-concern files
 - [x] Renamed project to StarBurst (app id, label, keystore)
+
+## Now — 3.0.0 (Planned ⏳)
+
+> 2026-09-17. Test Intelligence（智能测试体系）+ 客户端增量能力。
+
+### Test Intelligence（智能测试体系）
+
+> 详见 starburst-backend `docs/TEST_INTELLIGENCE.md`。通用、技术栈无关的测试能力：仓库理解与
+> 契约提取、测试资产发现、Git 变更驱动增量测试、API/客户端字段级校验、被测环境供给、安全与合规
+> 审计、失败归因与修复应用。后端新增 `internal/intel` 子系统，Web 与 APP 共用 `/api/intel/*` 端点。
+
+- [ ] M1 项目+扫描器 — projects 扁平模型 + type/role 自动识别（含 monorepo 子项目 modules）+ 契约/实体/字段扫描（带 provenance）
+- [ ] M2 Git delta — 增量测试（last_tested_sha→HEAD 影响面 ∪ 未解决问题）+ 问题闭环演进
+- [ ] M3 测试资产发现 + 命令白名单 + 测试执行 + 报告解析 + flaky 隔离
+- [ ] M4 修复应用 — 归因 → 修复建议 diff 预览 → 人工「应用/驳回」+ 备份回滚
+- [ ] M5 环境管理 — 中间件/工具链/设备/远程节点逐项检测与安装 + 运行前门禁
+- [ ] M6 Android 校验 — 必展示清单 + 契约↔界面差集 + 空值检查（CLIENT_MISSING_FIELD）
+- [ ] M7 安全合规审计 — 依赖漏洞/静态/合规/LLM 评审 findings + 豁免/误报 + SBOM 导出
+- [ ] M8 功能点 + AI — 功能点聚簇/拖动排序/单测/问题挂载/AI 对话 + 安全告警智能分级（SECURITY_WARNING）+ AI 建议规则
+- [ ] M9 StarBurst APP 端 — 测试智能入口 + 功能点列表/详情 + 单测 + AI 对话 + 结果推送（能力对等，§6.1）。APP 为**轻量客户端**：不做 Web 全量内容，聚焦**关键操作**（发起单测、AI 对话归因、问题挂功能点/盯办、修复建议查看与「应用」、豁免/标记误报）与**关键信息预览**（功能点列表/详情、单测结果、问题摘要、SECURITY_WARNING 高亮）；环境管理/命令白名单/全局设置/规则编辑等复杂配置留 Web
+
+### Client features（客户端增量）
+
+- [ ] Token/用量统计（per 会话/服务器，后端聚合 + 工作台卡片）
+- [ ] Prompt 模板库（可增删改）+ 会话模板（目录+系统提示词+模型+prompt 一键复用）
+- [ ] 文件 Diff 查看器（PTY `git diff` / 文件对比，语法高亮）
+- [ ] 服务日志实时 tail（PTY `tail -f` + 关键字过滤）
+- [ ] 书签标签/分组
+- [ ] 服务器监控告警（CPU/内存/磁盘阈值 → 推送）
+- [ ] 通知栏快捷操作（RemoteInput 直接回复发起任务）
+- [ ] Material You 动态取色主题
+- [ ] 端侧代码补全/重写模型（MNN 离线）
+- [ ] 编辑器内 AI 操作（选中代码 → 解释/重构/写测试 → diff 预览后应用）
+- [ ] 会话时间线回放（agent 决策过程可视化）
+- [ ] 自定义系统提示词 + 上下文预算管理（per 服务器）
+- [ ] 多设备/团队同步（经 backend 同步配置/模板/书签/归档）
+- [ ] 加密备份与恢复（Keystore 加密备份包，可跨设备恢复）
+
+### Engineering quality
+
+- [ ] Unit tests（ServerRepository 加密读写、EventReducer、SettingsRepository 等纯逻辑）
+- [ ] 启动耗时 / 内存 / 卡顿性能基线
+
+### Removed (product decision)
+
+- [x] ~~Accessibility (TalkBack)~~ — dropped, not pursued
+- [x] ~~TTS voice reading of replies~~ — dropped, not pursued
 
 ## 1.3.0 (Released ✅)
 
@@ -205,7 +252,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Large-message memory / streaming-render optimization (delta StringBuilder accumulation, 50ms throttle sampling)
 - [x] Removed unconditional MNN model preload (native heap ~790MB → ~21MB)
 - [x] SSE stall self-healing (busy-period REST fallback polling)
-- [ ] Accessibility (TalkBack)
+- [x] ~~Accessibility (TalkBack)~~ — dropped by product decision (3.0.0)
 
 ## Later — Backlog
 
@@ -214,4 +261,4 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Session archive to backend — long-press in session list / chat overflow menu → snapshot to backend archives; fixed upstream message-shape parsing so archives carry real transcript content *(released 1.3.0)*
 - [x] Backend integration — stats / rules / audit / tokens management screens (APP-token readable, no web-session login needed) *(released 1.4.0)*
 - [x] Voice input via backend streaming engine *(released 1.3.0 as server-side ASR fallback)*
-- [ ] Remaining engineering quality (unit tests, performance testing)
+- [ ] Remaining engineering quality (unit tests, performance testing) — moved to 3.0.0
