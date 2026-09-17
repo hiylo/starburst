@@ -103,24 +103,31 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### 测试智能体系（Test Intelligence）
 
-> 详见 starburst-backend `docs/TEST_INTELLIGENCE.md`。通用、技术栈无关的测试能力：仓库理解与
-> 契约提取、测试资产发现、Git 变更驱动增量测试、API/客户端字段级校验、被测环境供给、安全与合规
-> 审计、失败归因与修复应用。后端新增 `internal/intel` 子系统，Web 与 APP 共用 `/api/intel/*` 端点。
+> 后端：starburst-backend `docs/TEST_INTELLIGENCE.md`。新增与编排子系统平级的技术栈无关测试子系
+> 统（`internal/intel`），Web 与 APP 共用 `/api/intel/*` 端点。覆盖：仓库理解与契约提取、测试资产
+> 发现、Git 变更驱动增量测试、API/客户端字段级校验、被测环境供给、安全与合规审计、失败归因与
+> 修复应用。里程碑 M1–M9。
 
-- [ ] M1 项目+扫描器 — projects 扁平模型 + type/role 自动识别（含 monorepo 子项目 modules）+ 契约/实体/字段扫描（带 provenance）
-- [ ] M2 Git delta — 增量测试（last_tested_sha→HEAD 影响面 ∪ 未解决问题）+ 问题闭环演进
-- [ ] M3 测试资产发现 + 命令白名单 + 测试执行 + 报告解析 + flaky 隔离
-- [ ] M4 修复应用 — 归因 → 修复建议 diff 预览 → 人工「应用/驳回」+ 备份回滚
-- [ ] M5 环境管理 — 中间件/工具链/设备/远程节点逐项检测与安装 + 运行前门禁
-- [ ] M6 Android 校验 — 必展示清单 + 契约↔界面差集 + 空值检查（CLIENT_MISSING_FIELD）
-- [ ] M7 安全合规审计 — 依赖漏洞/静态/合规/LLM 评审 findings + 豁免/误报 + SBOM 导出
-- [ ] M8 功能点 + AI — 功能点聚簇/拖动排序/单测/问题挂载/AI 对话 + 安全告警智能分级（SECURITY_WARNING）+ AI 建议规则
-- [ ] M9 StarBurst APP 端 — 测试智能入口 + 功能点列表/详情 + 单测 + AI 对话 + 结果推送（能力对等，§6.1）。APP 为**轻量客户端**：不做 Web 全量内容，聚焦**关键操作**（发起单测、AI 对话归因、问题挂功能点/盯办、修复建议查看与「应用」、豁免/标记误报）与**关键信息预览**（功能点列表/详情、单测结果、问题摘要、SECURITY_WARNING 高亮）；环境管理/命令白名单/全局设置/规则编辑等复杂配置留 Web
+- [ ] M1 项目+扫描器 — 扁平项目模型；type/role 自动识别（可插拔 Profile 注册表：Java/Maven、Go、Android、iOS、Web(Vue/React)、BFF(GraphQL)、Node…）；monorepo 子项目（modules）识别；实体/表/列 + 端点/字段契约提取，带 `source_file:line` provenance。
+- [ ] M2 Git delta — 增量范围 = `last_tested_sha..HEAD` 影响面 ∪ 未解决问题；变更文件分类（构建/依赖 → 全量、配置/SQL → 集成、测试 → 直接入范围、源码 → 按契约反查）；ref/force-push 回退全量；问题闭环（open/resolved/removed/regression）。
+- [ ] M3 测试资产+执行 — 测试资产发现与分类（JUnit/Playwright/XCTest/Go/Node）；每项目命令白名单；白名单内后台 `os/exec` 执行；报告解析（surefire/playwright/go test）；flaky 自动隔离。
+- [ ] M4 修复应用 — 归因 → 修复建议（patch 草稿带 provenance）→ diff 预览 → 人工应用/驳回；写回形态（直接写文件/补丁/剪贴板/git 分支+提交）；备份 + 一键回滚；审计留痕。
+- [ ] M5 环境供给 — 中间件（容器、口令加密）/工具链（逐项安装与卸载）/Android 设备（USB/无线 ADB，绑定持久化）/远程节点（SSH + 能力标签路由 + host key 校验）；运行前门禁（就绪/缺失可修给途径/平台不支持明确告知）。
+- [ ] M6 Android 校验 — 必展示字段清单；契约↔界面差集；空值检查 → `CLIENT_MISSING_FIELD`。
+- [ ] M7 安全合规审计 — 依赖漏洞（Trivy/OSV/govulncheck/npm audit，去重+快照缓存）、静态/lint、AGENTS.md 合规规则、LLM 评审 → findings；误报/豁免；SBOM 导出（CycloneDX）。
+- [ ] M8 功能点+AI — 功能点聚簇、拖动排序、涉及端；功能点单测（连通性+期望数据）；问题↔功能点挂载；带实测上下文 AI 对话；智能分级（明文敏感字段升 SECURITY_WARNING）；AI 建议规则（提示词可配、AI 润色、逐条扫描）。
+- [ ] M9 StarBurst APP 端 — 测试智能入口 + 功能点列表/详情 + 单测 + AI 对话 + 结果推送（能力对等，§6.1）。APP 为**轻量客户端**：关键操作（单测、AI 对话归因、问题挂功能点/盯办、修复建议查看与应用、豁免/误报）+ 关键信息预览（功能点列表/详情、单测结果、问题摘要、SECURITY_WARNING 高亮）；复杂配置（环境、命令白名单、全局设置、规则编辑）留 Web。
+
+#### 识别与校正（overrides）
+- 置信度分级（high/medium/low）；表格直改 + 提示词批量辅助；覆写层（`auto_value`/`manual_value`）带 provenance；锚点变更 → 待复核队列，绝不静默吞掉人工修正。
+
+#### 自动化与推送
+- `intel-run` 规则（GitLab push/tag webhook + cron）；`intel.*` WS 事件推送到 APP；`/api/batch` 多项目并行分析/执行。
 
 ### 客户端增量功能
 
 - [ ] Token/用量统计（每会话/每服务器，后端聚合 + 工作台卡片）
-- [ ] Prompt 模板库（可增删改）+ 会话模板（目录+系统提示词+模型+prompt 一键复用）
+- [ ] Prompt 模板库（增删改）+ 会话模板（目录+系统提示词+模型+prompt 一键复用）
 - [ ] 文件 Diff 查看器（PTY `git diff` / 文件对比，语法高亮）
 - [ ] 服务日志实时 tail（PTY `tail -f` + 关键字过滤）
 - [ ] 书签标签/分组
@@ -132,7 +139,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [ ] 会话时间线回放（agent 决策过程可视化）
 - [ ] 自定义系统提示词 + 上下文预算管理（每服务器）
 - [ ] 多设备/团队同步（经 backend 同步配置/模板/书签/归档）
-- [ ] 加密备份与恢复（Keystore 加密备份包，可跨设备恢复）
+- [ ] 加密备份与恢复（Keystore 加密备份包，跨设备恢复）
 
 ### 工程质量
 
