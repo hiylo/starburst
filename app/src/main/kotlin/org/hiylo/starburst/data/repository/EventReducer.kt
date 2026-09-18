@@ -39,6 +39,9 @@ private const val TAG = "EventReducer"
 private const val MAX_PENDING_DELTA_KEYS = 128
 private const val MAX_PENDING_DELTA_CHARS = 65_536
 
+/** callId → messageId 索引容量上限：超过后驱逐最旧条目，防止长时间运行无界增长。 */
+private const val MAX_CALL_ID_INDEX = 512
+
 /** 流式 delta 累积 flush 间隔（毫秒），与 UI 的节流采样对齐。 */
 private const val DELTA_FLUSH_INTERVAL_MS = 50L
 
@@ -97,6 +100,14 @@ class EventReducer @Inject constructor(
     private val pendingDeltas = LinkedHashMap<PendingDeltaKey, StringBuilder>()
     private val removedMessageLock = Any()
     private val removedMessageSessions = mutableMapOf<String, String>()
+
+    /**
+     * callId → messageId 索引：shell/tool 结束类事件（如 next.shell.ended）不带 messageId，
+     * 用该索引 O(1) 定位所属消息，避免每次全库扫描所有会话的所有 parts。
+     * 带容量上限，防止长时间运行累积。
+     */
+    private val callIdIndex = ConcurrentHashMap<String, String>()
+    private val callIndexLock = Any()
     
     // ============ State ============
     
@@ -397,6 +408,7 @@ class EventReducer @Inject constructor(
     }
 
     private fun handleNextShellStarted(event: SseEvent.NextShellStarted) {
+        indexCallId(event.callId, event.messageId)
         handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Tool(
             id = event.callId,
             sessionId = event.sessionId,
@@ -411,9 +423,14 @@ class EventReducer @Inject constructor(
     }
 
     private fun handleNextShellEnded(event: SseEvent.NextShellEnded) {
-        val existing = _parts.value.values.asSequence().flatten()
-            .filterIsInstance<Part.Tool>()
-            .firstOrNull { it.sessionId == event.sessionId && it.callId == event.callId }
+        // 优先走 callId 索引 O(1) 定位（shell.ended 事件不带 messageId），
+        // 避免每次对全部会话的所有 parts 做全量扫描。
+        val existing = _parts.value[messageIdForCall(event.callId)]
+            ?.filterIsInstance<Part.Tool>()
+            ?.firstOrNull { it.callId == event.callId }
+            ?: _parts.value.values.asSequence().flatten()
+                .filterIsInstance<Part.Tool>()
+                .firstOrNull { it.sessionId == event.sessionId && it.callId == event.callId }
             ?: return
         val running = existing.state as? ToolState.Running ?: return
         handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
@@ -428,8 +445,24 @@ class EventReducer @Inject constructor(
     private fun findToolPart(messageId: String, callId: String): Part.Tool? =
         _parts.value[messageId]?.filterIsInstance<Part.Tool>()?.firstOrNull { it.callId == callId }
 
+    /** 记录 callId → messageId 映射，供不带 messageId 的结束类事件 O(1) 定位。 */
+    private fun indexCallId(callId: String, messageId: String) {
+        synchronized(callIndexLock) {
+            callIdIndex[callId] = messageId
+            if (callIdIndex.size > MAX_CALL_ID_INDEX) {
+                val eldest = callIdIndex.keys.firstOrNull() ?: return
+                callIdIndex.remove(eldest)
+            }
+        }
+    }
+
+    /** 通过 callId 索引反查 messageId；无索引时返回 null（调用方需兜底扫描）。 */
+    private fun messageIdForCall(callId: String): String? =
+        synchronized(callIndexLock) { callIdIndex[callId] }
+
     private fun handleNextToolInputStarted(event: SseEvent.NextToolInputStarted) {
         if (findToolPart(event.messageId, event.callId) != null) return
+        indexCallId(event.callId, event.messageId)
         handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Tool(
             id = event.callId,
             sessionId = event.sessionId,

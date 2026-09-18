@@ -112,6 +112,7 @@ class SseClient @Inject constructor(
             val channel = response.bodyAsChannel()
             val decoder = SseFrameDecoder()
             var eventCount = 0
+            var oversizedFrameCount = 0
 
             Log.i(TAG, "SSE stream opened, reading events...")
             onOpen()
@@ -121,8 +122,19 @@ class SseClient @Inject constructor(
                     ?: if (channel.isClosedForRead) break else {
                         throw SseConnectionException("SSE stream timed out")
                     }
-                decoder.accept(line)?.let { data ->
-                    eventCount += processFrame(data) { emit(it) }
+                try {
+                    decoder.accept(line)?.let { data ->
+                        eventCount += processFrame(data) { emit(it) }
+                    }
+                } catch (e: SseFrameTooLargeException) {
+                    // 单帧超限（如附件 data URL / 大 patch）不应终止整条 SSE 流：
+                    // 解码器已 clear()，跳过该帧继续读取，避免服务端反复推同帧时
+                    // 陷入 15 分钟重连风暴。
+                    oversizedFrameCount++
+                    Log.w(
+                        TAG,
+                        "Skipping oversized SSE frame (${e.message}); skipped=$oversizedFrameCount",
+                    )
                 }
             }
 

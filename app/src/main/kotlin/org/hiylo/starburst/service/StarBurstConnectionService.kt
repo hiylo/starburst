@@ -545,9 +545,10 @@ class StarBurstConnectionService : Service() {
                 replacedState = existing
                 val sseJob = startSseConnection(server, conn)
                 val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
-                // SSE 结束（正常/异常/被 cancel）时取消「当前」push job。用 state 实时取值，
-                // 避免替换 pushJob（如 replaceSshSession 后）仍取消旧 job 导致新推送停不掉。
-                sseJob.invokeOnCompletion { connections[server.id]?.pushJob?.cancel() }
+                // SSE 结束（正常/异常/被 cancel）时取消「本次」push job。闭包捕获创建时的
+                // 局部引用而非实时读 connections[server.id]，避免替换 state 后误取消新装的 job。
+                val capturedPushJob = pushJob
+                sseJob.invokeOnCompletion { capturedPushJob?.cancel() }
                 ServerConnectionState(
                     config = server,
                     conn = conn,
@@ -564,7 +565,9 @@ class StarBurstConnectionService : Service() {
                 closeSshSession(resolved.sshSession)
             } else {
                 replacedState?.let {
+                    // 替换连接时回收旧推送订阅，避免僵尸 WS 累积导致连接泄漏/重复订阅。
                     it.sseJob.cancel()
+                    it.pushJob?.cancel()
                     closeSshSession(it.sshSession)
                 }
                 if (BuildConfig.DEBUG) Log.d(TAG, "Connecting to configured server")
@@ -853,14 +856,17 @@ class StarBurstConnectionService : Service() {
             for (state in states) {
                 val job = startSseConnection(state.config, state.conn, preload = false)
                 val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
-                job.invokeOnCompletion { connections[state.config.id]?.pushJob?.cancel() }
+                val capturedPushJob = newPush
+                job.invokeOnCompletion { capturedPushJob?.cancel() }
                 val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
                 if (!connections.replace(state.config.id, state, replacement)) {
                     job.cancel()
                     newPush?.cancel()
                     continue
                 }
+                // 回收旧推送订阅，避免连接重建后旧 WS 订阅永久存活。
                 state.sseJob.cancel()
+                state.pushJob?.cancel()
                 reconciliationJobs.remove(state.config.id)?.cancel()
                 _connectedServerIds.update { it - state.config.id }
                 _connectingServerIds.update { it + state.config.id }
@@ -906,14 +912,17 @@ class StarBurstConnectionService : Service() {
         val state = connections[serverId] ?: return
         val job = startSseConnection(state.config, state.conn, preload = false)
         val newPush = startBackendPushJob(state.config, state.conn, state.backendLocalPort)
-        job.invokeOnCompletion { connections[serverId]?.pushJob?.cancel() }
+        val capturedPushJob = newPush
+        job.invokeOnCompletion { capturedPushJob?.cancel() }
         val replacement = state.copy(sseJob = job, isConnected = false, pushJob = newPush)
         if (!connections.replace(serverId, state, replacement)) {
             job.cancel()
             newPush?.cancel()
             return
         }
+        // 回收旧推送订阅，避免替换连接后旧 WS 订阅永久存活。
         state.sseJob.cancel()
+        state.pushJob?.cancel()
         reconciliationJobs.remove(serverId)?.cancel()
         _connectedServerIds.update { it - serverId }
         _connectingServerIds.update { it + serverId }
@@ -1507,7 +1516,9 @@ class StarBurstConnectionService : Service() {
                 job.cancel()
                 return
             }
+            // 回退到直连后不再走后端镜像：回收旧推送订阅，避免后端 WS 继续残留。
             state.sseJob.cancel()
+            state.pushJob?.cancel()
             reconciliationJobs.remove(server.id)?.cancel()
             _connectedServerIds.update { it - server.id }
             _connectingServerIds.update { it + server.id }
@@ -1766,7 +1777,10 @@ class StarBurstConnectionService : Service() {
             Log.w(TAG, "Notification reply ignored: server $serverId not connected (session=$sessionId)")
             return
         }
-        Log.i(TAG, "Notification reply: server=$serverId session=$sessionId kind=$kind text='${replyText.take(80)}'")
+        Log.d(TAG, "Notification reply: server=$serverId session=$sessionId kind=$kind textLen=${replyText.length}")
+        if (BuildConfig.DEBUG) {
+            Log.d(TAG, "Notification reply text='${replyText.take(80)}'")
+        }
         when (kind) {
             REPLY_KIND_QUESTION -> answerQuestionFromReply(state, sessionId, replyText)
             REPLY_KIND_COMPLETION -> sendFollowUpPrompt(state, sessionId, replyText)
