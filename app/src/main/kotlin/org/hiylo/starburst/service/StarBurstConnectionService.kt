@@ -79,18 +79,18 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
-private const val TAG = "StarBurstService"
-private const val NOTIFICATION_CHANNEL_ID = "starburst_connection"
-private const val NOTIFICATION_CHANNEL_TASKS_ID = "starburst_tasks"
-private const val NOTIFICATION_CHANNEL_TASKS_SILENT_ID = "starburst_tasks_silent"
-private const val NOTIFICATION_CHANNEL_PERMISSIONS_ID = "starburst_permissions"
-private const val PERSISTENT_NOTIFICATION_ID = 1001
+internal const val TAG = "StarBurstService"
+internal const val NOTIFICATION_CHANNEL_ID = "starburst_connection"
+internal const val NOTIFICATION_CHANNEL_TASKS_ID = "starburst_tasks"
+internal const val NOTIFICATION_CHANNEL_TASKS_SILENT_ID = "starburst_tasks_silent"
+internal const val NOTIFICATION_CHANNEL_PERMISSIONS_ID = "starburst_permissions"
+internal const val PERSISTENT_NOTIFICATION_ID = 1001
 private const val WAKELOCK_TAG = "StarBurst::SSEConnection"
 
 // Reconnect timing
-private const val RECONNECT_BASE_DELAY_MS = 1_000L   // 1 second
-private const val RECONNECT_MAX_DELAY_MS = 30_000L   // 30 seconds
-private const val RECONNECT_BACKOFF_FACTOR = 2.0
+internal const val RECONNECT_BASE_DELAY_MS = 1_000L   // 1 second
+internal const val RECONNECT_MAX_DELAY_MS = 30_000L   // 30 seconds
+internal const val RECONNECT_BACKOFF_FACTOR = 2.0
 private const val RECOVERY_DEBOUNCE_MS = 5_000L
 private const val MAX_RECONCILED_MESSAGE_SESSIONS = 20
 internal const val FAILED_CONNECTION_TIMEOUT_MS = 15 * 60 * 1000L
@@ -106,7 +106,7 @@ private const val COMPLETION_POLL_INTERVAL_MS = 15_000L
 /** 后端推送连续失败达到该次数后，把该 server 连接回退到直连 opencode。 */
 private const val BACKEND_FALLBACK_THRESHOLD = 3
 /** 通知正文结果摘要的最大字符数（约 80 字）。 */
-private const val NOTIFICATION_SUMMARY_MAX_CHARS = 80
+internal const val NOTIFICATION_SUMMARY_MAX_CHARS = 80
 
 internal fun hasFailedConnectionTimedOut(failureStartedAt: Long, now: Long): Boolean {
     return now - failureStartedAt >= FAILED_CONNECTION_TIMEOUT_MS
@@ -142,7 +142,7 @@ data class ServerConnectionMetrics(
 /**
  * Per-server connection state held by the service.
  */
-private data class ServerConnectionState(
+internal data class ServerConnectionState(
     val config: ServerConfig,
     val conn: ServerConnection,
     val sseJob: Job,
@@ -186,16 +186,16 @@ class StarBurstConnectionService : Service() {
     }
 
     @Inject
-    lateinit var api: OpenCodeApi
+    internal lateinit var api: OpenCodeApi
 
     @Inject
     lateinit var sseClient: SseClient
 
     @Inject
-    lateinit var eventReducer: EventReducer
+    internal lateinit var eventReducer: EventReducer
 
     @Inject
-    lateinit var settingsRepository: SettingsRepository
+    internal lateinit var settingsRepository: SettingsRepository
 
     @Inject
     lateinit var serverRepository: ServerRepository
@@ -204,7 +204,7 @@ class StarBurstConnectionService : Service() {
     lateinit var serverConnectionStateRepository: ServerConnectionStateRepository
 
     @Inject
-    lateinit var pendingPromptRepository: PendingPromptRepository
+    internal lateinit var pendingPromptRepository: PendingPromptRepository
 
     @Inject
     lateinit var backendApi: BackendApi
@@ -213,7 +213,7 @@ class StarBurstConnectionService : Service() {
     lateinit var backendPushListener: BackendPushListener
 
     private val binder = LocalBinder()
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    internal val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** Main-thread handler used to defer stopSelf() until after any queued connect completes. */
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -228,26 +228,26 @@ class StarBurstConnectionService : Service() {
     }
 
     /** All active/pending server connections keyed by serverId. */
-    private val connections = ConcurrentHashMap<String, ServerConnectionState>()
+    internal val connections = ConcurrentHashMap<String, ServerConnectionState>()
 
     /** Cached reconnect mode ("aggressive" | "normal" | "conservative"), refreshed from DataStore on start. */
     @Volatile
-    private var reconnectMode: String = "normal"
+    internal var reconnectMode: String = "normal"
 
     /** Cached do-not-disturb snapshot, refreshed from DataStore on start. */
     @Volatile
-    private var dndEnabledSnapshot: Boolean = false
+    internal var dndEnabledSnapshot: Boolean = false
 
     @Volatile
-    private var dndStartSnapshot: String = "22:00"
+    internal var dndStartSnapshot: String = "22:00"
 
     @Volatile
-    private var dndEndSnapshot: String = "07:00"
+    internal var dndEndSnapshot: String = "07:00"
 
     private var autoConnectJob: Job? = null
     @Volatile
     private var recoveryJob: Job? = null
-    private val reconciliationJobs = ConcurrentHashMap<String, Job>()
+    internal val reconciliationJobs = ConcurrentHashMap<String, Job>()
     private val explicitlyDisconnectedServerIds = ConcurrentHashMap.newKeySet<String>()
     @Volatile
     private var wakeLock: PowerManager.WakeLock? = null
@@ -259,7 +259,7 @@ class StarBurstConnectionService : Service() {
     private var lastDefaultNetwork: Network? = null
     private lateinit var connectivityManager: ConnectivityManager
     @Volatile
-    private var lastPersistentNotificationState: List<Triple<String, String, Boolean>>? = null
+    internal var lastPersistentNotificationState: List<Triple<String, String, Boolean>>? = null
 
     private val wakeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -290,9 +290,9 @@ class StarBurstConnectionService : Service() {
         }
     }
 
-    private lateinit var notificationManager: NotificationManager
+    internal lateinit var notificationManager: NotificationManager
     @Volatile
-    private var foregroundStarted: Boolean = false
+    internal var foregroundStarted: Boolean = false
 
     /** Observable set of server IDs that are actually connected (SSE stream active). */
     private val _connectedServerIds = MutableStateFlow<Set<String>>(emptySet())
@@ -1140,100 +1140,6 @@ class StarBurstConnectionService : Service() {
         }
     }
 
-    private fun startReconciliation(server: ServerConfig, conn: ServerConnection) {
-        val job = serviceScope.launch { reconcileServerState(server, conn) }
-        reconciliationJobs.put(server.id, job)?.cancel()
-        job.invokeOnCompletion { reconciliationJobs.remove(server.id, job) }
-    }
-
-    private suspend fun reconcileServerState(server: ServerConfig, conn: ServerConnection) {
-        val revision = eventReducer.pendingSnapshotRevision()
-        val permissions = mutableListOf<SseEvent.PermissionAsked>()
-        val questions = mutableListOf<SseEvent.QuestionAsked>()
-        var complete = true
-        try {
-            val localSessions = eventReducer.sessions.value.associateBy { it.id }
-            val sessions = api.listSessions(conn)
-            val changedSessions = sessionsNeedingMessageReconciliation(localSessions, sessions)
-            eventReducer.setSessions(server.id, sessions)
-            changedSessions.forEach { session ->
-                try {
-                    eventReducer.mergeMessages(
-                        session.id,
-                        api.listMessages(conn, session.id, limit = 50, directory = session.directory),
-                        server.id,
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "[${server.displayName}] Message reconciliation failed for ${session.id}", e)
-                }
-            }
-            val serverSessionIds = eventReducer.serverSessions.value[server.id].orEmpty()
-            val sessionIds = eventReducer.sessions.value.asSequence()
-                .filter { it.id in serverSessionIds }
-                .map { it.id }
-                .toSet()
-            // /session/status、/permission、/question 都按 query 参数 directory 过滤（不认 header），
-            // 且 /session/status 不支持无 directory 全量查询，必须按会话目录分组聚合。
-            val directories = sessions.asSequence()
-                .map { it.directory }
-                .filter { it.isNotBlank() }
-                .distinct()
-                .toList()
-            val statuses = api.listSessionStatusesForDirectories(conn, directories)
-            // 重连对账是完整的状态同步：/session/status 快照是服务端当前真实状态，
-            // 省略的会话即为已空闲，必须纠正掉断线期间残留的 Busy（connected=false 语义）。
-            eventReducer.replaceSessionStatuses(server.id, sessionIds, statuses, connected = false)
-            for (dir in directories) {
-                try {
-                    permissions += api.listPendingPermissions(conn, directory = dir).map { request ->
-                        SseEvent.PermissionAsked(
-                            id = request.id,
-                            sessionId = request.sessionId,
-                            permission = request.permission,
-                            patterns = request.patterns,
-                            always = request.always,
-                            metadata = request.metadata,
-                            tool = request.tool,
-                        )
-                    }
-                    questions += api.listPendingQuestions(conn, directory = dir).map { request ->
-                        SseEvent.QuestionAsked(
-                            id = request.id,
-                            sessionId = request.sessionId,
-                            questions = request.questions.map { question ->
-                                SseEvent.QuestionAsked.Question(
-                                    header = question.header,
-                                    question = question.question,
-                                    multiple = question.multiple,
-                                    custom = question.custom,
-                                    options = question.options.map { option ->
-                                        SseEvent.QuestionAsked.Option(option.label, option.description)
-                                    },
-                                )
-                            },
-                            tool = request.tool,
-                        )
-                    }
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.w(TAG, "[${server.displayName}] Pending reconciliation failed for directory $dir", e)
-                    complete = false
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            complete = false
-            Log.w(TAG, "[${server.displayName}] Reconciliation failed", e)
-        }
-        if (complete) {
-            eventReducer.replacePendingRequests(server.id, permissions, questions, revision)
-        }
-    }
-
     @Synchronized
     private fun cleanupTerminatedConnection(serverId: String, job: Job) {
         val state = connections[serverId] ?: return
@@ -1314,30 +1220,7 @@ class StarBurstConnectionService : Service() {
         connectStartedAt.remove(serverId)
     }
 
-    private fun calculateBackoff(attempt: Int): Long {
-        val maxDelay = when (reconnectMode) {
-            "aggressive" -> 5_000L
-            "conservative" -> 60_000L
-            else -> RECONNECT_MAX_DELAY_MS // normal: 30s
-        }
-        val exponential = (RECONNECT_BASE_DELAY_MS * Math.pow(RECONNECT_BACKOFF_FACTOR, (attempt - 1).coerceAtLeast(0).toDouble())).toLong()
-        val capped = exponential.coerceAtMost(maxDelay)
-        // Randomize by ±25% so multiple servers on the same network don't reconnect in a synchronized "thundering herd".
-        val jitterFactor = 0.75 + Random.nextDouble() * 0.5
-        return (capped * jitterFactor).toLong().coerceAtLeast(1L)
-    }
-
     // ============ Event Processing ============
-
-    /**
-     * Check if a session is a child/sub-agent session (has parentID set).
-     * Child sessions should not trigger user-facing notifications,
-     * matching the behavior of the official opencode WebUI and TUI.
-     */
-    private fun isChildSession(sessionId: String): Boolean {
-        val session = eventReducer.sessions.value.find { it.id == sessionId }
-        return session?.parentId != null
-    }
 
     private fun processEvent(server: ServerConfig, event: SseEvent, directory: String?, workspaceId: String?) {
         eventReducer.processEvent(event, server.id, directory, workspaceId)
@@ -1438,24 +1321,6 @@ class StarBurstConnectionService : Service() {
                 } ?: baseConn
             }
         }.getOrDefault(baseConn)
-    }
-
-    /**
-     * 解析后端镜像地址：SSH 隧道模式下用隧道内后端本地端口（否则 127.0.0.1:18880 不可达），
-     * 非 SSH 模式优先显式 [server.backendUrl]，否则推导为 opencode 同主机 18880。
-     */
-    private fun resolveBackendUrl(server: ServerConfig, backendLocalPort: Int?): String {
-        if (server.useSsh) {
-            backendLocalPort?.let { return "http://127.0.0.1:$it" }
-            // 没有显式 backendUrl 时不推导（隧道未转发后端端口，18880 不可达）。
-            if (server.backendUrl.isNullOrBlank()) return ""
-        }
-        return server.backendResolvedUrl
-    }
-
-    private fun getSessionInfo(sessionId: String): Pair<String?, String?> {
-        val session = eventReducer.sessions.value.find { it.id == sessionId }
-        return Pair(session?.title, session?.directory)
     }
 
     /**
@@ -1627,240 +1492,6 @@ class StarBurstConnectionService : Service() {
         }
     }
 
-    private fun latestNotifiableAssistantMessageId(sessionId: String): String? {
-        val sessionMessages = eventReducer.messages.value[sessionId] ?: return null
-        val latestAssistant = sessionMessages
-            .asReversed()
-            .firstOrNull { it is Message.Assistant } as? Message.Assistant ?: return null
-
-        if (!latestAssistant.error?.message.isNullOrBlank()) return latestAssistant.id
-
-        val parts = eventReducer.parts.value[latestAssistant.id] ?: return null
-        val hasTextOutput = parts.any { part ->
-            when (part) {
-                is Part.Text -> part.text.isNotBlank()
-                is Part.Reasoning -> part.text.isNotBlank()
-                else -> false
-            }
-        }
-        return if (hasTextOutput) latestAssistant.id else null
-    }
-
-    /**
-     * 取会话最后一条 assistant 消息的文本摘要（仅 Part.Text），用于通知正文。
-     * 截断到 [NOTIFICATION_SUMMARY_MAX_CHARS] 字；无文本时返回 null。
-     */
-    private fun buildAssistantMessageSummary(sessionId: String): String? {
-        val sessionMessages = eventReducer.messages.value[sessionId] ?: return null
-        val latestAssistant = sessionMessages
-            .asReversed()
-            .firstOrNull { it is Message.Assistant } as? Message.Assistant ?: return null
-        val parts = eventReducer.parts.value[latestAssistant.id] ?: return null
-        val text = parts.filterIsInstance<Part.Text>()
-            .map { it.text.trim() }
-            .filter { it.isNotEmpty() }
-            .joinToString(" ")
-        if (text.isEmpty()) return null
-        return text.take(NOTIFICATION_SUMMARY_MAX_CHARS)
-    }
-
-    private fun getProjectName(directory: String?): String? {
-        if (directory.isNullOrBlank()) return null
-        return directory.trimEnd('/').substringAfterLast('/')
-    }
-
-    private fun base64UrlEncode(value: String): String {
-        val encoded = android.util.Base64.encodeToString(
-            value.toByteArray(Charsets.UTF_8),
-            android.util.Base64.NO_WRAP
-        )
-        return encoded
-            .replace('+', '-')
-            .replace('/', '_')
-            .replace("=", "")
-    }
-
-    private fun buildSessionPath(sessionId: String): String? {
-        val session = eventReducer.sessions.value.find { it.id == sessionId }
-        if (session == null) {
-            Log.w(TAG, "buildSessionPath: session $sessionId not found")
-            return null
-        }
-        val encodedDir = base64UrlEncode(session.directory)
-        return "/$encodedDir/session/$sessionId"
-    }
-
-    private fun createSessionPendingIntent(server: ServerConfig, sessionId: String?, requestCode: Int): PendingIntent {
-        val sessionPath = sessionId?.let { buildSessionPath(it) }
-
-        val intent = Intent(this, MainActivity::class.java).apply {
-            action = ACTION_OPEN_SESSION
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-            putExtra(EXTRA_SERVER_URL, server.url)
-            putExtra(EXTRA_SERVER_USERNAME, server.username)
-            putExtra(EXTRA_SERVER_NAME, server.displayName)
-            putExtra(EXTRA_SERVER_ID, server.id)
-            sessionPath?.let { putExtra(EXTRA_SESSION_PATH, it) }
-            sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
-        }
-
-        return PendingIntent.getActivity(
-            this,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-    }
-
-    /**
-     * 构造「重试」按钮的广播 PendingIntent：携带 serverId/sessionId，由后续的
-     * BroadcastReceiver 监听 [ACTION_RETRY_SESSION] 触发对应会话重试。
-     */
-    private fun createRetrySessionPendingIntent(
-        server: ServerConfig,
-        sessionId: String?,
-        requestCode: Int,
-    ): PendingIntent {
-        val intent = Intent(ACTION_RETRY_SESSION).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_SERVER_ID, server.id)
-            sessionId?.let { putExtra(EXTRA_SESSION_ID, it) }
-        }
-        return PendingIntent.getBroadcast(
-            this,
-            requestCode,
-            intent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-    }
-
-    /**
-     * 构造通知内嵌「回复」RemoteInput 动作：携带 serverId/sessionId/通知 ID/回复类型等非敏感 extras，
-     * 由 [NotificationReplyReceiver] 接收用户输入的文本并转发给本服务处理。
-     */
-    private fun buildReplyAction(
-        server: ServerConfig,
-        sessionId: String,
-        notifId: Int,
-        kind: String,
-    ): NotificationCompat.Action {
-        val remoteInput = RemoteInput.Builder(KEY_NOTIFICATION_REPLY)
-            .setLabel(getString(R.string.notification_reply_label))
-            .build()
-        val replyIntent = Intent(ACTION_NOTIFICATION_REPLY).apply {
-            setPackage(packageName)
-            putExtra(EXTRA_SERVER_ID, server.id)
-            putExtra(EXTRA_SESSION_ID, sessionId)
-            putExtra(EXTRA_REPLY_NOTIFICATION_ID, notifId)
-            putExtra(EXTRA_REPLY_KIND, kind)
-        }
-        val replyPendingIntent = PendingIntent.getBroadcast(
-            this,
-            notifId,
-            replyIntent,
-            PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-        return NotificationCompat.Action.Builder(
-            android.R.drawable.ic_menu_send,
-            getString(R.string.notification_reply_label),
-            replyPendingIntent
-        ).addRemoteInput(remoteInput).build()
-    }
-
-    /**
-     * 处理来自通知内嵌回复的文本：回答问题或给会话发送后续 prompt。
-     * 仅通过非敏感 extras（serverId/sessionId）路由，绝不携带密码。
-     */
-    private suspend fun handleNotificationReply(serverId: String, sessionId: String, replyText: String, kind: String?) {
-        val state = connections[serverId]
-        if (state == null) {
-            Log.w(TAG, "Notification reply ignored: server $serverId not connected (session=$sessionId)")
-            return
-        }
-        Log.d(TAG, "Notification reply: server=$serverId session=$sessionId kind=$kind textLen=${replyText.length}")
-        if (BuildConfig.DEBUG) {
-            Log.d(TAG, "Notification reply text='${replyText.take(80)}'")
-        }
-        when (kind) {
-            REPLY_KIND_QUESTION -> answerQuestionFromReply(state, sessionId, replyText)
-            REPLY_KIND_COMPLETION -> sendFollowUpPrompt(state, sessionId, replyText)
-            else -> storeReplyAsPendingPrompt(state, sessionId, replyText)
-        }
-    }
-
-    /**
-     * 复用既有问题回答路径：查会话待决问题并以回复文本作为答案提交；
-     * 找不到待决问题或提交失败时，降级为把回复存为待发 prompt，保证文本不丢失。
-     */
-    private suspend fun answerQuestionFromReply(state: ServerConnectionState, sessionId: String, replyText: String) {
-        val question = eventReducer.pendingInteractions.value
-            .filterIsInstance<PendingInteraction.Question>()
-            .firstOrNull { it.sessionId == sessionId }
-        if (question == null) {
-            Log.w(TAG, "No pending question for session $sessionId; storing reply as pending prompt")
-            storeReplyAsPendingPrompt(state, sessionId, replyText)
-            return
-        }
-        val directory = sessionDirectoryOf(sessionId)
-        val ok = try {
-            api.replyToQuestion(state.conn, question.id, listOf(listOf(replyText)), directory)
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to reply to question ${question.id}", e)
-            false
-        }
-        if (ok) {
-            eventReducer.removeQuestion(sessionId, question.id)
-            Log.i(TAG, "Question ${question.id} answered via notification reply")
-        } else {
-            storeReplyAsPendingPrompt(state, sessionId, replyText)
-        }
-    }
-
-    /** 给会话发送后续 prompt（继续会话），失败时降级为待发 prompt。 */
-    private suspend fun sendFollowUpPrompt(state: ServerConnectionState, sessionId: String, replyText: String) {
-        val directory = sessionDirectoryOf(sessionId)
-        val messageId = MessageIdGenerator.next()
-        val parts = listOf(PromptPart(type = "text", text = replyText))
-        try {
-            api.promptAsync(
-                conn = state.conn,
-                sessionId = sessionId,
-                messageId = messageId,
-                parts = parts,
-                directory = directory,
-            )
-            eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
-            Log.i(TAG, "Follow-up prompt sent to session $sessionId via notification reply")
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to send follow-up prompt to session $sessionId", e)
-            storeReplyAsPendingPrompt(state, sessionId, replyText)
-        }
-    }
-
-    /** 回复无法立即投递时，存为待发 prompt，由会话界面读取并展示。 */
-    private fun storeReplyAsPendingPrompt(state: ServerConnectionState, sessionId: String, replyText: String) {
-        pendingPromptRepository.save(
-            PendingPromptRecord(
-                messageId = MessageIdGenerator.next(),
-                sessionId = sessionId,
-                parts = listOf(PromptPart(type = "text", text = replyText)),
-                directory = sessionDirectoryOf(sessionId),
-                createdAt = System.currentTimeMillis(),
-            )
-        )
-        Log.i(TAG, "Reply stored as pending prompt for session $sessionId (server=${state.config.id})")
-    }
-
-    /** 取会话工作目录（供回答问题/发送 prompt 的 directory 参数使用）。 */
-    private fun sessionDirectoryOf(sessionId: String): String? =
-        eventReducer.sessions.value.firstOrNull { it.id == sessionId }
-            ?.directory
-            ?.takeIf { it.isNotBlank() }
-
     companion object {
         const val ACTION_OPEN_SESSION = "org.hiylo.starburst.OPEN_SESSION"
         const val ACTION_DISCONNECT = "org.hiylo.starburst.DISCONNECT"
@@ -1893,368 +1524,4 @@ class StarBurstConnectionService : Service() {
         const val EXTRA_SESSION_ID = "sessionId"
     }
 
-    // ============ Notification Channels ============
-
-    private fun createNotificationChannels() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            // The tasks channel previously shipped without an explicit sound. Android never
-            // updates an already-created channel's sound settings, so force it by deleting
-            // and recreating the channel once on this upgrade.
-            if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID) != null) {
-                notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID)
-            }
-            // 权限/提问通知此前无声（MIUI 上 HIGH channel 不 setSound 即静音），重建一次以生效。
-            if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID) != null) {
-                notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID)
-            }
-
-            val connectionChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_ID,
-                getString(R.string.notification_channel_connection),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.notification_channel_connection_desc)
-                setShowBadge(false)
-            }
-
-            val tasksChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_TASKS_ID,
-                getString(R.string.notification_channel_tasks),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getString(R.string.notification_channel_tasks_desc)
-                setShowBadge(true)
-                enableVibration(true)
-                enableLights(true)
-                // Explicitly use the system default notification sound. On some devices
-                // (MIUI etc.) a HIGH channel without setSound still fires silently.
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-            }
-
-            val tasksSilentChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_TASKS_SILENT_ID,
-                getString(R.string.notification_channel_tasks_silent),
-                NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = getString(R.string.notification_channel_tasks_silent_desc)
-                setShowBadge(true)
-                enableVibration(false)
-                enableLights(false)
-                setSound(null, null)
-            }
-
-            val permissionsChannel = NotificationChannel(
-                NOTIFICATION_CHANNEL_PERMISSIONS_ID,
-                getString(R.string.notification_channel_permissions),
-                NotificationManager.IMPORTANCE_HIGH
-            ).apply {
-                description = getString(R.string.notification_channel_permissions_desc)
-                setShowBadge(true)
-                enableVibration(true)
-                enableLights(true)
-                // 同 tasks channel：显式默认通知铃声，避免 MIUI 等系统静音。
-                setSound(
-                    RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION),
-                    AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build(),
-                )
-            }
-
-            notificationManager.createNotificationChannel(connectionChannel)
-            notificationManager.createNotificationChannel(tasksChannel)
-            notificationManager.createNotificationChannel(tasksSilentChannel)
-            notificationManager.createNotificationChannel(permissionsChannel)
-        }
-    }
-
-    // ============ Persistent Notification (InboxStyle, multi-server) ============
-
-    private fun createPersistentNotification(): Notification {
-        val tapIntent = Intent(this, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
-        }
-        val tapPendingIntent = PendingIntent.getActivity(
-            this, 0, tapIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val exitIntent = Intent(this, StarBurstConnectionService::class.java).apply {
-            action = ACTION_EXIT
-        }
-        val exitPendingIntent = PendingIntent.getService(
-            this, 1, exitIntent,
-            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-        )
-
-        val visibleConnections = connections.values.sortedBy { it.config.id }
-        val serverCount = visibleConnections.size
-        val connectedCount = visibleConnections.count { it.isConnected }
-
-        val title = if (serverCount == 0) {
-            getString(R.string.app_name)
-        } else if (serverCount == 1) {
-            val server = visibleConnections.first()
-            if (server.isConnected) getString(R.string.notification_connected, server.config.displayName)
-            else getString(R.string.notification_connecting, server.config.displayName)
-        } else {
-            getString(R.string.notification_connected_count, connectedCount, serverCount)
-        }
-
-        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_ID)
-            .setContentTitle(getString(R.string.app_name))
-            .setContentText(title)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(tapPendingIntent)
-            .setOngoing(true)
-            .setPriority(NotificationCompat.PRIORITY_LOW)
-
-        if (serverCount > 0) {
-            builder.addAction(
-                R.mipmap.ic_launcher,
-                getString(R.string.notification_exit),
-                exitPendingIntent,
-            )
-        }
-
-        // InboxStyle when multiple servers
-        if (serverCount > 1) {
-            val inboxStyle = NotificationCompat.InboxStyle()
-                .setBigContentTitle(getString(R.string.notification_inbox_title, connectedCount, serverCount))
-            for (state in visibleConnections) {
-                val status = if (state.isConnected) getString(R.string.notification_status_connected) else getString(R.string.notification_status_connecting)
-                inboxStyle.addLine("${state.config.displayName}: $status")
-            }
-            builder.setStyle(inboxStyle)
-        }
-
-        return builder.build()
-    }
-
-    @Synchronized
-    private fun updatePersistentNotification() {
-        if (connections.isEmpty()) {
-            if (foregroundStarted) {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                foregroundStarted = false
-            }
-            notificationManager.cancel(PERSISTENT_NOTIFICATION_ID)
-            lastPersistentNotificationState = null
-            return
-        }
-        val state = connections.values
-            .map { Triple(it.config.id, it.config.displayName, it.isConnected) }
-            .sortedBy { it.first }
-        if (state == lastPersistentNotificationState) return
-        lastPersistentNotificationState = state
-        val notification = createPersistentNotification()
-        notificationManager.notify(PERSISTENT_NOTIFICATION_ID, notification)
-    }
-
-    // ============ Event Notifications (grouped by server) ============
-
-    private suspend fun showTaskCompleteNotification(server: ServerConfig, sessionId: String) {
-        val (sessionTitle, _) = getSessionInfo(sessionId)
-        // 标题用会话名，正文用最后一条 assistant 消息的结果摘要；摘要为空时回退到默认文案。
-        val title = sessionTitle?.takeIf { it.isNotBlank() } ?: getString(R.string.notification_new_session)
-        val body = buildAssistantMessageSummary(sessionId) ?: getString(R.string.notification_new_session)
-
-        val pendingIntent = createSessionPendingIntent(server, sessionId, sessionId.hashCode())
-
-        val silent = settingsRepository.silentNotifications.first()
-        val channelId = if (silent) NOTIFICATION_CHANNEL_TASKS_SILENT_ID else NOTIFICATION_CHANNEL_TASKS_ID
-
-        val notifId = eventNotificationId(server.id, sessionId, 0)
-        val builder = NotificationCompat.Builder(this, channelId)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setSubText(server.displayName)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
-            .setGroup("server_${server.id}")
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-
-        builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), pendingIntent)
-        builder.addAction(buildReplyAction(server, sessionId, notifId, REPLY_KIND_COMPLETION))
-
-        if (!silent) {
-            builder.setDefaults(NotificationCompat.DEFAULT_ALL)
-                .setVibrate(longArrayOf(0, 500, 200, 500))
-                // Android 13+ 高优渠道默认横幅（heads-up）；此渠道已配置声音+震动。
-                // Android 14 默认拒绝全屏通知（FSI_REQUESTED_BUT_DENIED），故不用 setFullScreenIntent。
-        }
-
-        postEventNotification(server, sessionId, notifId, builder.build())
-    }
-
-    private fun showPermissionNotification(server: ServerConfig, sessionId: String, permission: String) {
-        val (sessionTitle, directory) = getSessionInfo(sessionId)
-        val displayTitle = sessionTitle ?: getString(R.string.notification_new_session)
-        val projectName = getProjectName(directory)
-        val body = if (projectName != null) {
-            getString(R.string.notification_needs_permission_project, displayTitle, projectName)
-        } else {
-            getString(R.string.notification_needs_permission, displayTitle)
-        }
-
-        val notifId = eventNotificationId(server.id, sessionId, 1000)
-        val pendingIntent = createSessionPendingIntent(server, sessionId, notifId)
-
-        val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_PERMISSIONS_ID)
-            .setContentTitle(getString(R.string.notification_permission_required))
-            .setContentText(body)
-            .setSubText(server.displayName)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setVibrate(longArrayOf(0, 300, 100, 300))
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setGroup("server_${server.id}")
-            .build()
-
-        postEventNotification(server, sessionId, notifId, notification)
-    }
-
-    private fun showQuestionNotification(server: ServerConfig, sessionId: String, questionText: String) {
-        val (sessionTitle, directory) = getSessionInfo(sessionId)
-        val displayTitle = sessionTitle ?: getString(R.string.notification_new_session)
-        val projectName = getProjectName(directory)
-        val body = if (projectName != null) {
-            getString(R.string.notification_has_question_project, displayTitle, projectName)
-        } else {
-            getString(R.string.notification_has_question, displayTitle)
-        }
-
-        val notifId = eventNotificationId(server.id, sessionId, 2000)
-        val pendingIntent = createSessionPendingIntent(server, sessionId, notifId)
-
-        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_PERMISSIONS_ID)
-            .setContentTitle(getString(R.string.notification_question))
-            .setContentText(body)
-            .setSubText(server.displayName)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(pendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setVibrate(longArrayOf(0, 300, 100, 300))
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setGroup("server_${server.id}")
-
-        builder.addAction(buildReplyAction(server, sessionId, notifId, REPLY_KIND_QUESTION))
-
-        postEventNotification(server, sessionId, notifId, builder.build())
-    }
-
-    private fun showErrorNotification(server: ServerConfig, sessionId: String?, error: String) {
-        // 正文直接显示错误摘要
-        val body = error.ifBlank { getString(R.string.error_unknown) }
-
-        val notifId = eventNotificationId(server.id, sessionId ?: "error", 3000)
-        val viewPendingIntent = createSessionPendingIntent(server, sessionId, notifId)
-
-        val builder = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
-            .setContentTitle(getString(R.string.notification_session_error))
-            .setContentText(body)
-            .setSubText(server.displayName)
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentIntent(viewPendingIntent)
-            .setAutoCancel(true)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setDefaults(NotificationCompat.DEFAULT_ALL)
-            .setCategory(NotificationCompat.CATEGORY_STATUS)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
-            .setGroup("server_${server.id}")
-
-        builder.addAction(android.R.drawable.ic_menu_view, getString(R.string.notification_action_view), viewPendingIntent)
-        if (sessionId != null) {
-            val retryPendingIntent = createRetrySessionPendingIntent(server, sessionId, notifId + 1)
-            builder.addAction(android.R.drawable.ic_menu_revert, getString(R.string.notification_action_retry), retryPendingIntent)
-        }
-
-        postEventNotification(server, sessionId, notifId, builder.build())
-    }
-
-    private fun postEventNotification(
-        server: ServerConfig,
-        sessionId: String?,
-        notificationId: Int,
-        notification: Notification,
-    ) {
-        // 完整推送：即使正在前台查看该会话也弹通知（含声音震动），不再经 postUnlessActive 抑制。
-        val finalNotification = if (isNowInDndWindow()) {
-            // 免扰时段内降级为静默（无声无震动），但仍投递通知。
-            rebuildSilentNotification(notification)
-        } else {
-            notification
-        }
-        notificationManager.notify(notificationId, finalNotification)
-        showServerGroupSummary(server)
-    }
-
-    /** 当前时间是否落在免扰时段内（跨午夜窗口正确环绕）。 */
-    private fun isNowInDndWindow(): Boolean {
-        if (!dndEnabledSnapshot) return false
-        val now = java.util.Calendar.getInstance()
-        val currentMinutes = now.get(java.util.Calendar.HOUR_OF_DAY) * 60 + now.get(java.util.Calendar.MINUTE)
-        val startMinutes = parseHhMmMinutes(dndStartSnapshot)
-        val endMinutes = parseHhMmMinutes(dndEndSnapshot)
-        if (startMinutes == endMinutes) return true
-        return if (startMinutes < endMinutes) {
-            currentMinutes in startMinutes until endMinutes
-        } else {
-            // 跨午夜：start <= now 或 now < end
-            currentMinutes >= startMinutes || currentMinutes < endMinutes
-        }
-    }
-
-    private fun parseHhMmMinutes(value: String): Int {
-        val parts = value.split(":")
-        val hour = parts.getOrNull(0)?.toIntOrNull()?.coerceIn(0, 23) ?: 0
-        val minute = parts.getOrNull(1)?.toIntOrNull()?.coerceIn(0, 59) ?: 0
-        return hour * 60 + minute
-    }
-
-    /** 用静默渠道重建通知（保留内容/分组/意图，去掉声音与震动）。 */
-    private fun rebuildSilentNotification(original: Notification): Notification {
-        val recovered = Notification.Builder.recoverBuilder(this, original)
-        recovered.setChannelId(NOTIFICATION_CHANNEL_TASKS_SILENT_ID)
-            .setSound(null, null)
-            .setVibrate(null)
-            .setDefaults(0)
-            .setPriority(Notification.PRIORITY_LOW)
-        return recovered.build()
-    }
-
-    /**
-     * Post a group summary notification for a server so Android bundles
-     * event notifications from the same server together.
-     */
-    private fun showServerGroupSummary(server: ServerConfig) {
-        val summaryId = serverGroupSummaryNotificationId(server.id)
-        val summary = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_SILENT_ID)
-            .setContentTitle(server.displayName)
-            .setContentText(getString(R.string.notification_group_summary))
-            .setSmallIcon(R.mipmap.ic_launcher)
-            .setGroup("server_${server.id}")
-            .setGroupSummary(true)
-            .setAutoCancel(true)
-            .build()
-
-        notificationManager.notify(summaryId, summary)
-    }
 }
