@@ -101,6 +101,26 @@ private const val TAG = "ChatViewModel"
 internal fun Throwable.rethrowCancellation() {
     if (this is CancellationException) throw this
 }
+
+/**
+ * 把异常 message 翻译为面向用户的友好文案（国际化）。
+ *
+ * 打开已删除/不存在的会话时，opencode 返回 404 + `{"name":"NotFoundError",...}` 之类的错误体，
+ * 反序列化失败后的 message 会带着原始 JSON 直接上屏；这里统一识别并替换为「会话不存在」。
+ * 若无法识别则回退到原始 message，保留其它错误信息可见。
+ */
+internal fun Throwable.friendlyErrorMessage(context: Context): String {
+    val raw = message?.lowercase() ?: return ""
+    val notFound = raw.contains("session not found") ||
+        raw.contains("not found") ||
+        raw.contains("notfounderror") ||
+        raw.contains("404") ||
+        raw.contains("no session")
+    if (notFound) {
+        return context.getString(R.string.session_not_found)
+    }
+    return message ?: ""
+}
 private const val MAX_REVERT_RECOVERY_PAGES = 20
 private const val MAX_CHILD_SESSIONS = 100
 private const val FAST_INITIAL_MESSAGE_COUNT = 10
@@ -1313,10 +1333,10 @@ class ChatViewModel @Inject constructor(
                     } catch (retryEx: Exception) {
                         retryEx.rethrowCancellation()
                         Log.e(TAG, "Retry also failed", retryEx)
-                        _error.value = retryEx.message ?: "Failed to load messages"
+                        _error.value = retryEx.friendlyErrorMessage(context).ifBlank { "Failed to load messages" }
                     }
                 } else {
-                    _error.value = e.message ?: "Failed to load messages"
+                    _error.value = e.friendlyErrorMessage(context).ifBlank { "Failed to load messages" }
                 }
             } finally {
                 flushThrottledState()
@@ -1858,7 +1878,7 @@ class ChatViewModel @Inject constructor(
             } catch (e: Exception) {
                 e.rethrowCancellation()
                 Log.e(TAG, "Failed to send message", e)
-                _error.value = e.message ?: "Failed to send message"
+                _error.value = e.friendlyErrorMessage(context).ifBlank { "Failed to send message" }
                 val definiteHttpFailure = e is RuntimeException && e.message?.startsWith("prompt_async failed:") == true
                 if (definiteHttpFailure) {
                     eventReducer.updateSessionStatus(sessionId, SessionStatus.Idle)
