@@ -27,6 +27,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import java.util.UUID
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -106,12 +107,21 @@ class ServerShellSession internal constructor(
             activeDeferred = deferred
         }
         sock.send("printf '$ready\\n'\n")
-        withTimeoutOrNull(10_000L) { deferred.await() }
+        val handshakeOk = withTimeoutOrNull(10_000L) { deferred.await() } != null
         synchronized(lock) {
             activeMarker = null
             activeDeferred = null
             buffer.setLength(0)
             tail.setLength(0)
+        }
+        if (!handshakeOk) {
+            // 远端 shell 未就绪：标记断开并抛错，避免在未完成 exec sh / stty -echo 的
+            // shell 上执行命令（回显污染标记、section 匹配失败、空输出误重试）。
+            connected = false
+            socket = null
+            ptyId = null
+            runCatching { sock.close() }
+            throw IOException("Shell not ready (handshake timeout)")
         }
         connected = true
     }
@@ -132,10 +142,17 @@ class ServerShellSession internal constructor(
                 activeDeferred = deferred
             }
             sock.send(script)
-            withTimeoutOrNull(timeoutMs) { deferred.await() }
+            val timedOut = withTimeoutOrNull(timeoutMs) { deferred.await() } == null
             synchronized(lock) {
                 activeMarker = null
                 activeDeferred = null
+            }
+            if (timedOut) {
+                // 超时后远端命令仍在执行、输出继续写入 buffer：清理缓冲并强制断开，
+                // 下次执行会重建 PTY，避免旧命令 end 标记与新命令输出交错导致结果错乱/截断。
+                synchronized(lock) { buffer.setLength(0); tail.setLength(0) }
+                connected = false
+                throw ShellCommandTimeoutException("Command timed out after ${timeoutMs}ms")
             }
             synchronized(lock) { buffer.toString() }
         }
@@ -156,6 +173,7 @@ class ServerShellSession internal constructor(
 
     /**
      * 执行单条 shell 命令并返回退出码与清洗后的输出，用于需要区分成功/失败的场景。
+     * 命令超时（[run] 抛 [ShellCommandTimeoutException]）时返回退出码 -1，绝不误报成功。
      */
     suspend fun runCommandResult(command: String, timeoutMs: Long = 60_000): ShellCommandResult {
         val id = UUID.randomUUID().toString().replace("-", "")
@@ -167,7 +185,8 @@ class ServerShellSession internal constructor(
         val body = extract(begin, end, raw)
         val lines = body.lineSequence().toList()
         val exitLine = lines.lastOrNull { it.startsWith(exit) }
-        val code = exitLine?.removePrefix(exit)?.trim()?.toIntOrNull() ?: 0
+        // 缺失退出码行说明命令超时/标记丢失，此时绝不能回退成 0（误报成功）。
+        val code = exitLine?.removePrefix(exit)?.trim()?.toIntOrNull() ?: -1
         val output = lines.filterNot { it.startsWith(exit) }.joinToString("\n").trim()
         return ShellCommandResult(code, output)
     }
@@ -177,7 +196,11 @@ class ServerShellSession internal constructor(
         val begin = "OPENSHELL_B_$id"
         val end = "OPENSHELL_E_$id"
         val script = "printf '$begin\\n'\n$command 2>&1\nprintf '\\n$end\\n'\n"
-        val raw = run(script, end, timeoutMs)
+        // 读类命令超时保持宽容：返回空串由调用方降级/重试，不向上抛（[]run] 超时抛异常已在[]runCommandResult] 用于失败判定）。
+        val raw = runCatching { run(script, end, timeoutMs) }.getOrElse {
+            if (it is ShellCommandTimeoutException) return ""
+            throw it
+        }
         return extract(begin, end, raw)
     }
 
@@ -260,3 +283,6 @@ class ServerShellRegistry @Inject constructor() {
         }
     }
 }
+
+/** 常驻 PTY 命令执行超时：退出码不可靠，调用方应视为失败而非成功。 */
+class ShellCommandTimeoutException(message: String) : IOException(message)

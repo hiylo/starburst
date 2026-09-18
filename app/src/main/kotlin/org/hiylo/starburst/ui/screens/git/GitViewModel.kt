@@ -24,6 +24,7 @@ import org.hiylo.starburst.data.api.getCurrentProject
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
+import org.hiylo.starburst.data.shell.ShellCommandTimeoutException
 import org.hiylo.starburst.data.sync.LocalSyncSecretStore
 import org.hiylo.starburst.ml.MnnLlm
 import kotlinx.coroutines.Dispatchers
@@ -889,22 +890,31 @@ class GitViewModel @Inject constructor(
         val begin = "OPENGIT_B_$id"
         val end = "OPENGIT_E_$id"
         val script = "printf '$begin\\n'\n$command 2>&1\nprintf '\\n$end\\n'\n"
-        val raw = ptySession.run(script, end, timeoutMs)
+        // 读类命令超时保持宽容：返回空串由调用方降级/重试。
+        val raw = runCatching { ptySession.run(script, end, timeoutMs) }.getOrElse {
+            if (it is ShellCommandTimeoutException) return ""
+            throw it
+        }
         return extract(begin, end, raw)
     }
 
-    /** 执行 shell 命令并返回退出码与输出（用于需要区分成功/失败的操作）。 */
+    /** 执行 shell 命令并返回退出码与输出（用于需要区分成功/失败的操作）。
+     *  命令超时时由 [run] 抛 [ShellCommandTimeoutException]，此处转为退出码 -1，绝不误报成功。 */
     private suspend fun runCommandResult(command: String, timeoutMs: Long = 60_000): CommandResult {
         val id = UUID.randomUUID().toString().replace("-", "")
         val begin = "OPENGIT_B_$id"
         val end = "OPENGIT_E_$id"
         val exit = "OPENGIT_X_$id"
         val script = "printf '$begin\\n'\n$command 2>&1\nprintf '${exit}%d\\n' \"\$?\"\nprintf '\\n$end\\n'\n"
-        val raw = ptySession.run(script, end, timeoutMs)
+        val raw = runCatching { ptySession.run(script, end, timeoutMs) }.getOrElse {
+            if (it is ShellCommandTimeoutException) return CommandResult(-1, "")
+            throw it
+        }
         val body = extract(begin, end, raw)
         val lines = body.lineSequence().toList()
         val exitLine = lines.lastOrNull { it.startsWith(exit) }
-        val code = exitLine?.removePrefix(exit)?.trim()?.toIntOrNull() ?: 0
+        // 缺失退出码行说明命令超时/标记丢失，回退 -1（非零）而非 0，避免误报成功。
+        val code = exitLine?.removePrefix(exit)?.trim()?.toIntOrNull() ?: -1
         val output = lines.filterNot { it.startsWith(exit) }.joinToString("\n").trim()
         return CommandResult(code, output)
     }

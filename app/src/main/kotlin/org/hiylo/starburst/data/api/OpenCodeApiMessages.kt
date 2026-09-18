@@ -79,24 +79,30 @@ suspend fun OpenCodeApi.exportSessionToStream(
         .connectTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
         .readTimeout(120, java.util.concurrent.TimeUnit.SECONDS)
         .build()
-    val request = okhttp3.Request.Builder()
-        .url("${conn.baseUrl}/session/$sessionId/message")
-        .apply { conn.authHeader?.let { addHeader("Authorization", it) } }
-        .build()
+    try {
+        val request = okhttp3.Request.Builder()
+            .url("${conn.baseUrl}/session/$sessionId/message")
+            .apply { conn.authHeader?.let { addHeader("Authorization", it) } }
+            .build()
 
-    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        okClient.newCall(request).execute().use { response ->
-            val body = response.body ?: throw java.io.IOException("Empty response body")
-            val source = body.source()
-            val buffer = ByteArray(8192)
-            while (true) {
-                val read = source.read(buffer)
-                if (read == -1) break
-                outputStream.write(buffer, 0, read)
-                bytesWritten += read
-                onProgress(bytesWritten)
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            okClient.newCall(request).execute().use { response ->
+                val body = response.body ?: throw java.io.IOException("Empty response body")
+                val source = body.source()
+                val buffer = ByteArray(8192)
+                while (true) {
+                    val read = source.read(buffer)
+                    if (read == -1) break
+                    outputStream.write(buffer, 0, read)
+                    bytesWritten += read
+                    onProgress(bytesWritten)
+                }
             }
         }
+    } finally {
+        // 释放每次导出新建的客户端：线程池 + 连接池，避免长驻泄漏。
+        okClient.dispatcher.executorService.shutdown()
+        okClient.connectionPool.evictAll()
     }
 
     outputStream.write("}".toByteArray())
