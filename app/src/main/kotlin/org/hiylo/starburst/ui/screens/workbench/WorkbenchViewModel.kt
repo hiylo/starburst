@@ -33,7 +33,6 @@ import kotlinx.coroutines.launch
 import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
-import org.hiylo.starburst.data.api.BackendTokenUsage
 import org.hiylo.starburst.data.api.MessageIdGenerator
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.OpenCodeGateway
@@ -45,7 +44,6 @@ import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.listMessages
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.getSession
-import org.hiylo.starburst.data.api.listSessionEvents
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.QuestionInfo
@@ -77,15 +75,8 @@ import java.time.Instant
 import javax.inject.Inject
 
 private const val TAG = "WorkbenchViewModel"
-/** 实时事件流轮询间隔（毫秒）。 */
-private const val EVENT_POLL_INTERVAL_MS = 5_000L
 /** 会话列表 / 状态轮询间隔（毫秒）。 */
 private const val SESSION_POLL_INTERVAL_MS = 10_000L
-/** 用量统计轮询间隔（毫秒）。 */
-private const val USAGE_POLL_INTERVAL_MS = 60_000L
-/** 事件流单页大小与本地保留上限。 */
-private const val EVENT_PAGE_LIMIT = 100
-private const val MAX_EVENTS = 100
 /** 初始化/兜底状态时从最近事件里提取 session.status 的事件条数。 */
 private const val EVENT_STATUS_PAGE = 200
 /** 决策面板 AI 最近回复摘要的最大字符数。 */
@@ -106,27 +97,12 @@ data class WorkbenchSession(
     val unread: Boolean = false,
 )
 
-/** 事件流条目：按会话聚合的最新动态（标题 + 路径 + AI 回复/事件摘要）。 */
-data class WorkbenchEventItem(
-    val sessionId: String,
-    val title: String = "",
-    val directory: String = "",
-    val summary: String = "",
-    val eventType: String = "",
-    val createdAt: String = "",
-)
-
 /** AI 工作台看板的完整 UI 状态。 */
 data class WorkbenchUiState(
     val serverName: String = "",
-    val events: List<WorkbenchEventItem> = emptyList(),
     val sessions: List<WorkbenchSession> = emptyList(),
     val loadingSessions: Boolean = true,
-    val eventsError: String? = null,
     val sessionsError: String? = null,
-    val tokenUsage: List<BackendTokenUsage> = emptyList(),
-    val loadingUsage: Boolean = true,
-    val usageError: String? = null,
 )
 
 /** 决策面板里的一条最近对话消息。 */
@@ -177,11 +153,9 @@ class WorkbenchViewModel @Inject constructor(
 
     /** OpenCode 直连连接（会话列表 / 消息 / prompt_async 用）。 */
     private var conn: ServerConnection? = null
-    /** starburst-backend 地址与 APP token（/api/events 用）。 */
+    /** starburst-backend 地址与 APP token（镜像通道 / 用量统计 / 任务中心用）。 */
     private var backendUrl = ""
     private var backendToken = "ocb_default"
-    /** 事件流正向游标：上一次响应的最后一条 createdAt。 */
-    private var eventsCursor: String? = null
 
     private val _uiState = MutableStateFlow(WorkbenchUiState(serverName = serverNameArg))
     val uiState: StateFlow<WorkbenchUiState> = _uiState.asStateFlow()
@@ -292,20 +266,7 @@ class WorkbenchViewModel @Inject constructor(
         return url to backendToken
     }
 
-    /** 看板「实时动态」忽略的低层事件（流式分片/同步心跳），只展示有意义的会话级动态。 */
-    private val HIGH_FREQUENCY_EVENT_TYPES = setOf(
-        "heartbeat",
-        "server.heartbeat",
-        "sync",
-        "server.connected",
-        "message.part.delta",
-        "message.part.updated",
-        "message.part.removed",
-        "message.updated",
-        "session.updated",
-    )
-
-    init {
+        init {
         viewModelScope.launch {
             val server = serverRepository.servers.first().firstOrNull { it.id == serverId }
             val baseUrl = server?.url?.trimEnd('/') ?: serverUrlArg
@@ -315,7 +276,8 @@ class WorkbenchViewModel @Inject constructor(
             backendUrl = server?.backendResolvedUrl.orEmpty()
             backendToken = server?.backendResolvedToken ?: "ocb_default"
             // 后端可用时走镜像通道：状态/列表走后端增强接口（快照+事件+活跃度聚合，准确）。
-            if (backendUrl.isNotBlank()) {
+            // token 为空（未配置/显式禁用后端）时保持直连 opencode，避免用空 Bearer 请求镜像。
+            if (backendUrl.isNotBlank() && backendToken.isNotBlank()) {
                 conn = ServerConnection(
                     baseUrl = backendUrl.trimEnd('/') + OpenCodeGateway.BACKEND_API_PREFIX,
                     authHeader = "Bearer $backendToken",
@@ -325,29 +287,7 @@ class WorkbenchViewModel @Inject constructor(
                 _uiState.update { it.copy(loadingSessions = false, sessionsError = context.getString(R.string.workbench_error_resolve_conn)) }
                 return@launch
             }
-            refreshSessions()
-            refreshEvents()
-            refreshUsage()
-            startPushStream()
-            // 推送断线时的轮询兜底。
-            viewModelScope.launch {
-                while (isActive) {
-                    delay(EVENT_POLL_INTERVAL_MS)
-                    refreshEvents()
-                }
-            }
-            viewModelScope.launch {
-                while (isActive) {
-                    delay(SESSION_POLL_INTERVAL_MS)
-                    refreshSessions()
-                }
-            }
-            viewModelScope.launch {
-                while (isActive) {
-                    delay(USAGE_POLL_INTERVAL_MS)
-                    refreshUsage()
-                }
-            }
+
         }
     }
 
@@ -391,9 +331,6 @@ class WorkbenchViewModel @Inject constructor(
             -> refreshSessionsSoon()
             else -> {}
         }
-        if (ev.eventType !in HIGH_FREQUENCY_EVENT_TYPES) {
-            mergePushEvent(ev)
-        }
     }
 
     /** 与后端 isUnreadTriggerEvent 保持一致：这些事件会把会话标记为「有新消息未读」。 */
@@ -423,107 +360,6 @@ class WorkbenchViewModel @Inject constructor(
         if (now - lastStatusRefreshAt < STATUS_REFRESH_DEBOUNCE_MS) return
         lastStatusRefreshAt = now
         viewModelScope.launch { refreshSessions() }
-    }
-
-    /** 把一条推送事件按会话聚合进事件流（每会话一行最新动态）。 */
-    private fun mergePushEvent(ev: PushSessionEvent) {
-        _uiState.update { current ->
-            val session = current.sessions.firstOrNull { it.session.id == ev.sessionId }?.session
-            val (payloadTitle, payloadDirectory, payloadFile) = payloadMeta(ev.payload)
-            // 文件事件直接用完整文件路径作标题（目录+文件名），不再匹配会话标题，避免同目录多会话误配。
-            val title = payloadFile.ifBlank {
-                payloadTitle.ifBlank { payloadDirectory.substringAfterLast('/') }
-            }
-            val item = WorkbenchEventItem(
-                sessionId = ev.sessionId,
-                title = title,
-                directory = session?.directory?.takeIf { it.isNotBlank() } ?: payloadDirectory,
-                summary = summarizeEvent(context, ev.eventType, ev.payload),
-                eventType = ev.eventType,
-                createdAt = Instant.now().toString(),
-            )
-            current.copy(
-                events = (current.events + item)
-                    .sortedByDescending { parseEventTime(it.createdAt) }
-                    .distinctBy { it.sessionId }
-                    .take(MAX_EVENTS),
-                eventsError = null,
-            )
-        }
-    }
-
-    /** 拉取事件流增量（兜底轮询），同样按会话聚合。 */
-    private suspend fun refreshEvents() {
-        if (backendUrl.isBlank()) {
-            _uiState.update { it.copy(eventsError = context.getString(R.string.workbench_error_no_backend)) }
-            return
-        }
-        try {
-            val fresh = api.listSessionEvents(
-                backendUrl = backendUrl,
-                token = backendToken,
-                since = eventsCursor,
-                limit = EVENT_PAGE_LIMIT,
-            )
-            if (fresh.isNotEmpty()) {
-                eventsCursor = fresh.last().createdAt
-            }
-            val items = fresh
-                .filterNot { it.eventType in HIGH_FREQUENCY_EVENT_TYPES }
-                .map { record ->
-                    val session = _uiState.value.sessions.firstOrNull { it.session.id == record.sessionId }?.session
-                    val (payloadTitle, payloadDirectory, payloadFile) = payloadMeta(record.payload)
-                    // 文件事件直接用完整文件路径作标题（目录+文件名），不再匹配会话标题，避免同目录多会话误配。
-                    val title = payloadFile.ifBlank {
-                        payloadTitle.ifBlank { payloadDirectory.substringAfterLast('/') }
-                    }
-                    WorkbenchEventItem(
-                        sessionId = record.sessionId,
-                        title = title,
-                        directory = session?.directory?.takeIf { it.isNotBlank() } ?: payloadDirectory,
-                        summary = summarizeEvent(context, record.eventType, record.payload),
-                        eventType = record.eventType,
-                        createdAt = record.createdAt,
-                    )
-                }
-            if (items.isNotEmpty()) {
-                _uiState.update { current ->
-                    current.copy(
-                        events = (current.events + items)
-                            .sortedByDescending { parseEventTime(it.createdAt) }
-                            .distinctBy { it.sessionId }
-                            .take(MAX_EVENTS),
-                        eventsError = null,
-                    )
-                }
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.d(TAG, "refresh events failed: ${e.message}")
-            _uiState.update { it.copy(eventsError = it.eventsError ?: e.message ?: context.getString(R.string.workbench_error_events)) }
-        }
-    }
-
-    /** 拉取后端用量统计（`GET /api/stats`）：token 调用量，读多写少，慢轮询。 */
-    private suspend fun refreshUsage() {
-        if (backendUrl.isBlank()) {
-            _uiState.update { it.copy(loadingUsage = false, usageError = context.getString(R.string.usage_no_backend)) }
-            return
-        }
-        try {
-            val stats = backendApi.getStats(backendUrl, backendToken)
-            _uiState.update {
-                it.copy(tokenUsage = stats.tokenUsage, loadingUsage = false, usageError = null)
-            }
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            if (BuildConfig.DEBUG) Log.d(TAG, "refresh usage failed: ${e.message}")
-            _uiState.update {
-                it.copy(loadingUsage = false, usageError = e.message ?: context.getString(R.string.usage_error))
-            }
-        }
     }
 
     /** 拉取全量会话 + 状态 + 待决问题，派生排序后刷新列表。 */
@@ -846,123 +682,3 @@ class WorkbenchViewModel @Inject constructor(
 
 /** 状态类事件刷新的去抖窗口（毫秒）。 */
 private const val STATUS_REFRESH_DEBOUNCE_MS = 2_000L
-
-/** 事件流排序用时间戳解析（RFC3339Nano；失败回退 0）。 */
-private fun parseEventTime(createdAt: String): Long =
-    runCatching { Instant.parse(createdAt).toEpochMilli() }.getOrDefault(0L)
-
-/**
- * 从事件 payload 里提取展示信息：目录、会话标题、文件路径。
- * 目录优先取 payload 顶层 directory，其次 session 对象，最后从 file 路径反推；
- * 标题优先 session.title；文件事件直接用完整文件路径作标题，不再显示会话标题。
- */
-private fun payloadMeta(payload: JsonElement?): Triple<String, String, String> {
-    val obj = payload as? JsonObject ?: return Triple("", "", "")
-    val props = obj["properties"] as? JsonObject ?: obj["data"] as? JsonObject
-    val sessionObj = obj["session"] as? JsonObject ?: props?.get("session") as? JsonObject
-    val title = sessionObj?.get("title")?.jsonPrimitive?.contentOrNull.orEmpty()
-    val filePath = filePathFrom(obj, props).orEmpty()
-    val directory = (obj["directory"] as? JsonPrimitive)?.contentOrNull
-        ?: sessionObj?.get("directory")?.jsonPrimitive?.contentOrNull
-        ?: filePath.let { fp ->
-            val slash = fp.lastIndexOf('/')
-            if (slash > 0) fp.substring(0, slash) else ""
-        }
-        .orEmpty()
-    return Triple(title, directory, filePath)
-}
-
-/**
- * 从事件里取文件路径：v1.18 file 事件中 file 是字符串（直接是路径），
- * 兼容旧版 { "filePath": ... } 对象形态。
- */
-private fun filePathFrom(obj: JsonObject, props: JsonObject?): String? {
-    val file = obj["file"] ?: props?.get("file")
-    return when (file) {
-        is JsonPrimitive -> file.contentOrNull
-        is JsonObject -> file["filePath"]?.jsonPrimitive?.contentOrNull
-        else -> null
-    }
-}
-
-/**
- * 从事件里提取用于「实时动态」行的摘要：优先 AI 回复文本（message 的 content），
- * 其次流式 part 文本 / 问题文本 / 权限，最后按事件类型给中文文案。
- */
-    /** 事件行摘要：优先从 payload 提取动作文本，其次按事件类型给本地化文案。 */
-    private fun summarizeEvent(context: Context, eventType: String, payload: JsonElement?): String {
-        val obj = (payload as? JsonObject) ?: return fallbackEventText(context, eventType)
-        val props = obj["properties"] as? JsonObject ?: obj["data"] as? JsonObject
-
-        // session.status：解析出「开始处理 / 处理完成 / 重试中」等动作。
-        if (eventType == "session.status" || eventType == "session.updated") {
-            val st = props?.get("status")
-            val type = when (st) {
-                is JsonObject -> st["type"]?.jsonPrimitive?.contentOrNull
-                is JsonPrimitive -> st.contentOrNull
-                else -> null
-            }
-            when (type) {
-                "busy" -> return context.getString(R.string.workbench_event_busy)
-                "idle" -> return context.getString(R.string.workbench_event_idle)
-                "retry" -> return context.getString(R.string.workbench_event_retry)
-                "error" -> return context.getString(R.string.workbench_event_error)
-                else -> {}
-            }
-        }
-
-        // question：显示等待回答的问题内容。
-        val questionsArray = obj["questions"] as? JsonArray ?: props?.get("questions") as? JsonArray
-        val questionObj = questionsArray?.firstOrNull() as? JsonObject
-        val questionText = questionObj?.get("question")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        if (questionText != null) return context.getString(R.string.workbench_event_question_waiting, questionText.trim().take(60))
-
-        // permission：显示需要授权的工具/权限类型。
-        val permissionText = (obj["permission"] as? JsonObject ?: props?.get("permission") as? JsonObject)
-            ?.get("type")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        if (permissionText != null) return context.getString(R.string.workbench_event_permission, permissionText)
-
-        // error：显示错误摘要。
-        val errorText = (obj["error"] as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull
-            ?.takeIf { it.isNotBlank() }
-        if (errorText != null) return context.getString(R.string.workbench_event_error_detail, errorText.trim().take(60))
-
-        // tool / file：显示正在执行的工具或修改的文件，比「状态更新」更有用。
-        val toolText = (obj["tool"] as? JsonObject ?: props?.get("tool") as? JsonObject)
-            ?.get("type")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        if (toolText != null) return context.getString(R.string.workbench_event_tool, toolText)
-
-        val fileText = filePathFrom(obj, props)?.substringAfterLast('/')?.takeIf { it.isNotBlank() }
-        if (fileText != null) return context.getString(R.string.workbench_event_file, fileText)
-
-        // message.updated / part：AI 回复文本，只截取可读的开头。
-        val contentArray = (obj["message"] as? JsonObject ?: props?.get("message") as? JsonObject)
-            ?.get("content") as? JsonArray
-        val messageText = contentArray
-            ?.mapNotNull { it as? JsonObject }
-            ?.mapNotNull { it["text"]?.jsonPrimitive?.contentOrNull }
-            ?.joinToString(" ")
-            ?.takeIf { it.isNotBlank() }
-        if (messageText != null) return messageText.trim().replace('\n', ' ').take(50)
-
-        val partText = (obj["part"] as? JsonObject ?: props?.get("part") as? JsonObject)
-            ?.get("text")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-        if (partText != null) return partText.trim().replace('\n', ' ').take(50)
-
-        return fallbackEventText(context, eventType)
-    }
-
-    private fun fallbackEventText(context: Context, eventType: String): String = when {
-        eventType.contains("error") || eventType.contains("failed") -> context.getString(R.string.workbench_event_error)
-        eventType == "message.complete" || eventType.contains("idle") -> context.getString(R.string.workbench_event_idle)
-        eventType.startsWith("question.") -> context.getString(R.string.workbench_event_question)
-        eventType.startsWith("permission.") -> context.getString(R.string.workbench_event_permission_short)
-        eventType.contains("busy") -> context.getString(R.string.workbench_event_busy)
-        eventType.startsWith("file.") -> context.getString(R.string.workbench_event_file_short)
-        eventType.startsWith("tool") -> context.getString(R.string.workbench_event_tool_short)
-        eventType.startsWith("message.") || eventType.contains("assistant") -> context.getString(R.string.workbench_event_reply)
-        eventType.startsWith("user.") || eventType.contains("prompt") -> context.getString(R.string.workbench_event_user)
-        eventType.startsWith("project.") -> context.getString(R.string.workbench_event_project)
-        eventType.contains("status") || eventType.contains("updated") || eventType.contains("created") -> context.getString(R.string.workbench_event_status)
-        else -> context.getString(R.string.workbench_event_misc)
-    }
