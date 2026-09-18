@@ -66,7 +66,7 @@ import dev.snipme.highlights.model.ColorHighlight
 import dev.snipme.highlights.model.SyntaxLanguage
 import org.intellij.markdown.ast.ASTNode
 
-private const val TAG = "SafeMarkdownHighlight"
+private const val SMH_TAG = "SafeMarkdownHighlight"
 
 /** 代码块折叠阈值：超过该行数时默认折叠，用户可点击展开。 */
 private const val CODE_FOLD_LINE_THRESHOLD = 14
@@ -253,7 +253,7 @@ internal fun buildSafeHighlightedAnnotatedString(
                 }
         }
     } catch (e: Exception) {
-        Log.w(TAG, "Syntax highlighting failed; rendering plain code", e)
+        Log.w(SMH_TAG, "Syntax highlighting failed; rendering plain code", e)
         AnnotatedString(code)
     }
 }
