@@ -1448,6 +1448,7 @@ private fun ThemePickerDialog(
         options = listOf(
             "system" to stringResource(R.string.settings_theme_system),
             "light" to stringResource(R.string.settings_theme_light),
+            "dim" to stringResource(R.string.settings_theme_dim),
             "dark" to stringResource(R.string.settings_theme_dark),
             "amoled" to stringResource(R.string.settings_theme_amoled)
         ),
@@ -1958,6 +1959,7 @@ private fun getThemeDisplayName(theme: String): String {
     return when (theme) {
         "system" -> stringResource(R.string.settings_theme_system)
         "light" -> stringResource(R.string.settings_theme_light)
+        "dim" -> stringResource(R.string.settings_theme_dim)
         "dark" -> stringResource(R.string.settings_theme_dark)
         "amoled" -> stringResource(R.string.settings_theme_amoled)
         else -> theme
