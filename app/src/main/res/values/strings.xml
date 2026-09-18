@@ -194,6 +194,8 @@
     <string name="template_delete">Delete</string>
     <string name="template_move_up">Move up</string>
     <string name="template_move_down">Move down</string>
+    <string name="template_expand">Expand prompt</string>
+    <string name="template_collapse">Collapse prompt</string>
     <string name="template_save_failed">Name and prompt are required</string>
     <string name="session_template_title">Session templates</string>
     <string name="session_template_empty">No session templates yet. Save a reusable new-session preset (directory + system prompt + model + prompt) below.</string>

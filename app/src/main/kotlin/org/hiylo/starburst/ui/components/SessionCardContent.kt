@@ -236,6 +236,19 @@ fun SessionCardContent(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
+                session.model?.id?.takeIf(String::isNotBlank)?.let { modelId ->
+                    Text(
+                        text = modelId,
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.75f),
+                        ),
+                        modifier = Modifier.weight(1f, fill = false),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
                 category?.let {
                     Text(
                         text = it.name,

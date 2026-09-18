@@ -30,7 +30,8 @@ data class Session(
     val summary: Summary? = null,
     val share: Share? = null,
     val permission: List<PermissionRule>? = null,
-    val revert: Revert? = null
+    val revert: Revert? = null,
+    val model: SessionModel? = null
 ) {
     @Serializable
     data class Time(
@@ -64,6 +65,13 @@ data class Session(
         val permission: String,
         val pattern: String = "*",
         val action: String = "ask"
+    )
+
+    @Serializable
+    data class SessionModel(
+        val id: String = "",
+        @SerialName("providerID") val providerId: String = "",
+        val variant: String? = null
     )
 
     val createdAt: Long

@@ -106,6 +106,8 @@ import org.hiylo.starburst.MainActivity
 import org.hiylo.starburst.ui.screens.settings.SessionExport
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlin.math.abs
 import android.net.Uri
 import android.Manifest
@@ -909,26 +911,41 @@ fun ChatScreen(
     val isAtBottom by remember {
         derivedStateOf {
             val info = listState.layoutInfo
-            val lastVisible = info.visibleItemsInfo.lastOrNull() ?: return@derivedStateOf true
-            // reverseLayout: index 0 is the bottom-most (newest) item. At the bottom of the list,
-            // the item at the bottom of the viewport is index 0.
-            if (lastVisible.index > 0) return@derivedStateOf false
+            val visibleItems = info.visibleItemsInfo
+            if (visibleItems.isEmpty()) return@derivedStateOf true
+            // With reverseLayout, index 0 is the bottommost item (conversation_bottom spacer)
+            // Check if it's visible in the viewport
+            val bottomItem = visibleItems.firstOrNull { it.index == 0 }
+            if (bottomItem == null) return@derivedStateOf false
             // Bottom-most item is visible — check if its bottom edge is within the viewport
-            val itemBottom = lastVisible.offset + lastVisible.size
+            val itemBottom = bottomItem.offset + bottomItem.size
             val viewportEnd = info.viewportEndOffset
             itemBottom <= viewportEnd + 50 // 50px tolerance
         }
     }
 
+    // Track if we're doing a programmatic scroll to avoid disabling auto-scroll
+    var isProgrammaticScroll by remember { mutableStateOf(false) }
+
     // When user touches the list, disable auto-scroll; re-enable when they reach the bottom
     LaunchedEffect(listState.isScrollInProgress, isAtBottom) {
-        if (listState.isScrollInProgress) {
+        if (listState.isScrollInProgress && !isProgrammaticScroll) {
             // User is actively dragging/flinging — disable auto-scroll
             autoScrollEnabled = false
         } else if (isAtBottom) {
             // User stopped scrolling and ended up at the bottom — re-enable
             autoScrollEnabled = true
             hasUnreadMessages = false
+        }
+    }
+
+    // Reset programmatic scroll flag when scroll completes
+    LaunchedEffect(isProgrammaticScroll) {
+        if (isProgrammaticScroll) {
+            snapshotFlow { listState.isScrollInProgress }
+                .filter { !it }
+                .first()
+            isProgrammaticScroll = false
         }
     }
 
@@ -963,6 +980,7 @@ fun ChatScreen(
             lastSeenMessageCount = messageCount
         }
         if (messageCount > 0 && autoScrollEnabled) {
+            isProgrammaticScroll = true
             listState.scrollToItem(0)
         }
     }
@@ -970,6 +988,7 @@ fun ChatScreen(
     // Also auto-scroll when first loading
     LaunchedEffect(uiState.isLoading) {
         if (!uiState.isLoading && messageCount > 0) {
+            isProgrammaticScroll = true
             listState.scrollToItem(0)
             autoScrollEnabled = true
         }
@@ -1256,22 +1275,6 @@ fun ChatScreen(
                                 leadingIcon = {
                                     Icon(Icons.Default.Compress, contentDescription = null)
                                 }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_review_changes)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.executeCommand("review") { ok ->
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                if (ok) context.getString(R.string.chat_command_executed, "review") else context.getString(R.string.chat_command_failed, "review")
-                                            )
-                                        }
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.RateReview, contentDescription = null)
-                                },
                             )
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_summarize_session)) },
@@ -2702,7 +2705,16 @@ fun ChatScreen(
             userTemplates = promptTemplates,
             onSelect = { template ->
                 showTemplatePicker = false
-                pendingTemplatePrompt = template
+                if (confirmBeforeSend) {
+                    pendingTemplatePrompt = template
+                } else {
+                    viewModel.sendMessage(template)
+                    inputText = TextFieldValue("")
+                    attachments.clear()
+                    viewModel.clearConfirmedPaths()
+                    viewModel.clearFileSearch()
+                    viewModel.clearDraft()
+                }
             },
             onAdd = viewModel::addPromptTemplate,
             onEdit = viewModel::updatePromptTemplate,
