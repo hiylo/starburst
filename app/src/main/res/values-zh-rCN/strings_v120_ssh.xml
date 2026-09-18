@@ -12,6 +12,12 @@
     <string name="server_ssh_section">SSH（可选）</string>
     <string name="server_ssh_section_desc">留空则直连。配置后可通过 SSH 隧道访问并远程重启服务。</string>
 
+    <!-- Server dialog: optional backend -->
+    <string name="server_backend_section">后端代理（可选）</string>
+    <string name="server_backend_section_desc">18880 端口 starburst-backend 代理的 Token。保持默认值使用镜像；改成错误值可强制直连。</string>
+    <string name="server_backend_token">后端 Token</string>
+    <string name="server_backend_token_hint">ocb_default</string>
+
     <!-- SSH restart feedback -->
     <string name="home_ssh_restart">通过 SSH 重启</string>
     <string name="home_ssh_restart_success">已通过 SSH 发送重启命令</string>

@@ -81,6 +81,9 @@ data class ServerSettingsUiState(
     val customProviders: List<ProviderConfigEntry> = emptyList(),
     /** 探测到的 starburst-backend 是否可用（GET /api/health）。null 表示探测中。 */
     val backendAvailable: Boolean? = null,
+    /** 探测到的后端是否已部署/可达（GET /api/health 通过）。与 backendAvailable 的区别：
+     *  后端可达但 token 无效/未配置时，backendAvailable=false 而 backendHealthy=true。 */
+    val backendHealthy: Boolean? = null,
     /** 探测到的后端自身版本（GET /api/system 的 version 字段）。 */
     val backendVersion: String? = null,
     /** 后端版本是否低于 App 要求的最低版本（需要升级）。 */
@@ -213,13 +216,14 @@ class ServerSettingsViewModel @Inject constructor(
      */
     fun probeBackend() {
         viewModelScope.launch {
-            _uiState.update { it.copy(backendAvailable = null, backendVersion = null, backendNeedsUpgrade = false) }
+            _uiState.update { it.copy(backendAvailable = null, backendHealthy = null, backendVersion = null, backendNeedsUpgrade = false) }
             _serverConfig = serverRepository.getServer(serverId)
             val server = _serverConfig
             val probe = BackendGate.probe(backendApi, server, serverUrl)
             _uiState.update {
                 it.copy(
                     backendAvailable = probe.available,
+                    backendHealthy = probe.healthy,
                     backendVersion = probe.version,
                     backendNeedsUpgrade = probe.needsUpgrade,
                 )
@@ -268,6 +272,7 @@ class ServerSettingsViewModel @Inject constructor(
                         isInstallingBackend = false,
                         backendInstallLog = output,
                         backendAvailable = probe.available,
+                        backendHealthy = probe.healthy,
                         backendVersion = probe.version,
                         backendNeedsUpgrade = probe.needsUpgrade,
                     )

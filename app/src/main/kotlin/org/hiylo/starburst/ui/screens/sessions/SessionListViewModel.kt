@@ -18,6 +18,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.FileNode
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
+import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.createSession
 import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.executeCommand
@@ -36,6 +37,7 @@ import org.hiylo.starburst.data.repository.DirectoryScope
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
+import org.hiylo.starburst.ui.gate.BackendGate
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
@@ -214,6 +216,7 @@ class SessionListViewModel @Inject constructor(
     private val connectionStateRepository: ServerConnectionStateRepository,
     private val serverRepository: ServerRepository,
     private val backendRepository: BackendRepository,
+    private val backendApi: BackendApi,
 ) : ViewModel() {
 
     val serverUrl: String = savedStateHandle.get<String>("serverUrl").orEmpty()
@@ -223,6 +226,10 @@ class SessionListViewModel @Inject constructor(
     val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
     /** 进入即自动新建会话（来自 Widget / 快捷方式「新建会话」入口）。 */
     private val autoNewSession: Boolean = savedStateHandle.get<Boolean>("autoNewSession") ?: false
+
+    /** 后端是否「正常可用」（健康 + 版本达标 + token 有效）；驱动「AI 工作台」等后端依赖入口的显隐。 */
+    private val _backendReady = MutableStateFlow(false)
+    val backendReady: StateFlow<Boolean> = _backendReady.asStateFlow()
 
     private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
@@ -479,6 +486,13 @@ class SessionListViewModel @Inject constructor(
     init {
         loadHomeDir()
         loadSessions()
+        viewModelScope.launch {
+            // 探测后端可用性：token 无效 / 后端未部署 / 版本过低时保持不可用，
+            // 从而隐藏「AI 工作台」等强依赖后端的入口，避免打开即报错。
+            val server = serverRepository.servers.first().firstOrNull { it.id == serverId }
+            val probe = runCatching { BackendGate.probe(backendApi, server, serverUrl) }.getOrNull()
+            _backendReady.value = probe?.let { BackendGate.isReady(it.available, it.version) } == true
+        }
         if (autoNewSession) {
             createNewSession()
         }

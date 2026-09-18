@@ -61,7 +61,7 @@ private fun deriveServerNameFromHost(host: String, port: Int?): String {
 fun ServerDialog(
     server: ServerConfig?,
     onDismiss: () -> Unit,
-    onSave: (name: String, url: String, username: String, password: String, autoConnect: Boolean, sshPort: Int, sshUsername: String, sshPassword: String?) -> Unit
+    onSave: (name: String, url: String, username: String, password: String, autoConnect: Boolean, sshPort: Int, sshUsername: String, sshPassword: String?, backendToken: String?) -> Unit
 ) {
     val (initialHost, initialPort) = parseHostAndPort(server?.url)
     var name by remember(server) { mutableStateOf(server?.name ?: "") }
@@ -74,6 +74,9 @@ fun ServerDialog(
     var sshPortText by remember(server) { mutableStateOf((server?.sshPort ?: 22).toString()) }
     var sshUsername by remember(server) { mutableStateOf(server?.sshUsername ?: "") }
     var sshPassword by remember(server) { mutableStateOf(server?.sshPassword ?: "") }
+    // 新建服务器时默认填 ocb_default；编辑时如实显示已存 token（null 显示空，不自动兜底），
+    // 否则用户清空 token 保存后重进又被 ocb_default 填回，误以为「删除不生效」。
+    var backendToken by remember(server) { mutableStateOf(server?.backendToken ?: if (server == null) "ocb_default" else "") }
 
     var hostError by remember { mutableStateOf<String?>(null) }
     val hostInvalidText = stringResource(R.string.server_invalid_host)
@@ -278,9 +281,30 @@ fun ServerDialog(
                     onValueChange = { sshPassword = it },
                     label = { Text(stringResource(R.string.server_ssh_password)) },
                     visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Next),
+                    keyboardActions = nextAction,
                     singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // 后端代理（可选）
+                Text(
+                    text = stringResource(R.string.server_backend_section),
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Text(
+                    text = stringResource(R.string.server_backend_section_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                OutlinedTextField(
+                    value = backendToken,
+                    onValueChange = { backendToken = it },
+                    label = { Text(stringResource(R.string.server_backend_token)) },
+                    placeholder = { Text(stringResource(R.string.server_backend_token_hint)) },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { focusManager.clearFocus() }),
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -313,6 +337,7 @@ fun ServerDialog(
                             sshPortValue,
                             sshUsername.trim(),
                             sshPassword.ifBlank { null },
+                            backendToken.trim(),
                         )
                     }
                 },

@@ -1023,6 +1023,8 @@
     <string name="backend_not_installed">后端未安装</string>
     <string name="backend_not_installed_desc">该服务器上未部署 starburst-backend。通过 SSH 一键安装后即可解锁任务中心、归档与语音兜底。</string>
     <string name="backend_install_action">安装后端</string>
+    <string name="backend_token_invalid">需要配置后端 Token</string>
+    <string name="backend_token_invalid_desc">starburst-backend 已在该服务器运行，但后端 Token 缺失或无效。编辑服务器并填写有效的后端 Token 即可解锁后端功能。</string>
     <string name="backend_required_version">1.0.0</string>
     <string name="backend_needs_upgrade">后端需要升级</string>
     <string name="backend_needs_upgrade_desc">当前版本 %1$s，需要 %2$s</string>

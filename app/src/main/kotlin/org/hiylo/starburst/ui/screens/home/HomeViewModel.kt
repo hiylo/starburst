@@ -284,6 +284,7 @@ class HomeViewModel @Inject constructor(
         sshPort: Int,
         sshUsername: String,
         sshPassword: String?,
+        backendToken: String?,
     ) {
         viewModelScope.launch {
             val editingServer = _uiState.value.editingServer
@@ -298,6 +299,7 @@ class HomeViewModel @Inject constructor(
                     sshPort = sshPort,
                     sshUsername = sshUsername,
                     sshPassword = sshPassword,
+                    backendToken = backendToken,
                 )
                 serverRepository.updateServer(updatedServer)
             } else {
@@ -310,6 +312,7 @@ class HomeViewModel @Inject constructor(
                     sshPort = sshPort,
                     sshUsername = sshUsername,
                     sshPassword = sshPassword,
+                    backendToken = backendToken,
                 )
             }
             

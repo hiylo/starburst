@@ -1059,6 +1059,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="backend_not_installed">Backend not installed</string>
     <string name="backend_not_installed_desc">starburst-backend is unavailable on this server. Install it over SSH to unlock Task Center, archives and voice fallback.</string>
     <string name="backend_install_action">Install backend</string>
+    <string name="backend_token_invalid">Backend token required</string>
+    <string name="backend_token_invalid_desc">starburst-backend is running, but the backend token is missing or invalid. Edit the server and set a valid Backend token to unlock backend features.</string>
     <string name="backend_required_version">1.0.0</string>
     <string name="backend_needs_upgrade">Backend update available</string>
     <string name="backend_needs_upgrade_desc">Version %1$s installed, %2$s required</string>

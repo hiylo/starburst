@@ -47,9 +47,14 @@ data class ServerConfig(
     val backendResolvedUrl: String
         get() = backendUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: "http://$host:18880"
 
-    /** 解析后的 Backend token：优先用显式 [backendToken]，否则用默认 token。 */
+    /**
+     * 解析后的 Backend token：
+     * - 显式配置则使用配置值（后端镜像启用）；
+     * - 未配置/空串时回退到后端默认令牌 `ocb_default`（与后端 `--default-token` 一致，
+     *   避免 `?: "ocb_default"` 兜底被空串绕过后以空 token 请求导致 401）。
+     */
     val backendResolvedToken: String
-        get() = backendToken?.takeIf { it.isNotBlank() } ?: "ocb_default"
+        get() = backendToken?.takeIf { it.isNotBlank() }?.trim() ?: "ocb_default"
 
     /** OpenCode 服务端口（显式端口，否则回退 http/https 默认端口）。 */
     val openCodePort: Int

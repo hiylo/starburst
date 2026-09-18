@@ -12,6 +12,12 @@
     <string name="server_ssh_section">SSH (optional)</string>
     <string name="server_ssh_section_desc">Leave empty to connect directly. Configure to tunnel the connection and restart the service over SSH.</string>
 
+    <!-- Server dialog: optional backend -->
+    <string name="server_backend_section">Backend (optional)</string>
+    <string name="server_backend_section_desc">Token for the starburst-backend proxy on port 18880. Keep the default to use the mirror; enter a wrong value to force a direct connection.</string>
+    <string name="server_backend_token">Backend token</string>
+    <string name="server_backend_token_hint">ocb_default</string>
+
     <!-- SSH restart feedback -->
     <string name="home_ssh_restart">Restart over SSH</string>
     <string name="home_ssh_restart_success">Restart command sent over SSH</string>

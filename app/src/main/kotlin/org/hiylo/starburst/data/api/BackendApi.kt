@@ -198,13 +198,18 @@ class BackendApi @Inject constructor(
         }
     }
 
-    /** 读取后端系统信息（`GET /api/system`）：后端自身版本 + 上游 opencode 版本。 */
+    /**
+     * 读取后端系统信息（`GET /api/system`）：后端自身版本 + 上游 opencode 版本。
+     * 仅 2xx 视为成功；401（token 无效）或其它非 2xx 一律返回 null，避免把错误响应
+     * 误反序列化成「版本为空」的可用结果（否则 token 失效时后端功能仍会被误判为可用）。
+     */
     suspend fun getSystemInfo(backendUrl: String, token: String): BackendSystemInfo? =
         try {
-            httpClient.get("${backendUrl.trimEnd('/')}/api/system") {
+            val resp = httpClient.get("${backendUrl.trimEnd('/')}/api/system") {
                 header("Authorization", "Bearer $token")
                 timeout { requestTimeoutMillis = 8_000L }
-            }.body()
+            }
+            if (resp.status.value !in 200..299) null else resp.body()
         } catch (e: Exception) {
             null
         }

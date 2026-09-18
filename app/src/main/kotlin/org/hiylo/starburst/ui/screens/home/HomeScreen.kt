@@ -339,8 +339,8 @@ fun HomeScreen(
             ServerDialog(
                 server = uiState.editingServer,
                 onDismiss = { viewModel.hideServerDialog() },
-                onSave = { name, url, username, password, autoConnect, sshPort, sshUsername, sshPassword ->
-                    viewModel.saveServer(name, url, username, password, autoConnect, sshPort, sshUsername, sshPassword)
+                onSave = { name, url, username, password, autoConnect, sshPort, sshUsername, sshPassword, backendToken ->
+                    viewModel.saveServer(name, url, username, password, autoConnect, sshPort, sshUsername, sshPassword, backendToken)
                 }
             )
         }

@@ -287,6 +287,7 @@ fun SessionListScreen(
     val groupByProject by viewModel.groupSessionsByProject.collectAsState()
     val recentDirectoryCount by viewModel.recentDirectoryCount.collectAsState()
     val compactSessions by viewModel.compactSessions.collectAsState()
+    val backendReady by viewModel.backendReady.collectAsState()
     val isAmoled = isAmoledTheme()
     val context = LocalContext.current
     // Navigate to newly created session
@@ -534,11 +535,13 @@ fun SessionListScreen(
                     },
                     actions = {
                         if (!searchActive) {
-                            IconButton(onClick = onNavigateToWorkbench) {
-                                Icon(
-                                    Icons.Default.Dashboard,
-                                    contentDescription = stringResource(R.string.workbench_enter),
-                                )
+                            if (backendReady) {
+                                IconButton(onClick = onNavigateToWorkbench) {
+                                    Icon(
+                                        Icons.Default.Dashboard,
+                                        contentDescription = stringResource(R.string.workbench_enter),
+                                    )
+                                }
                             }
                             IconButton(
                                 onClick = { onOpenBookmarks(viewModel.serverId) },

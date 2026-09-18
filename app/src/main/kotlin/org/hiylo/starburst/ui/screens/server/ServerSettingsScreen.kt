@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.DeviceHub
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
@@ -448,6 +449,7 @@ fun ServerSettingsScreen(
             // 后端可用 → 任务中心；不可用 + SSH → 一键安装；探测中 → loading。
             BackendStatusCard(
                 backendAvailable = backendAvailable,
+                backendHealthy = uiState.backendHealthy,
                 isInstallingBackend = isInstallingBackend,
                 hasSsh = viewModel.serverConfig?.useSsh == true,
                 installLog = uiState.backendInstallLog,
@@ -529,6 +531,7 @@ private fun ServerSysPromptDialog(
 @Composable
 private fun BackendStatusCard(
     backendAvailable: Boolean?,
+    backendHealthy: Boolean?,
     isInstallingBackend: Boolean,
     hasSsh: Boolean,
     installLog: String?,
@@ -681,6 +684,37 @@ private fun BackendStatusCard(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
                             )
+                        }
+                    }
+                }
+
+                // 后端已部署（health 通过）但 token 无效/未配置：提示修改 token，而非引导安装。
+                backendHealthy == true -> BackendCard {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 14.dp, vertical = 12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(Icons.Default.Key, contentDescription = null)
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(horizontal = 12.dp),
+                            ) {
+                                Text(
+                                    text = stringResource(R.string.backend_token_invalid),
+                                    style = MaterialTheme.typography.titleSmall,
+                                )
+                                Text(
+                                    text = stringResource(R.string.backend_token_invalid_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                )
+                            }
                         }
                     }
                 }

@@ -14,7 +14,9 @@ import org.hiylo.starburst.domain.model.ServerConfig
 
 /** 一次 starburst-backend 探测的结果。 */
 data class BackendProbeResult(
-    /** /api/health 是否返回 2xx。 */
+    /** /api/health 是否返回 2xx（后端是否可达/已部署）。 */
+    val healthy: Boolean,
+    /** 后端是否「可用」：可达 且 token 能鉴权读取真实 /api/system。 */
     val available: Boolean,
     /** 后端自身版本（/api/system 的 version 字段），探测失败或为空时为 null。 */
     val version: String?,
@@ -66,11 +68,21 @@ object BackendGate {
     suspend fun probe(backendApi: BackendApi, server: ServerConfig?, serverUrl: String): BackendProbeResult {
         val backendUrl = (server?.backendResolvedUrl ?: "http://${hostFrom(serverUrl)}:18880").trimEnd('/')
         val token = server?.backendResolvedToken ?: "ocb_default"
-        val available = backendApi.isHealthy(backendUrl)
-        // 后端可用时顺带读 /api/system 拿自身版本，用于判断是否需要升级。
-        val system = if (available) backendApi.getSystemInfo(backendUrl, token) else null
+        // 先探测后端是否已部署/可达（/api/health 无鉴权，token 空/无效均可探测）。
+        val healthy = backendApi.isHealthy(backendUrl)
+        // token 为空（显式禁用后端）：可达也不算「可用」，避免仅凭 /api/health 通过就误显示
+        // 后端功能入口（自动化规则 / API 令牌 / 审计日志等）；healthy 保留用于区分「未安装」。
+        if (token.isBlank()) {
+            return BackendProbeResult(healthy = healthy, available = false, version = null, needsUpgrade = false)
+        }
+        // 后端「可用」必须同时满足：/api/health 通过 且 token 能鉴权读取真实 /api/system。
+        // 注意：token 无效时后端返回 {"error":"invalid token"}，会反序列化为各字段为空的
+        // BackendSystemInfo（非 null），因此必须校验关键字段而非仅判空。
+        val system = if (healthy) backendApi.getSystemInfo(backendUrl, token) else null
+        val available = healthy && system != null && system.backend.isNotBlank()
         val version = system?.version.orEmpty()
         return BackendProbeResult(
+            healthy = healthy,
             available = available,
             version = version.ifBlank { null },
             needsUpgrade = needsUpgrade(version),
