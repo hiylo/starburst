@@ -235,6 +235,7 @@
     <string name="server_invalid_url">URL 格式无效</string>
     <string name="session_untitled">无标题会话</string>
     <string name="session_unknown_error">未知错误</string>
+    <string name="session_not_found">会话不存在或可能已被删除。\n请返回并刷新会话列表。</string>
     <string name="chat_tokens_summary">%1$s 令牌</string>
     <string name="chat_default_variant">默认</string>
     <string name="chat_type_answer">输入你的答案…</string>

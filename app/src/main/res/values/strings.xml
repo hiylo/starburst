@@ -159,6 +159,7 @@
     <string name="session_changes_deletions">-%1$d</string>
     <string name="session_untitled">Untitled session</string>
     <string name="session_unknown_error">Unknown error</string>
+    <string name="session_not_found">Session not found or it may have been deleted.\nPlease go back and refresh the session list.</string>
     
     <!-- Chat Screen -->
     <string name="chat_input_hint">Message OpenCode…</string>
