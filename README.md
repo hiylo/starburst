@@ -134,7 +134,7 @@ opencode serve --port 4096 --hostname 0.0.0.0
 ### 2. Connect in the app
 
 1. Tap **+** on the home screen
-2. Enter the server URL (e.g. `http://192.168.0.10:4096`), username and optional password
+2. Enter the server URL (e.g. `http://192.0.2.10:4096`), username and optional password
 3. Tap **Connect**
 
 ### 3. (Optional) Configure an external LLM for suggestions

@@ -47,10 +47,10 @@ class DiagnosticLogRepositoryTest {
     @Test
     fun redactsNetworkAddressesAndUserPaths() {
         val sanitized = DiagnosticLogRepository.sanitize(
-            "hosts 192.168.10.20 and 2001:db8::1 paths /home/alice/private/project.kt /Users/bob/source C:\\Users\\carol\\secret",
+            "hosts 198.51.100.20 and 2001:db8::1 paths /home/alice/private/project.kt /Users/bob/source C:\\Users\\carol\\secret",
         )
 
-        assertFalse(sanitized.contains("192.168.10.20"))
+        assertFalse(sanitized.contains("198.51.100.20"))
         assertFalse(sanitized.contains("2001:db8::1"))
         assertFalse(sanitized.contains("alice"))
         assertFalse(sanitized.contains("bob"))

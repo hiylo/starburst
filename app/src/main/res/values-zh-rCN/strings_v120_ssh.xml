@@ -2,7 +2,7 @@
 <resources>
     <!-- Server dialog: split host / port -->
     <string name="server_host">服务器地址</string>
-    <string name="server_host_hint">192.168.1.100</string>
+    <string name="server_host_hint">192.0.2.100</string>
     <string name="server_opencode_port">OpenCode 端口</string>
     <string name="server_opencode_port_hint">4096</string>
     <string name="server_https">使用 HTTPS</string>

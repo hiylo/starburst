@@ -17,7 +17,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ServerConfig(
     val id: String, // UUID
-    val url: String, // e.g. http://192.168.1.100:4096
+    val url: String, // e.g. http://192.0.2.100:4096
     val username: String = "starburst",
     val password: String? = null,
     val name: String? = null, // User-friendly name

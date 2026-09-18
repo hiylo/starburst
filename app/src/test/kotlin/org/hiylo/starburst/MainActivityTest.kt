@@ -18,7 +18,7 @@ class MainActivityTest {
     private val servers = listOf(
         ServerConfig(
             id = "server-1",
-            url = "http://10.9.0.6:4096/",
+            url = "http://198.51.100.6:4096/",
             username = "opencode",
         ),
         ServerConfig(
@@ -30,14 +30,14 @@ class MainActivityTest {
 
     @Test
     fun `deep link resolves server by id first`() {
-        val server = findDeepLinkServer(servers, "server-2", "http://10.9.0.6:4096")
+        val server = findDeepLinkServer(servers, "server-2", "http://198.51.100.6:4096")
 
         assertEquals("server-2", server?.id)
     }
 
     @Test
     fun `legacy deep link resolves server by normalized url`() {
-        val server = findDeepLinkServer(servers, "", "http://10.9.0.6:4096")
+        val server = findDeepLinkServer(servers, "", "http://198.51.100.6:4096")
 
         assertEquals("server-1", server?.id)
     }
