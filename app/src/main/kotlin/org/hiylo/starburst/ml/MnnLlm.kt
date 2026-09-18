@@ -130,6 +130,14 @@ object MnnLlm {
     @Volatile
     private var loaded = false
 
+    /**
+     * 代数计数器：每次 [initNative] 成功加载都会自增。用于让异步 [release] 只释放
+     * 「发出释放请求时」已存在的指针 —— 若请求后期间又重建了模型（代数变化），
+     * 则不释放新指针，避免「刚加载的模型被并发 release 立即释放」的竞态。
+     */
+    @Volatile
+    private var generation = 0L
+
     /** Serializes native calls so reset()/generate() never overlap with MNN internals. */
     private val nativeLock = Mutex()
 
@@ -213,8 +221,12 @@ object MnnLlm {
             }
             nativeLock.withLock {
                 if (loaded && nativePtr != 0L) return@withLock true
-                nativePtr = initNative(dir.absolutePath)
-                loaded = nativePtr != 0L
+                val ptr = initNative(dir.absolutePath)
+                if (ptr != 0L) {
+                    generation++
+                }
+                nativePtr = ptr
+                loaded = ptr != 0L
                 state = if (loaded) State.Ready else State.Failed
                 if (!loaded) Log.e(TAG, "initNative returned 0 (load failed)")
                 loaded
@@ -370,12 +382,19 @@ object MnnLlm {
     }
 
     /** Releases native resources. Idempotent; serialized behind [nativeLock] to avoid freeing
-     *  memory while a generation is still in flight (use-after-free). */
+     *  memory while a generation is still in flight (use-after-free).
+     *
+     *  Request-stamped against [generation]: the async release only frees the pointer that
+     *  existed when [release] was *called*. If in the meantime the model was (re)loaded by
+     *  [ensureLoaded] (generation changed), the newer pointer is left untouched, so a
+     *  "release flooding in right after load" can no longer free a freshly loaded model. */
     fun release() {
+        val requestedGeneration = generation
         releaseScope.launch {
             nativeLock.withLock {
-                if (nativePtr != 0L) {
-                    runCatching { releaseNative(nativePtr) }
+                val ptr = nativePtr
+                if (ptr != 0L && generation == requestedGeneration) {
+                    runCatching { releaseNative(ptr) }
                     nativePtr = 0L
                     loaded = false
                 }

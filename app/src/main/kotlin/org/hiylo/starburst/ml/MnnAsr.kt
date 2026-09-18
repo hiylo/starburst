@@ -258,14 +258,16 @@ object MnnAsr {
         withContext(Dispatchers.IO) {
             nativeLock.withLock {
                 val r = recognizer ?: return@withLock ""
-                runCatching {
+                var released = false
+                try {
                     stream.inputFinished()
                     val text = r.getResult(stream).text
                     stream.release()
+                    released = true
                     text
-                }.getOrElse {
-                    Log.e(TAG, "finish failed", it)
-                    stream.release()
+                } catch (e: Exception) {
+                    Log.e(TAG, "finish failed", e)
+                    if (!released) stream.release()
                     ""
                 }
             }

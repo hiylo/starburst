@@ -150,6 +150,9 @@ class MnnAsrRecorder(private val context: Context) : AsrSession {
             runCatching { rec.stop() }
             runCatching { rec.release() }
             record = null
+            // 始终释放识别流：正常 stop（finish 内已释放 finish，幂等）、取消、
+            // 读取失败 / 协程取消等到此统一收口，避免 OnlineStream 泄漏。
+            runCatching { MnnAsr.releaseStream(stream) }
         }
     }
 
