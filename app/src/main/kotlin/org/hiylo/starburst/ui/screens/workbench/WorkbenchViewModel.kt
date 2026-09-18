@@ -155,7 +155,7 @@ class WorkbenchViewModel @Inject constructor(
     private var conn: ServerConnection? = null
     /** starburst-backend 地址与 APP token（镜像通道 / 用量统计 / 任务中心用）。 */
     private var backendUrl = ""
-    private var backendToken = "ocb_default"
+    private var backendToken = ""
 
     private val _uiState = MutableStateFlow(WorkbenchUiState(serverName = serverNameArg))
     val uiState: StateFlow<WorkbenchUiState> = _uiState.asStateFlow()
@@ -274,7 +274,7 @@ class WorkbenchViewModel @Inject constructor(
             val password = server?.password ?: passwordArg.ifEmpty { null }
             conn = ServerConnection.from(baseUrl, username, password)
             backendUrl = server?.backendResolvedUrl.orEmpty()
-            backendToken = server?.backendResolvedToken ?: "ocb_default"
+            backendToken = server?.backendResolvedToken.orEmpty()
             // 后端可用时走镜像通道：状态/列表走后端增强接口（快照+事件+活跃度聚合，准确）。
             // token 为空（未配置/显式禁用后端）时保持直连 opencode，避免用空 Bearer 请求镜像。
             if (backendUrl.isNotBlank() && backendToken.isNotBlank()) {
@@ -288,6 +288,15 @@ class WorkbenchViewModel @Inject constructor(
                 return@launch
             }
 
+            refreshSessions()
+            startPushStream()
+            // 推送断线时的轮询兜底。
+            viewModelScope.launch {
+                while (isActive) {
+                    delay(SESSION_POLL_INTERVAL_MS)
+                    refreshSessions()
+                }
+            }
         }
     }
 

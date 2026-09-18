@@ -116,7 +116,7 @@ class AgentsMdViewModel @Inject constructor(
         viewModelScope.launch {
             val server = serverRepository.servers.first().firstOrNull { it.id == serverId }
             backendUrl = server?.backendResolvedUrl.orEmpty()
-            backendToken = server?.backendResolvedToken ?: "ocb_default"
+            backendToken = server?.backendResolvedToken.orEmpty()
             detect()
         }
     }

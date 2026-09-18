@@ -638,4 +638,6 @@ data class BackendSystemInfo(
     val opencodeUrl: String = "",
     val opencodeVersion: String = "",
     val db: String = "",
+    val pgvector: Boolean = false,
+    val vectorCapable: Boolean = false,
 )

@@ -170,6 +170,8 @@ enum class SuggestionSource { BACKEND, CLOUD, ON_DEVICE, FALLBACK }
 
 data class ChatUiState(
     val sessionTitle: String = "",
+    /** 项目路径（会话所属项目目录），显示在标题栏副标题。 */
+    val sessionDirectory: String = "",
     val sessionLoaded: Boolean = false,
     val parentSessionId: String? = null,
     /** 当前会话 fork 出的直接子会话列表（用于分支切换对比）。 */
@@ -987,6 +989,7 @@ class ChatViewModel @Inject constructor(
 
         ChatUiState(
             sessionTitle = session?.title ?: "Chat",
+            sessionDirectory = session?.directory ?: "",
             sessionLoaded = session != null,
             parentSessionId = session?.parentId,
             childSessions = childSessions,
@@ -1739,7 +1742,7 @@ class ChatViewModel @Inject constructor(
         if (host.isBlank()) return null
         val url = (backend?.backendResolvedUrl ?: "http://$host:18880").trimEnd('/')
         if (url.isBlank()) return null
-        return url to (backend?.backendResolvedToken ?: "ocb_default")
+        return url to (backend?.backendResolvedToken.orEmpty())
     }
 
     /** 停止语音识别（松手上屏）。 */
@@ -2634,7 +2637,7 @@ class ChatViewModel @Inject constructor(
         if (host.isBlank()) return null
         val backendUrl = (backend?.backendResolvedUrl ?: "http://$host:18880").trimEnd('/')
         if (backendUrl.isBlank()) return null
-        val token = backend?.backendResolvedToken ?: "ocb_default"
+        val token = backend?.backendResolvedToken.orEmpty()
         val parsed = try {
             backendRepository.generateSuggestions(backendUrl, token, SUGGESTION_API_SYSTEM, prompt)
         } catch (e: CancellationException) {

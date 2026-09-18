@@ -85,7 +85,7 @@ private const val TAG = "TaskListViewModel"
             val server = serverRepository.servers.first().firstOrNull { it.id == serverId }
             // 地址自动推导（opencode 同主机 :18880）、token 默认 ocb_default，零配置可用。
             backendUrl = server?.backendResolvedUrl.orEmpty()
-            backendToken = server?.backendResolvedToken ?: "ocb_default"
+            backendToken = server?.backendResolvedToken.orEmpty()
             if (backendUrl.isNotBlank()) {
                 refresh()
                 backendRepository.connectWs(serverId, backendUrl, backendToken)

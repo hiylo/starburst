@@ -50,11 +50,12 @@ data class ServerConfig(
     /**
      * 解析后的 Backend token：
      * - 显式配置则使用配置值（后端镜像启用）；
-     * - 未配置/空串时回退到后端默认令牌 `ocb_default`（与后端 `--default-token` 一致，
-     *   避免 `?: "ocb_default"` 兜底被空串绕过后以空 token 请求导致 401）。
+     * - 未配置/空串时为**空串**，语义为「禁用后端」：后端入口隐藏、连接保持直连 opencode。
+     *   注意：不要回退到默认令牌 `ocb_default`——那是后端侧的默认值，客户端显式禁用
+     *   时必须能表达「不连镜像」，回退会把禁用语义静默变成「用默认令牌连镜像」（401 误报）。
      */
     val backendResolvedToken: String
-        get() = backendToken?.takeIf { it.isNotBlank() }?.trim() ?: "ocb_default"
+        get() = backendToken?.takeIf { it.isNotBlank() }?.trim() ?: ""
 
     /** OpenCode 服务端口（显式端口，否则回退 http/https 默认端口）。 */
     val openCodePort: Int

@@ -11,6 +11,7 @@ package org.hiylo.starburst.data.repository
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.client.plugins.websocket.webSocket
+import io.ktor.client.request.header
 import io.ktor.websocket.Frame
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CoroutineScope
@@ -226,11 +227,17 @@ class BackendRepository @Inject constructor(
         disconnectWs(serverId)
         st.url = backendUrl
         st.token = token
-        val wsUrl = backendUrl.trimEnd('/').replaceFirst("http", "ws") + "/api/ws?token=$token"
+        // token 走 Authorization 头而非 URL 查询串：避免明文凭据落代理/访问日志；
+        // https 后端对应 wss（不能简单 replaceFirst("http","ws")，否则得到非法的 wsps://）。
+        val wsUrl = backendUrl.trimEnd('/')
+            .let { if (it.startsWith("https://")) it.replaceFirst("https://", "wss://") else it.replaceFirst("http://", "ws://") } +
+            "/api/ws"
         st.wsJob = scope.launch {
             while (isActive) {
                 try {
-                    httpClient.webSocket(wsUrl) {
+                    httpClient.webSocket(wsUrl, request = {
+                        header(io.ktor.http.HttpHeaders.Authorization, "Bearer $token")
+                    }) {
                         st.connected.value = true
                         for (frame in incoming) {
                             if (frame is Frame.Text) {

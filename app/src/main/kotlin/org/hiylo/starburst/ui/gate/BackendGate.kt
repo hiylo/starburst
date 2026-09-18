@@ -67,7 +67,7 @@ object BackendGate {
      */
     suspend fun probe(backendApi: BackendApi, server: ServerConfig?, serverUrl: String): BackendProbeResult {
         val backendUrl = (server?.backendResolvedUrl ?: "http://${hostFrom(serverUrl)}:18880").trimEnd('/')
-        val token = server?.backendResolvedToken ?: "ocb_default"
+        val token = server?.backendResolvedToken.orEmpty()
         // 先探测后端是否已部署/可达（/api/health 无鉴权，token 空/无效均可探测）。
         val healthy = backendApi.isHealthy(backendUrl)
         // token 为空（显式禁用后端）：可达也不算「可用」，避免仅凭 /api/health 通过就误显示
