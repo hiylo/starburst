@@ -256,7 +256,14 @@ fun HomeScreen(
                             }
                         }
 
-                        if (uiState.updateState is UpdateState.Available || uiState.updateState is UpdateState.Error) {
+                        // 仅当确有新版本（Available）或存在可恢复的下载/安装失败（Error 且带 release）
+                        // 时才展示更新横幅；纯检查失败（网络错误、Error 且无 release）不提示「有可用更新」。
+                        val updateBanner = when (val s = uiState.updateState) {
+                            is UpdateState.Available -> true
+                            is UpdateState.Error -> s.release != null
+                            else -> false
+                        }
+                        if (updateBanner) {
                             item(key = "__app_update") {
                                 UpdateAvailableCard(
                                     updateState = uiState.updateState,

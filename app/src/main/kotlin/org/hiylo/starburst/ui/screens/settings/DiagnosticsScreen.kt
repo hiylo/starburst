@@ -18,7 +18,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ContentCopy
@@ -248,12 +248,16 @@ fun DiagnosticsScreen(
                     )
                 }
             } else {
+                val reversedEntries = remember(entries) { entries.asReversed().toList() }
                 LazyColumn(
                     modifier = Modifier.fillMaxWidth().weight(1f),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 16.dp, end = 16.dp, bottom = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(entries.asReversed()) { entry ->
+                    itemsIndexed(items = reversedEntries, key = { index, entry ->
+                        // entries 来自 SQLite 自增序，timestamp 可能重复，用「时间戳+类别」保证稳定且不越界。
+                        "${entry.timestamp}-${entry.level}-${entry.category}-$index"
+                    }) { _, entry ->
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = AppCardShape,

@@ -128,7 +128,7 @@ class TerminalEmulator(initialCols: Int = 80, initialRows: Int = 24) {
     private val escParams = StringBuilder()
 
     // Scrollback buffer for main screen (limited size)
-    private val scrollback = mutableListOf<Array<Cell>>()
+    private val scrollback = ArrayDeque<Array<Cell>>()
     private val maxScrollback = 500
 
     // Version counter — incremented on any screen change for compose recomposition
@@ -776,8 +776,8 @@ class TerminalEmulator(initialCols: Int = 80, initialRows: Int = 24) {
         if (!onAltScreen && topMargin == 0) {
             val saved = Array(cols) { Cell() }
             for (c in 0 until cols) saved[c].copyFrom(screen[topMargin][c])
-            scrollback.add(saved)
-            if (scrollback.size > maxScrollback) scrollback.removeAt(0)
+            scrollback.addLast(saved)
+            if (scrollback.size > maxScrollback) scrollback.removeFirst()
         }
 
         // Shift lines up within scroll region

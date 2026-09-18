@@ -1665,7 +1665,7 @@ private fun OpenProjectDialog(
                                     modifier = Modifier.fillMaxSize(),
                                     contentPadding = PaddingValues(vertical = 4.dp)
                                 ) {
-                                    items(searchResults) { path ->
+                                    items(searchResults, key = { it }) { path ->
                                         val absolutePath = path.trimEnd('/').ifEmpty { "/" }
                                         DirectoryRow(
                                             displayPath = tildeReplace(absolutePath) + "/",

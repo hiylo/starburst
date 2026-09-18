@@ -413,12 +413,6 @@ internal fun SessionTerminalInline(
             val totalRows = remember(terminalVersion) {
                 emulator.totalRowsWithScrollback().coerceAtLeast(1)
             }
-            val renderedOutput = remember(terminalVersion, totalRows) {
-                emulator.render(
-                    scrollbackOffsetRows = 0,
-                    windowRows = totalRows,
-                )
-            }
             val renderedRuns = remember(terminalVersion, totalRows) {
                 emulator.renderRuns(
                     scrollbackOffsetRows = 0,

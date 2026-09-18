@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -1026,10 +1027,15 @@ fun ChatScreen(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        // Subtitle: total tokens and cost for the session
+                        // Subtitle: project path, total tokens and cost for the session
                         val totalTokens = uiState.totalInputTokens + uiState.totalOutputTokens
-                        if (totalTokens > 0 || uiState.totalCost > 0) {
+                        val hasTokenOrCost = totalTokens > 0 || uiState.totalCost > 0
+                        val hasDirectory = uiState.sessionDirectory.isNotBlank()
+                        if (hasDirectory || hasTokenOrCost) {
                             val parts = mutableListOf<String>()
+                            if (hasDirectory) {
+                                parts.add(uiState.sessionDirectory)
+                            }
                             if (totalTokens > 0) {
                                 parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
                             }
@@ -1040,7 +1046,9 @@ fun ChatScreen(
                                 Text(
                                     text = parts.joinToString(" · "),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
                                 )
                             }
                         }
@@ -2348,7 +2356,7 @@ fun ChatScreen(
                                 is ChatTimelineEntry.DateDivider -> DateDividerRow(entry.dayStartMillis)
                                 is ChatTimelineEntry.Turn -> {
                             val chatTurn = entry.turn
-                            val chatMessage = chatTurn.messages.first()
+                            val chatMessage = chatTurn.messages.firstOrNull() ?: return@items
                             // Detect compaction trigger messages (user messages with Part.Compaction)
                             val isCompactionTrigger = chatMessage.isUser &&
                                 chatMessage.parts.any { it is Part.Compaction }
@@ -3806,8 +3814,7 @@ private fun ChatInputBar(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    items(attachments.size) { index ->
-                        val attachment = attachments[index]
+                    itemsIndexed(attachments, key = { _, it -> it.uri }) { index, attachment ->
                         Box(
                             modifier = Modifier
                                 .width(if (attachment.isImage) 56.dp else 180.dp)

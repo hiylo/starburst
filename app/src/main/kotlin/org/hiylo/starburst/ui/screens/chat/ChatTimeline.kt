@@ -47,8 +47,8 @@ internal fun buildChatTimeline(messages: List<ChatMessage>): List<ChatTimelineEn
     val entries = mutableListOf<ChatTimelineEntry>()
     var lastDay: Long? = null
     turns.forEach { turn ->
-        val created = turn.messages.first().message.time.created
-        val dayStart = dayStartEpochMillis(created)
+        val first = turn.messages.firstOrNull() ?: return@forEach
+        val dayStart = dayStartEpochMillis(first.message.time.created)
         if (lastDay == null || dayStart != lastDay) {
             entries += ChatTimelineEntry.DateDivider(dayStart)
             lastDay = dayStart
