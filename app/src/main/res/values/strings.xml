@@ -10,6 +10,7 @@
     <string name="home_connect">Connect</string>
     <string name="home_connecting">Connecting…</string>
     <string name="home_disconnect">Disconnect</string>
+    <string name="home_cancel_connect">Cancel</string>
     <string name="home_edit">Edit</string>
     <string name="home_fix">Fix</string>
     <string name="home_battery_title">Battery restrictions active</string>

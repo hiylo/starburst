@@ -64,6 +64,7 @@
     <string name="home_connect">连接</string>
     <string name="home_connecting">正在连接…</string>
     <string name="home_disconnect">断开连接</string>
+    <string name="home_cancel_connect">取消连接</string>
     <string name="home_edit">编辑</string>
     <string name="home_fix">修复</string>
     <string name="server_name">服务器名称</string>

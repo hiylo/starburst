@@ -730,6 +730,18 @@ private fun ServerCard(
                             Text(stringResource(R.string.home_connect))
                         }
                     }
+                    if (isConnecting) {
+                        AppSecondaryButton(
+                            onClick = onDisconnect,
+                            modifier = Modifier.fillMaxWidth(),
+                            destructive = true,
+                            outlined = true,
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text(stringResource(R.string.home_cancel_connect), maxLines = 1)
+                        }
+                    }
                     if (connectionError != null && server.useSsh) {
                         AppSecondaryButton(
                             onClick = onRestartViaSsh,
