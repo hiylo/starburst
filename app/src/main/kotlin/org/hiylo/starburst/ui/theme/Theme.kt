@@ -93,6 +93,22 @@ private fun ColorScheme.withAmoledSurfaces(): ColorScheme = copy(
     surfaceContainerHighest = Color(0xFF1C1C24)
 )
 
+/** 柔和（Dim）主题的中性灰表面系：介于浅色与深色之间，避免纯黑刺眼也避免纯白过亮。 */
+private fun ColorScheme.withDimSurfaces(): ColorScheme = copy(
+    background = Color(0xFF2A2A30),
+    surface = Color(0xFF2A2A30),
+    surfaceVariant = Color(0xFF3A3A43),
+    surfaceContainer = Color(0xFF303038),
+    surfaceContainerLow = Color(0xFF2C2C33),
+    surfaceContainerLowest = Color(0xFF26262C),
+    surfaceContainerHigh = Color(0xFF383841),
+    surfaceContainerHighest = Color(0xFF42424B),
+    onSurface = Color(0xFFE6E2EA),
+    onSurfaceVariant = Color(0xFFC9C5CF),
+    outline = Color(0xFF929099),
+    outlineVariant = Color(0xFF4A4951)
+)
+
 /** Primary color roles for one accent choice, split by light/dark mode. */
 internal data class AccentRoles(
     val primary: Color,
@@ -388,6 +404,7 @@ fun StarBurstTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = false,
     amoledDark: Boolean = false,
+    dimTheme: Boolean = false,
     accentColor: String = "indigo",
     themeScheme: String = "default",
     content: @Composable () -> Unit
@@ -395,6 +412,11 @@ fun StarBurstTheme(
     val accent = StarBurstAccents[accentColor] ?: StarBurstAccents.getValue("indigo")
     val scheme = StarBurstSchemes[themeScheme]
     val colorScheme = when {
+        dimTheme -> {
+            // 柔和主题：以对应方案/强调色的深色版为基底，应用中性灰表面系。
+            val base = if (scheme != null) scheme.dark else darkSchemeFor(accent)
+            base.withDimSurfaces()
+        }
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             val base = if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)

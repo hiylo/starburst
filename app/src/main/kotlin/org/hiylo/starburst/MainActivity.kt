@@ -244,6 +244,7 @@ class MainActivity : ComponentActivity() {
             
             // Determine if dark theme should be used
             val systemDarkTheme = isSystemInDarkTheme()
+            val dimTheme = appTheme == "dim"
             val darkTheme = when (appTheme) {
                 "light" -> false
                 "dark" -> true
@@ -254,6 +255,7 @@ class MainActivity : ComponentActivity() {
                 darkTheme = darkTheme,
                 dynamicColor = dynamicColor,
                 amoledDark = amoledDark,
+                dimTheme = dimTheme,
                 accentColor = accentColor,
                 themeScheme = themeScheme,
             ) {
@@ -265,8 +267,9 @@ class MainActivity : ComponentActivity() {
                     window.navigationBarColor = Color.Transparent.toArgb()
                     
                     val insetsController = WindowCompat.getInsetsController(window, window.decorView)
-                    insetsController.isAppearanceLightStatusBars = !darkTheme
-                    insetsController.isAppearanceLightNavigationBars = !darkTheme
+                    val useLightIcons = darkTheme || dimTheme
+                    insetsController.isAppearanceLightStatusBars = !useLightIcons
+                    insetsController.isAppearanceLightNavigationBars = !useLightIcons
                 }
                 
                 Surface(

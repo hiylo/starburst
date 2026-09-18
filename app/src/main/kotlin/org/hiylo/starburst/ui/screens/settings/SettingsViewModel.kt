@@ -164,8 +164,9 @@ class SettingsViewModel @Inject constructor(
     )
 
     /**
-     * Four-way theme mode: "system", "light", "dark", or "amoled".
-     * "amoled" is a first-class choice that maps to dark theme + pure black surfaces.
+     * Five-way theme mode: "system", "light", "dim", "dark", or "amoled".
+     * "dim" is a mid-tone theme between light and dark; "amoled" is a first-class
+     * choice that maps to dark theme + pure black surfaces.
      */
     val themeMode: StateFlow<String> = combine(appTheme, amoledDark) { theme, amoled ->
         if (theme == "dark" && amoled) "amoled" else theme
@@ -386,8 +387,9 @@ class SettingsViewModel @Inject constructor(
     }
 
     /**
-     * Sets the four-way theme mode. "amoled" is persisted as dark theme + AMOLED surfaces;
-     * the other values map directly onto the stored app theme.
+     * Sets the five-way theme mode. "amoled" is persisted as dark theme + AMOLED surfaces;
+     * "dim" is a mid-tone theme between light and dark; the other values map directly
+     * onto the stored app theme.
      */
     fun setThemeMode(mode: String) {
         viewModelScope.launch {
