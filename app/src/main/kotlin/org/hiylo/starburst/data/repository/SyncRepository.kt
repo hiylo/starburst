@@ -171,6 +171,13 @@ class SyncRepository @Inject constructor(
         }
         if (config.webDav.enabled) {
             require(config.webDav.endpoint.isNotBlank()) { "A WebDAV file URL is required" }
+            val webDavUri = Uri.parse(config.webDav.endpoint.trim())
+            // WebDAV 通过 Basic Auth 明文携带用户名/密码：仅允许 https（或回环地址），
+            // 禁止 http:// 明文传输，避免同网段设备/代理日志捕获同步凭据。
+            val isLoopback = webDavUri.host?.let { it == "127.0.0.1" || it == "localhost" || it == "::1" } == true
+            require(webDavUri.scheme == "https" || isLoopback) {
+                "WebDAV over plain HTTP exposes your sync password; use an https:// URL"
+            }
             require(!webDavPassword.isNullOrBlank() || hasSecret(LocalSyncSecretStore.SecretKey.WEBDAV_PASSWORD)) {
                 "WebDAV password is required"
             }

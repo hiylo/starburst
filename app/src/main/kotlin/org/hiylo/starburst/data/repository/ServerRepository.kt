@@ -174,7 +174,7 @@ class ServerRepository @Inject constructor(
         )
         
         dataStore.edit { preferences ->
-            preferences[serversKey] = encodeServers(readServers(preferences) + server)
+            preferences[serversKey] = encodeServers(readServersStrict(preferences) + server)
         }
         
         return server
@@ -185,7 +185,7 @@ class ServerRepository @Inject constructor(
      */
     suspend fun updateServer(server: ServerConfig) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = encodeServers(readServers(preferences).map {
+            preferences[serversKey] = encodeServers(readServersStrict(preferences).map {
                 if (it.id == server.id) server else it
             })
         }
@@ -193,7 +193,7 @@ class ServerRepository @Inject constructor(
 
     suspend fun setAutoConnect(serverId: String, autoConnect: Boolean) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = encodeServers(readServers(preferences).map { server ->
+            preferences[serversKey] = encodeServers(readServersStrict(preferences).map { server ->
                 if (server.id == serverId) server.copy(autoConnect = autoConnect) else server
             })
         }
@@ -204,7 +204,7 @@ class ServerRepository @Inject constructor(
      */
     suspend fun deleteServer(serverId: String) {
         dataStore.edit { preferences ->
-            preferences[serversKey] = encodeServers(readServers(preferences).filter { it.id != serverId })
+            preferences[serversKey] = encodeServers(readServersStrict(preferences).filter { it.id != serverId })
         }
         // 释放该服务器对应的终端 workspace（关闭 socket 协程、清理连接凭据），避免泄漏。
         ServerTerminalRegistry.release(serverId)
@@ -293,7 +293,7 @@ class ServerRepository @Inject constructor(
         remote: List<SyncServer>,
         passwords: Map<String, String>,
     ): Map<String, String> {
-        val result = mergeSyncServers(readServers(preferences), remote, passwords)
+        val result = mergeSyncServers(readServersStrict(preferences), remote, passwords)
         preferences[serversKey] = encodeServers(result.servers)
         return result.idMapping
     }
@@ -303,7 +303,7 @@ class ServerRepository @Inject constructor(
         preferences: MutablePreferences,
         remote: List<ServerConfig>,
     ): Map<String, String> {
-        val result = mergeServerConfigs(readServers(preferences), remote)
+        val result = mergeServerConfigs(readServersStrict(preferences), remote)
         preferences[serversKey] = encodeServers(result.servers)
         return result.idMapping
     }
@@ -332,6 +332,38 @@ class ServerRepository @Inject constructor(
         }
     }
 
+    /**
+     * 严格解码：用于写路径。若存储的密文既非明文 JSON 也无法用 Keystore 解密
+     * （换机/云备份恢复后密钥缺失），返回 null —— 调用方必须中止写入，禁止
+     * 把空列表写回覆盖掉现有服务器配置（否则一次瞬时 Keystore 抖动即全量清空）。
+     */
+    private fun decodeServersStrict(encoded: String?): List<ServerConfig>? {
+        if (encoded.isNullOrEmpty()) return emptyList()
+        secretStore.decrypt(encoded)?.let { plain ->
+            return runCatching { json.decodeFromString<List<ServerConfig>>(plain) }
+                .getOrNull() ?: run {
+                    Log.e(TAG, "Failed to decode servers (strict)")
+                    null
+                }
+        }
+        return runCatching { json.decodeFromString<List<ServerConfig>>(encoded) }
+            .getOrNull() ?: run {
+            // 既非旧明文 JSON，也无法用 Keystore 密钥解密：多为换机/云备份恢复后
+            // Keystore 密钥缺失导致的密文不可解。写路径必须中止，避免静默清空。
+            Log.e(TAG, "Servers payload is neither plaintext JSON nor decryptable (strict)")
+            null
+        }
+    }
+
+    /** 写路径统一入口：读改写前先严格解码，不可解则抛异常中止本次写入。 */
+    private fun readServersStrict(preferences: Preferences): List<ServerConfig> =
+        decodeServersStrict(preferences[serversKey]) ?: throw ServerStorageException(
+            "Refusing to overwrite undecryptable server list; restore from backup."
+        )
+
     private fun readServers(preferences: Preferences): List<ServerConfig> =
         decodeServers(preferences[serversKey])
 }
+
+/** 服务器列表存储异常：写路径遇不可解密数据时抛出，避免静默清空配置。 */
+class ServerStorageException(message: String) : RuntimeException(message)

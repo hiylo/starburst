@@ -22,13 +22,23 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import org.hiylo.starburst.data.sync.SyncSettings
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
 import org.hiylo.starburst.domain.model.SessionCategory
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import javax.inject.Singleton
+
+/**
+ * DataStore 偏好读取统一收口：`data` 的 map 变换（含 JSON 反序列化）移到 IO 线程执行，
+ * 避免每次偏好变更都在主线程解码大集合（会话分类/收藏快照等随会话数线性增长）。
+ */
+private fun <T> Flow<Preferences>.mapDecoded(
+    transform: (Preferences) -> T,
+): Flow<T> = map(transform).flowOn(Dispatchers.IO)
 
 internal fun remapServerScopedKey(key: String, serverIdMapping: Map<String, String>): String? {
     val separator = key.indexOf(':')
@@ -160,13 +170,13 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     private fun serverContextLimitKey(serverId: String) =
         intPreferencesKey(SERVER_CONTEXT_LIMIT_PREFIX + serverId)
 
-    val sessionCategories: Flow<List<SessionCategory>> = dataStore.data.map { preferences ->
+    val sessionCategories: Flow<List<SessionCategory>> = dataStore.data.mapDecoded { preferences ->
         preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
             runCatching { json.decodeFromString<List<SessionCategory>>(encoded) }.getOrDefault(emptyList())
         }.orEmpty()
     }
 
-    val crossServerFavoriteOrder: Flow<List<String>> = dataStore.data.map { preferences ->
+    val crossServerFavoriteOrder: Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
         preferences[CROSS_SERVER_FAVORITE_ORDER_KEY]
             ?.lineSequence()
             ?.filter(String::isNotBlank)
@@ -175,13 +185,13 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
             .orEmpty()
     }
 
-    val favoriteSessionSnapshots: Flow<Map<String, FavoriteSessionSnapshot>> = dataStore.data.map { preferences ->
+    val favoriteSessionSnapshots: Flow<Map<String, FavoriteSessionSnapshot>> = dataStore.data.mapDecoded { preferences ->
         preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
             runCatching { json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded) }.getOrDefault(emptyMap())
         }.orEmpty()
     }
 
-    fun sessionCategoryAssignments(serverId: String): Flow<Map<String, String>> = dataStore.data.map { preferences ->
+    fun sessionCategoryAssignments(serverId: String): Flow<Map<String, String>> = dataStore.data.mapDecoded { preferences ->
         preferences[serverSessionCategoryKey(serverId)]?.let { encoded ->
             runCatching { json.decodeFromString<Map<String, String>>(encoded) }.getOrDefault(emptyMap())
         }.orEmpty()
@@ -218,7 +228,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    fun favoriteSessionIds(serverId: String): Flow<List<String>> = dataStore.data.map { preferences ->
+    fun favoriteSessionIds(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
         (preferences[serverFavoriteSessionsKey(serverId)] ?: preferences[serverPinnedSessionsKey(serverId)])
             ?.lineSequence()
             ?.filter(String::isNotBlank)
@@ -299,7 +309,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    fun pinnedSessionIds(serverId: String): Flow<List<String>> = dataStore.data.map { preferences ->
+    fun pinnedSessionIds(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
         preferences[serverPinnedIdsKey(serverId)]
             ?.lineSequence()
             ?.filter(String::isNotBlank)
@@ -367,7 +377,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    fun recentProjects(serverId: String): Flow<List<String>> = dataStore.data.map { preferences ->
+    fun recentProjects(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
         preferences[serverRecentProjectsKey(serverId)]
             ?.lineSequence()
             ?.filter(String::isNotBlank)
@@ -392,7 +402,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** 用户在 Open Project 里手动固定的常用路径（每服务器独立，保序，最近添加在前）。 */
-    fun savedPaths(serverId: String): Flow<List<String>> = dataStore.data.map { preferences ->
+    fun savedPaths(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
         preferences[serverSavedPathsKey(serverId)]
             ?.lineSequence()
             ?.filter(String::isNotBlank)
@@ -456,14 +466,14 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Selected language code (e.g. "en", "ru", "de") or empty string for system default.
      */
-    val appLanguage: Flow<String> = dataStore.data.map { preferences ->
+    val appLanguage: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[LANGUAGE_KEY] ?: ""
     }
 
     /**
      * Selected theme: "system", "light", or "dark".
      */
-    val appTheme: Flow<String> = dataStore.data.map { preferences ->
+    val appTheme: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[THEME_KEY] ?: "system"
     }
 
@@ -493,7 +503,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether dynamic colors (Material You) are enabled. Default: false.
      */
-    val dynamicColor: Flow<Boolean> = dataStore.data.map { preferences ->
+    val dynamicColor: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         dynamicColorEnabled(preferences)
     }
 
@@ -506,7 +516,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Chat font size: "small", "medium", "large". Default: "medium".
      */
-    val chatFontSize: Flow<String> = dataStore.data.map { preferences ->
+    val chatFontSize: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[FONT_SIZE_KEY] ?: "medium"
     }
 
@@ -519,7 +529,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Chat line spacing multiplier (1.0 = default, up to 2.0). Default: 1.0.
      */
-    val chatLineHeight: Flow<Float> = dataStore.data.map { preferences ->
+    val chatLineHeight: Flow<Float> = dataStore.data.mapDecoded { preferences ->
         (preferences[LINE_HEIGHT_KEY] ?: 1f).coerceIn(1f, 2f)
     }
 
@@ -533,8 +543,8 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     @kotlinx.serialization.Serializable
     data class CustomCommand(val name: String, val prompt: String)
 
-    val customCommands: Flow<List<CustomCommand>> = dataStore.data.map { preferences ->
-        val raw = preferences[CUSTOM_COMMANDS_KEY] ?: return@map emptyList()
+    val customCommands: Flow<List<CustomCommand>> = dataStore.data.mapDecoded { preferences ->
+        val raw = preferences[CUSTOM_COMMANDS_KEY] ?: return@mapDecoded emptyList()
         runCatching { Json.decodeFromString<List<CustomCommand>>(raw) }.getOrDefault(emptyList())
     }
 
@@ -582,7 +592,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         val prompt: String = "",
     )
 
-    val promptTemplates: Flow<List<PromptTemplate>> = dataStore.data.map { preferences ->
+    val promptTemplates: Flow<List<PromptTemplate>> = dataStore.data.mapDecoded { preferences ->
         decodePromptTemplates(preferences)
     }
 
@@ -626,7 +636,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    fun sessionTemplates(serverId: String): Flow<List<SessionTemplate>> = dataStore.data.map { preferences ->
+    fun sessionTemplates(serverId: String): Flow<List<SessionTemplate>> = dataStore.data.mapDecoded { preferences ->
         decodeSessionTemplates(preferences, serverSessionTemplatesKey(serverId))
     }
 
@@ -688,7 +698,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether task completion notifications are enabled. Default: true.
      */
-    val notificationsEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+    val notificationsEnabled: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[NOTIFICATIONS_KEY] ?: true
     }
 
@@ -699,7 +709,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Base URL of the externally configured LLM provider used for suggestions (e.g. https://api.openai.com/v1). */
-    val llmProviderBaseUrl: Flow<String> = dataStore.data.map { preferences ->
+    val llmProviderBaseUrl: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[LLM_PROVIDER_BASE_URL_KEY] ?: ""
     }
 
@@ -710,7 +720,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Model name used with the external LLM provider for suggestions (e.g. gpt-4o-mini, deepseek-chat). */
-    val llmProviderModel: Flow<String> = dataStore.data.map { preferences ->
+    val llmProviderModel: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[LLM_PROVIDER_MODEL_KEY] ?: ""
     }
 
@@ -723,7 +733,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Initial number of messages to load per session. Default: 50.
      */
-    val initialMessageCount: Flow<Int> = dataStore.data.map { preferences ->
+    val initialMessageCount: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         preferences[INITIAL_MESSAGE_COUNT_KEY] ?: 50
     }
 
@@ -734,7 +744,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Maximum uncompressed message-history response size before adaptive fallback. Default: 24 MB. */
-    val messageHistoryResponseLimitMb: Flow<Int> = dataStore.data.map { preferences ->
+    val messageHistoryResponseLimitMb: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         (preferences[MESSAGE_HISTORY_RESPONSE_LIMIT_MB_KEY] ?: 24).coerceIn(8, 128)
     }
 
@@ -745,7 +755,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Number of directories shown in the quick new-session dialog. Default: 20. */
-    val recentDirectoryCount: Flow<Int> = dataStore.data.map { preferences ->
+    val recentDirectoryCount: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         (preferences[RECENT_DIRECTORY_COUNT_KEY] ?: 20).coerceIn(5, 50)
     }
 
@@ -758,7 +768,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether code blocks use word wrap (true) or horizontal scroll (false). Default: false.
      */
-    val codeWordWrap: Flow<Boolean> = dataStore.data.map { preferences ->
+    val codeWordWrap: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[CODE_WORD_WRAP_KEY] ?: false
     }
 
@@ -771,7 +781,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether to show confirmation dialog before sending a message. Default: false.
      */
-    val confirmBeforeSend: Flow<Boolean> = dataStore.data.map { preferences ->
+    val confirmBeforeSend: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[CONFIRM_BEFORE_SEND_KEY] ?: false
     }
 
@@ -784,7 +794,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether AMOLED pure black dark theme is enabled. Default: false.
      */
-    val amoledDark: Flow<Boolean> = dataStore.data.map { preferences ->
+    val amoledDark: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[AMOLED_DARK_KEY] ?: false
     }
 
@@ -797,7 +807,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Selected accent color: "indigo", "violet", "cyan", "green", "amber", "red". Default: "indigo".
      */
-    val accentColor: Flow<String> = dataStore.data.map { preferences ->
+    val accentColor: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[ACCENT_COLOR_KEY] ?: DEFAULT_ACCENT_COLOR
     }
 
@@ -811,7 +821,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
      * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset".
      * Default: "default".
      */
-    val themeScheme: Flow<String> = dataStore.data.map { preferences ->
+    val themeScheme: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[THEME_SCHEME_KEY] ?: DEFAULT_THEME_SCHEME
     }
 
@@ -824,7 +834,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether compact message spacing is enabled. Default: false.
      */
-    val compactMessages: Flow<Boolean> = dataStore.data.map { preferences ->
+    val compactMessages: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[COMPACT_MESSAGES_KEY] ?: false
     }
 
@@ -837,7 +847,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether tool cards are collapsed by default. Default: false.
      */
-    val collapseTools: Flow<Boolean> = dataStore.data.map { preferences ->
+    val collapseTools: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[COLLAPSE_TOOLS_KEY] ?: false
     }
 
@@ -847,7 +857,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    val expandReasoning: Flow<Boolean> = dataStore.data.map { preferences ->
+    val expandReasoning: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[EXPAND_REASONING_KEY] ?: false
     }
 
@@ -855,7 +865,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         dataStore.edit { preferences -> preferences[EXPAND_REASONING_KEY] = enabled }
     }
 
-    val showTurnDividers: Flow<Boolean> = dataStore.data.map { preferences ->
+    val showTurnDividers: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[SHOW_TURN_DIVIDERS_KEY] ?: true
     }
 
@@ -863,7 +873,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         dataStore.edit { preferences -> preferences[SHOW_TURN_DIVIDERS_KEY] = enabled }
     }
 
-    val groupSessionsByProject: Flow<Boolean> = dataStore.data.map { preferences ->
+    val groupSessionsByProject: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[GROUP_SESSIONS_BY_PROJECT_KEY] ?: false
     }
 
@@ -874,7 +884,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether haptic feedback is enabled. Default: true.
      */
-    val hapticFeedback: Flow<Boolean> = dataStore.data.map { preferences ->
+    val hapticFeedback: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[HAPTIC_FEEDBACK_KEY] ?: true
     }
 
@@ -884,7 +894,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    val hapticStrength: Flow<String> = dataStore.data.map { preferences ->
+    val hapticStrength: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[HAPTIC_STRENGTH_KEY]?.takeIf { it in setOf("light", "medium", "strong") } ?: "medium"
     }
 
@@ -893,12 +903,12 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         dataStore.edit { preferences -> preferences[HAPTIC_STRENGTH_KEY] = strength }
     }
 
-    val hapticDurationMillis: Flow<Int> = dataStore.data.map { preferences ->
+    val hapticDurationMillis: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         val fallback = hapticPatternForStrength(preferences[HAPTIC_STRENGTH_KEY] ?: "medium")
         (preferences[HAPTIC_DURATION_KEY] ?: fallback.first).coerceIn(5, 100)
     }
 
-    val hapticAmplitude: Flow<Int> = dataStore.data.map { preferences ->
+    val hapticAmplitude: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         val fallback = hapticPatternForStrength(preferences[HAPTIC_STRENGTH_KEY] ?: "medium")
         (preferences[HAPTIC_AMPLITUDE_KEY] ?: fallback.second).coerceIn(1, 255)
     }
@@ -914,7 +924,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
      * Reconnect mode: "aggressive" (1-5s), "normal" (1-30s), "conservative" (1-60s).
      * Default: "normal".
      */
-    val reconnectMode: Flow<String> = dataStore.data.map { preferences ->
+    val reconnectMode: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[RECONNECT_MODE_KEY] ?: "normal"
     }
 
@@ -927,7 +937,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether background SSE connections keep the CPU awake. Default: false.
      */
-    val backgroundWakeLock: Flow<Boolean> = dataStore.data.map { preferences ->
+    val backgroundWakeLock: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[BACKGROUND_WAKE_LOCK_KEY] ?: false
     }
 
@@ -940,7 +950,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether to keep screen on during streaming. Default: false.
      */
-    val keepScreenOn: Flow<Boolean> = dataStore.data.map { preferences ->
+    val keepScreenOn: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[KEEP_SCREEN_ON_KEY] ?: false
     }
 
@@ -953,7 +963,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether notifications are silent (no sound/vibration). Default: false.
      */
-    val silentNotifications: Flow<Boolean> = dataStore.data.map { preferences ->
+    val silentNotifications: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[SILENT_NOTIFICATIONS_KEY] ?: false
     }
 
@@ -966,7 +976,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether notifications are grouped/collapsed by project by default. Default: false.
      */
-    val groupNotifications: Flow<Boolean> = dataStore.data.map { preferences ->
+    val groupNotifications: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[GROUP_NOTIFICATIONS_KEY] ?: false
     }
 
@@ -979,7 +989,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether do-not-disturb time window is enabled. Default: false.
      */
-    val dndEnabled: Flow<Boolean> = dataStore.data.map { preferences ->
+    val dndEnabled: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[DND_ENABLED_KEY] ?: false
     }
 
@@ -990,7 +1000,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Do-not-disturb start time "HH:mm". Default: "22:00". */
-    val dndStart: Flow<String> = dataStore.data.map { preferences ->
+    val dndStart: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[DND_START_KEY] ?: DEFAULT_DND_START
     }
 
@@ -1001,7 +1011,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /** Do-not-disturb end time "HH:mm". Default: "07:00". */
-    val dndEnd: Flow<String> = dataStore.data.map { preferences ->
+    val dndEnd: Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[DND_END_KEY] ?: DEFAULT_DND_END
     }
 
@@ -1014,7 +1024,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Whether image attachments are optimized (resize + WebP) before sending. Default: true.
      */
-    val compressImageAttachments: Flow<Boolean> = dataStore.data.map { preferences ->
+    val compressImageAttachments: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[COMPRESS_IMAGE_ATTACHMENTS_KEY] ?: true
     }
 
@@ -1028,7 +1038,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
      * Max long side (in px) used when resizing image attachments before sending.
      * Use 0 to keep original resolution. Default: 1440.
      */
-    val imageAttachmentMaxLongSide: Flow<Int> = dataStore.data.map { preferences ->
+    val imageAttachmentMaxLongSide: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         val value = preferences[IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY] ?: 1440
         if (value <= 0) 0 else value.coerceIn(720, 4096)
     }
@@ -1042,7 +1052,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * WebP quality used for image attachment optimization. Default: 60.
      */
-    val imageAttachmentWebpQuality: Flow<Int> = dataStore.data.map { preferences ->
+    val imageAttachmentWebpQuality: Flow<Int> = dataStore.data.mapDecoded { preferences ->
         (preferences[IMAGE_ATTACHMENT_WEBP_QUALITY_KEY] ?: 60).coerceIn(1, 100)
     }
 
@@ -1055,7 +1065,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Default terminal font size in sp. Default: 13.
      */
-    val terminalFontSize: Flow<Float> = dataStore.data.map { preferences ->
+    val terminalFontSize: Flow<Float> = dataStore.data.mapDecoded { preferences ->
         (preferences[TERMINAL_FONT_SIZE_KEY] ?: 13f).coerceIn(6f, 20f)
     }
 
@@ -1065,7 +1075,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    val showTerminalPanelHint: Flow<Boolean> = dataStore.data.map { preferences ->
+    val showTerminalPanelHint: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
         preferences[SHOW_TERMINAL_PANEL_HINT_KEY] ?: true
     }
 
@@ -1078,7 +1088,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     /**
      * Hidden model keys for a server. Key format: "providerId:modelId".
      */
-    fun hiddenModels(serverId: String): Flow<Set<String>> = dataStore.data.map { preferences ->
+    fun hiddenModels(serverId: String): Flow<Set<String>> = dataStore.data.mapDecoded { preferences ->
         preferences[serverModelHiddenKey(serverId)] ?: emptySet()
     }
 
@@ -1105,7 +1115,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
      * @param serverId 服务器 ID
      * @return 该服务器的系统提示词（未设置时为空串）
      */
-    fun systemPrompt(serverId: String): Flow<String> = dataStore.data.map { preferences ->
+    fun systemPrompt(serverId: String): Flow<String> = dataStore.data.mapDecoded { preferences ->
         preferences[serverSystemPromptKey(serverId)].orEmpty()
     }
 
@@ -1132,7 +1142,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
      * @param serverId 服务器 ID
      * @return 覆盖的上下文窗口 token 数（未设置时为 0）
      */
-    fun contextLimit(serverId: String): Flow<Int> = dataStore.data.map { preferences ->
+    fun contextLimit(serverId: String): Flow<Int> = dataStore.data.mapDecoded { preferences ->
         preferences[serverContextLimitKey(serverId)] ?: 0
     }
 
