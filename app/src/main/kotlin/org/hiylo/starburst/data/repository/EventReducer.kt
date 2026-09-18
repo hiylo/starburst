@@ -610,6 +610,7 @@ class EventReducer @Inject constructor(
         _todos.update { it - sessionId }
         synchronized(deltaLock) {
             pendingDeltas.keys.removeAll { it.sessionId == sessionId }
+            deltaAccumulator.keys.removeAll { it.sessionId == sessionId }
         }
         synchronized(removedMessageLock) {
             removedMessageSessions.entries.removeAll { it.value == sessionId }
@@ -719,34 +720,36 @@ class EventReducer @Inject constructor(
         val messageId = event.part.messageId
         if (isMessageRemoved(messageId)) return
         val key = PendingDeltaKey(event.part.sessionId, messageId, event.part.id)
-        val buffered = synchronized(deltaLock) {
+        // message.part.updated 携带的是 part 的权威全量文本，未刷的流式 delta 已包含其中，
+        // 不能叠加（否则结尾重复）；只有 part 尚不存在时早到的 delta（pendingDeltas）才需要合并。
+        synchronized(deltaLock) {
             val pending = pendingDeltas.remove(key)?.toString().orEmpty()
-            val accumulated = deltaAccumulator.remove(key)?.toString().orEmpty()
-            pending + accumulated
-        }
-        val updatedPart = if (buffered.isNotEmpty()) {
-            applyTextDelta(event.part, buffered)
-        } else {
-            event.part
-        }
-        _parts.update { current ->
-            val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
-            val existingIndex = messageParts.indexOfFirst { it.id == updatedPart.id }
-            
-            if (existingIndex >= 0) {
-                messageParts[existingIndex] = updatedPart
+            deltaAccumulator.remove(key)
+            val updatedPart = if (pending.isNotEmpty()) {
+                applyTextDelta(event.part, pending)
             } else {
-                messageParts.add(updatedPart)
+                event.part
             }
-            
-            current + (messageId to messageParts)
+            _parts.update { current ->
+                val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
+                val existingIndex = messageParts.indexOfFirst { it.id == updatedPart.id }
+
+                if (existingIndex >= 0) {
+                    messageParts[existingIndex] = updatedPart
+                } else {
+                    messageParts.add(updatedPart)
+                }
+
+                current + (messageId to messageParts)
+            }
         }
     }
 
     /**
      * 全量替换 part（start/end 事件）：携带的全量文本不应再叠加残留 delta，
      * 否则 50ms flush 前到达的 ended 事件会与未刷的尾部 delta 重复拼接。
-     * 调用前清空该 part 的残留缓冲。
+     * 调用前清空该 part 的残留缓冲；且 flush 与本次替换都持有 deltaLock，
+     * 避免 flush 已快照的 delta 在替换完成后再被追加导致结尾重复。
      */
     private fun handleMessagePartFinal(event: SseEvent.MessagePartUpdated) {
         val messageId = event.part.messageId
@@ -754,16 +757,16 @@ class EventReducer @Inject constructor(
         synchronized(deltaLock) {
             pendingDeltas.keys.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
             deltaAccumulator.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
-        }
-        _parts.update { current ->
-            val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
-            val existingIndex = messageParts.indexOfFirst { it.id == event.part.id }
-            if (existingIndex >= 0) {
-                messageParts[existingIndex] = event.part
-            } else {
-                messageParts.add(event.part)
+            _parts.update { current ->
+                val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
+                val existingIndex = messageParts.indexOfFirst { it.id == event.part.id }
+                if (existingIndex >= 0) {
+                    messageParts[existingIndex] = event.part
+                } else {
+                    messageParts.add(event.part)
+                }
+                current + (messageId to messageParts)
             }
-            current + (messageId to messageParts)
         }
     }
     
@@ -793,22 +796,25 @@ class EventReducer @Inject constructor(
 
     /** 把累积的 delta 一次性合并进 _parts（每次合并只复制一次整段文本）。 */
     private fun flushAccumulatedDeltas() {
-        val snapshot = synchronized(deltaLock) {
+        // 拿快照与写入 _parts 必须在同一把锁内完成：若先快照后释放锁再写入，
+        // handleMessagePartFinal/Updated 的全量替换可能挤进来，把已含这些 delta 的全量
+        // 文本写好后 flush 再把旧快照追加一遍，导致结尾内容重复（1,2,3→1,1,2）。
+        synchronized(deltaLock) {
             if (deltaAccumulator.isEmpty()) return
-            deltaAccumulator.entries.map { it.key to it.value.toString() }.also { deltaAccumulator.clear() }
-        }
-        if (snapshot.isEmpty()) return
-        _parts.update { current ->
-            var updated = current
-            for ((key, text) in snapshot) {
-                val messageParts = updated[key.messageId]?.toMutableList() ?: continue
-                val idx = messageParts.indexOfFirst { it.id == key.partId }
-                if (idx < 0) continue
-                val part = messageParts[idx]
-                messageParts[idx] = applyTextDelta(part, text)
-                updated = updated + (key.messageId to messageParts)
+            val snapshot = deltaAccumulator.entries.map { it.key to it.value.toString() }.also { deltaAccumulator.clear() }
+            if (snapshot.isEmpty()) return
+            _parts.update { current ->
+                var updated = current
+                for ((key, text) in snapshot) {
+                    val messageParts = updated[key.messageId]?.toMutableList() ?: continue
+                    val idx = messageParts.indexOfFirst { it.id == key.partId }
+                    if (idx < 0) continue
+                    val part = messageParts[idx]
+                    messageParts[idx] = applyTextDelta(part, text)
+                    updated = updated + (key.messageId to messageParts)
+                }
+                updated
             }
-            updated
         }
     }
     
@@ -823,6 +829,7 @@ class EventReducer @Inject constructor(
         }
         synchronized(deltaLock) {
             pendingDeltas.remove(PendingDeltaKey(event.sessionId, event.messageId, event.partId))
+            deltaAccumulator.remove(PendingDeltaKey(event.sessionId, event.messageId, event.partId))
         }
     }
 
@@ -1211,7 +1218,10 @@ class EventReducer @Inject constructor(
             _pendingInteractions.value = emptyList()
             pendingRevision++
         }
-        synchronized(deltaLock) { pendingDeltas.clear() }
+        synchronized(deltaLock) {
+            pendingDeltas.clear()
+            deltaAccumulator.clear()
+        }
         synchronized(removedMessageLock) { removedMessageSessions.clear() }
         _todos.value = emptyMap()
         _vcsBranches.value = emptyMap()

@@ -578,6 +578,45 @@ class EventReducerTest {
     }
 
     @Test
+    fun authoritativeFullText_doesNotDuplicateBufferedDeltaTail() {
+        val reducer = reducer()
+        // Streaming text: part created, one delta buffered but not yet flushed.
+        reducer.processEvent(SseEvent.NextTextStarted("session", "assistant", "text", 1), "server")
+        reducer.processEvent(SseEvent.NextTextDelta("session", "assistant", "text", "答案如下："), "server")
+        // A full-text snapshot (e.g. message.part.updated / reconciliation) arrives that
+        // already contains the buffered delta. It must NOT be merged again on top.
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text(
+                id = "text", sessionId = "session", messageId = "assistant",
+                text = "答案如下：你倾向哪种？或对推迟模块有特别指示？",
+            )),
+            "server",
+        )
+        // Late flush must not re-append the stale buffered delta.
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("答案如下：你倾向哪种？或对推迟模块有特别指示？", part.text)
+    }
+
+    @Test
+    fun endedFullText_afterBufferedDelta_doesNotDuplicateTail() {
+        val reducer = reducer()
+        reducer.processEvent(SseEvent.NextTextStarted("session", "assistant", "text", 1), "server")
+        reducer.processEvent(SseEvent.NextTextDelta("session", "assistant", "text", "1. 第一步"), "server")
+        // session.next.text.ended carries the authoritative full text including the delta;
+        // it must replace, not append on top of the already-buffered delta.
+        reducer.processEvent(
+            SseEvent.NextTextEnded("session", "assistant", "text", "1. 第一步\n2. 第二步", 2),
+            "server",
+        )
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("1. 第一步\n2. 第二步", part.text)
+    }
+
+    @Test
     fun statusSnapshot_keepsOmittedSessionsWhileConnected() {
         val reducer = reducer()
         reducer.processEvent(SseEvent.SessionStatus("busy", SessionStatus.Busy), "server")
