@@ -28,6 +28,9 @@ import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
+import okhttp3.ConnectionPool
+import okhttp3.Dispatcher
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "starburst_prefs")
@@ -54,9 +57,14 @@ object NetworkModule {
             json(json)
         }
         
+        // 注：gzip 由 OkHttp 引擎层透明处理（默认添加 Accept-Encoding: gzip 并自动解压），
+        // 无需另装 Compression 插件；后端代理会把上游 gzip 透传回来。
+        
         install(Logging) {
             logger = Logger.ANDROID
-            level = LogLevel.NONE
+            // HEADERS：记请求行 + 状态行 + 耗时（Ktor 无更轻等级；不打印响应体，量可控），
+            // 便于真机定位「哪次请求慢」——弱网归因的关键。
+            level = LogLevel.HEADERS
         }
         
         install(HttpTimeout) {
@@ -80,6 +88,11 @@ object NetworkModule {
             config {
                 // OkHttp-specific: disable response body buffering for streaming
                 retryOnConnectionFailure(true)
+                // 多目录扇出 / 并行请求远超 OkHttp 默认的 5 连接/单 host：
+                // 提高单 host 并发上限 + 更长的连接复用窗口（VPN 隧道常重建，
+                // 5 分钟 keep-alive 让半死连接堆积，这里收紧到 2 分钟）。
+                dispatcher(Dispatcher().apply { maxRequestsPerHost = 16 })
+                connectionPool(ConnectionPool(maxIdleConnections = 20, keepAliveDuration = 2, TimeUnit.MINUTES))
             }
         }
         

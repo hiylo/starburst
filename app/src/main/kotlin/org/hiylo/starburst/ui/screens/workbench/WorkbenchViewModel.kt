@@ -20,6 +20,10 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -45,7 +49,7 @@ import org.hiylo.starburst.data.api.listMessages
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listSessions
-import org.hiylo.starburst.data.api.listSessionStatuses
+import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.QuestionInfo
 import org.hiylo.starburst.data.api.QuestionRequest
 import org.hiylo.starburst.data.api.promptAsync
@@ -382,25 +386,20 @@ class WorkbenchViewModel @Inject constructor(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .toList()
-            val pendingBySession = directories.flatMap { dir ->
-                runCatching { api.listPendingQuestions(activeConn, directory = dir) }
-                    .getOrElse { e ->
-                        if (e is CancellationException) throw e
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
-                        emptyList()
+            // 待决问题按目录并发拉取；状态走后端聚合（镜像）或目录并发（直连上游）自适配。
+            val pendingBySession: Map<String, List<QuestionRequest>> = coroutineScope {
+                directories.map { dir ->
+                    async {
+                        runCatching { api.listPendingQuestions(activeConn, directory = dir) }
+                            .getOrElse { e ->
+                                if (e is CancellationException) throw e
+                                if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
+                                emptyList()
+                            }
                     }
-            }.groupBy { it.sessionId }
-            // 镜像通道下 listSessionStatuses 走后端增强接口（快照+事件聚合），状态准确。
-            // /session/status 只认 query 参数 directory，按会话目录分组聚合查询。
-            val statuses = directories.flatMap { dir ->
-                runCatching { api.listSessionStatuses(activeConn, directory = dir) }
-                    .getOrElse { e ->
-                        if (e is CancellationException) throw e
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load session status for $dir: ${e.message}")
-                        emptyMap()
-                    }
-                    .toList()
-            }.toMap()
+                }.awaitAll().flatten().groupBy { it.sessionId }
+            }
+            val statuses = api.listSessionStatusesForDirectories(activeConn, directories)
             // 补齐缺失的 busy/retry 子会话对象，保证父会话能归并子会话的处理中状态。
             val sessionsWithChildren = hydrateBusyChildren(activeConn, sessions, statuses)
             val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession)

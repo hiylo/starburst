@@ -9,7 +9,9 @@
  */
 package org.hiylo.starburst.data.api
 
-internal const val DEFAULT_MAX_SSE_FRAME_SIZE = 1_048_576
+// 与后端 StreamEvents 的 maxSSEEventSize（16MiB）对齐：附件 data URL 单帧可能达到
+// 10~13MB，默认 1MiB 会把大 patch/附件整帧丢弃，App 只能靠轮询补齐——弱网正反馈。
+internal const val DEFAULT_MAX_SSE_FRAME_SIZE = 16 * 1024 * 1024
 
 internal class SseFrameDecoder(
     private val maxFrameSize: Int = DEFAULT_MAX_SSE_FRAME_SIZE,

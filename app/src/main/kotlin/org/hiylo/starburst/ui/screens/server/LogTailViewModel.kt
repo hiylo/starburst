@@ -214,7 +214,8 @@ class LogTailViewModel @Inject constructor(
         const val MAX_LINES = 5_000
 
         /** 轮询读取新日志的间隔（毫秒）。 */
-        const val POLL_INTERVAL_MS = 1_500L
+        // 每轮两条 SSH 命令；VPN 高 RTT 下 1.5s 太密，放宽到 3s 仍够跟日志。
+        const val POLL_INTERVAL_MS = 3_000L
 
         /** 单条 shell 命令的超时时间（毫秒）。 */
         const val CMD_TIMEOUT_MS = 20_000L

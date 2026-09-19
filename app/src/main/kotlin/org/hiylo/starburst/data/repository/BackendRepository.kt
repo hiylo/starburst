@@ -19,6 +19,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlin.random.Random
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -44,7 +45,8 @@ import javax.inject.Singleton
 private const val TAG = "BackendRepository"
 
 /** WebSocket 断线后重连的间隔。 */
-private const val RECONNECT_DELAY_MS = 3_000L
+private const val RECONNECT_BASE_DELAY_MS = 2_000L
+private const val RECONNECT_MAX_DELAY_MS = 30_000L
 
 /** 新任务事件触发列表刷新的去抖间隔。 */
 private const val REFRESH_DEBOUNCE_MS = 500L
@@ -233,12 +235,14 @@ class BackendRepository @Inject constructor(
             .let { if (it.startsWith("https://")) it.replaceFirst("https://", "wss://") else it.replaceFirst("http://", "ws://") } +
             "/api/ws"
         st.wsJob = scope.launch {
+            var attempt = 0
             while (isActive) {
                 try {
                     httpClient.webSocket(wsUrl, request = {
                         header(io.ktor.http.HttpHeaders.Authorization, "Bearer $token")
                     }) {
                         st.connected.value = true
+                        attempt = 0 // 连上后重置退避
                         for (frame in incoming) {
                             if (frame is Frame.Text) {
                                 handleWsMessage(serverId, frame.readText())
@@ -253,7 +257,11 @@ class BackendRepository @Inject constructor(
                     st.connected.value = false
                 }
                 if (isActive) {
-                    delay(RECONNECT_DELAY_MS)
+                    // 指数退避 + 抖动：VPN 抖动时避免每 3s 固定敲门（重连风暴）。
+                    val backoff = (RECONNECT_BASE_DELAY_MS * (1L shl attempt.coerceAtMost(4)))
+                        .coerceAtMost(RECONNECT_MAX_DELAY_MS)
+                    attempt++
+                    delay((backoff * (0.75 + Random.nextDouble() * 0.5)).toLong().coerceAtLeast(200L))
                 }
             }
         }

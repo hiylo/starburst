@@ -95,18 +95,23 @@ internal suspend fun StarBurstConnectionService.reconcileServerState(server: Ser
         val sessions = api.listSessions(conn)
         val changedSessions = sessionsNeedingMessageReconciliation(localSessions, sessions)
         eventReducer.setSessions(server.id, sessions)
-        changedSessions.forEach { session ->
-            try {
-                eventReducer.mergeMessages(
-                    session.id,
-                    api.listMessages(conn, session.id, limit = 50, directory = session.directory),
-                    server.id,
-                )
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.w(TAG, "[${server.displayName}] Message reconciliation failed for ${session.id}", e)
-            }
+        // 断线对账的消息补拉：并发执行（弱网下串行 20×limit50 会造成重连请求风暴）。
+        coroutineScope {
+            changedSessions.map { session ->
+                async {
+                    try {
+                        eventReducer.mergeMessages(
+                            session.id,
+                            api.listMessages(conn, session.id, limit = 50, directory = session.directory),
+                            server.id,
+                        )
+                    } catch (e: CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        Log.w(TAG, "[${server.displayName}] Message reconciliation failed for ${session.id}", e)
+                    }
+                }
+            }.awaitAll()
         }
         val serverSessionIds = eventReducer.serverSessions.value[server.id].orEmpty()
         val sessionIds = eventReducer.sessions.value.asSequence()

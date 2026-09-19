@@ -22,6 +22,9 @@ import io.ktor.client.plugins.websocket.webSocketSession
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -50,7 +53,12 @@ suspend fun OpenCodeApi.listSessionStatuses(
         conn.authHeader?.let { header("Authorization", it) }
         directory?.let { parameter("directory", it) }
     }.body()
-    return payload.mapValues { (_, value) ->
+    return parseSessionStatuses(payload)
+}
+
+// 共享的状态 map 解析（busy/retry/idle）。
+internal fun parseSessionStatuses(payload: JsonObject): Map<String, SessionStatus> =
+    payload.mapValues { (_, value) ->
         val status = value.jsonObject
         when (status["type"]?.jsonPrimitive?.content) {
             "busy" -> SessionStatus.Busy
@@ -62,6 +70,17 @@ suspend fun OpenCodeApi.listSessionStatuses(
             else -> SessionStatus.Idle
         }
     }
+
+// 后端镜像通道的全局状态快照：/session/status 不带 directory 时后端会合并上游快照
+// 与事件聚合返回全部会话状态（HTTP 200，可能为空表）。非 2xx（直连上游不支持
+// 无 directory 查询）返回 null，调用方据此退回按目录拉取。
+private suspend fun OpenCodeApi.listSessionStatusesAggregatedOrNull(conn: ServerConnection): Map<String, SessionStatus>? {
+    val resp = httpClient.get("${conn.baseUrl}/session/status") {
+        conn.authHeader?.let { header("Authorization", it) }
+    }
+    if (!resp.status.isSuccess()) return null
+    val payload = resp.body<JsonObject>()
+    return parseSessionStatuses(payload)
 }
 
 /**
@@ -73,11 +92,17 @@ suspend fun OpenCodeApi.listSessionStatusesForDirectories(
     directories: Collection<String>,
 ): Map<String, SessionStatus> {
     if (directories.isEmpty()) return emptyMap()
-    return directories.flatMap { dir ->
-        runCatching { listSessionStatuses(conn, directory = dir) }
-            .getOrElse { emptyMap() }
-            .toList()
-    }.toMap()
+    // 后端镜像（useBackend）通道：一次无 directory 的请求即可拿到全局聚合快照，
+    // 把 N×RTT 扇出降成单次往返；直连上游（非 2xx）自动退回按目录并发拉取。
+    runCatching { listSessionStatusesAggregatedOrNull(conn) }.getOrNull()?.let { return it }
+    return coroutineScope {
+        directories.map { dir ->
+            async {
+                runCatching { listSessionStatuses(conn, directory = dir) }
+                    .getOrElse { emptyMap() }
+            }
+        }.awaitAll().fold(emptyMap()) { acc, m -> acc + m }
+    }
 }
 
 suspend fun OpenCodeApi.getSession(conn: ServerConnection, sessionId: String, directory: String? = null): Session {

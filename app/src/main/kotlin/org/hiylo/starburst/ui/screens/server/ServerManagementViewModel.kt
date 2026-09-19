@@ -406,6 +406,7 @@ class ServerManagementViewModel @Inject constructor(
         const val RESTART_COMMAND: String = "systemctl restart opencode"
 
         /** 系统资源信息自动刷新间隔（毫秒）。 */
-        const val SYSTEM_INFO_REFRESH_INTERVAL_MS = 5_000L
+        // 每条 SSH 命令超时 20s、每轮 3~4 条；VPN 高 RTT 下 5s 一轮容易堆积重叠，放宽到 10s。
+        const val SYSTEM_INFO_REFRESH_INTERVAL_MS = 10_000L
     }
 }
