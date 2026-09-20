@@ -70,6 +70,7 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
+import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.ProviderIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
@@ -884,7 +885,7 @@ internal fun ChatInputBar(
                                 onClick = onAttach,
                                 modifier = Modifier.size(48.dp),
                             ) {
-                                Icon(
+                                CartoonInkIcon(
                                     Icons.Default.AttachFile,
                                     contentDescription = stringResource(R.string.chat_attach),
                                     modifier = Modifier.size(24.dp),
@@ -938,7 +939,7 @@ internal fun ChatInputBar(
                         contentAlignment = Alignment.Center,
                     ) {
                         cancelThresholdPx = with(density) { 44.dp.toPx() }
-                        Icon(
+                        CartoonInkIcon(
                             imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
                             contentDescription = stringResource(
                                 if (isListening) R.string.chat_voice_input_stop else R.string.chat_voice_input
@@ -1010,10 +1011,11 @@ internal fun ChatInputBar(
                             color = MaterialTheme.colorScheme.primary
                         )
                     } else if (action == ComposerAction.STOP) {
-                        Icon(
+                        CartoonInkIcon(
                             Icons.Default.Stop,
                             contentDescription = stringResource(R.string.chat_stop),
                             modifier = Modifier.size(14.dp),
+                            inkWidth = 0.9.dp,
                             tint = if (isAmoled) {
                                 MaterialTheme.colorScheme.error.copy(alpha = 0.88f)
                             } else {
@@ -1021,7 +1023,7 @@ internal fun ChatInputBar(
                             },
                         )
                     } else {
-                        Icon(
+                        CartoonInkIcon(
                             Icons.AutoMirrored.Filled.Send,
                             contentDescription = if (isShellMode) {
                                 stringResource(R.string.chat_send_shell)
@@ -1029,6 +1031,7 @@ internal fun ChatInputBar(
                                 stringResource(R.string.chat_send)
                             },
                             modifier = Modifier.size(18.dp),
+                            inkWidth = 1.0.dp,
                             tint = if (canSend) {
                                 MaterialTheme.colorScheme.primary
                             } else if (isShellMode && isAmoled && !isSending) {

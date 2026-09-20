@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppHaptics
+import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.AppHapticConfig
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import kotlin.math.roundToInt
@@ -173,7 +174,7 @@ fun SettingsScreen(
                 title = { Text(stringResource(R.string.settings_title)) },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(
+                        CartoonInkIcon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = stringResource(R.string.close)
                         )

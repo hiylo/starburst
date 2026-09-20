@@ -14,6 +14,10 @@
     <string name="session_archive">Archive session</string>
     <string name="session_archive_confirm">Archive \"%1$s\"?</string>
 
+    <!-- Batch compact -->
+    <string name="sessions_compact_selected">Compact selected</string>
+    <string name="sessions_compact_selected_confirm">Compact %1$d sessions to reduce context? Each session will be summarized.</string>
+
     <!-- Recent projects -->
     <string name="sessions_recent_projects">Recent projects</string>
 

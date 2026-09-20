@@ -382,7 +382,7 @@
     <string name="settings_theme_scheme">Theme scheme</string>
     <string name="settings_theme_scheme_desc">Full color schemes that change the whole app look. Non-default schemes replace the accent color.</string>
     <string name="settings_cartoon_style">Cartoon style</string>
-    <string name="settings_cartoon_style_desc">Rounder corners, bold outlines and solid shadows. Works with any color scheme.</string>
+    <string name="settings_cartoon_style_desc">Rounder corners, a rounded heading font, ink-outlined icons and solid shadows. Works with any color scheme.</string>
     <string name="settings_theme_scheme_default">Default</string>
     <string name="settings_theme_scheme_candy">Candy</string>
     <string name="settings_theme_scheme_ocean">Ocean</string>

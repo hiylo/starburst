@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.ServerConfig
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.sessionCategoryColor
 import org.hiylo.starburst.ui.components.sessionCategoryIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
@@ -221,7 +222,12 @@ fun CrossServerSessionsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(Icons.Default.StarBorder, contentDescription = null, modifier = Modifier.size(40.dp))
+                    CartoonStickerIcon(
+                        Icons.Default.StarBorder,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        padding = 9.dp,
+                    )
                     Text(
                         text = stringResource(
                             if (selectedCategoryId == null) R.string.cross_sessions_empty_favorites_any_server

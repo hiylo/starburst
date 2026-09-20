@@ -25,6 +25,7 @@ import org.hiylo.starburst.data.api.createSession
 import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.executeCommand
 import org.hiylo.starburst.data.api.findFiles
+import org.hiylo.starburst.data.api.getProviders
 import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.listPendingQuestions
@@ -33,6 +34,7 @@ import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.runShellCommand
+import org.hiylo.starburst.data.api.summarizeSession
 import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.repository.BackendRepository
 import org.hiylo.starburst.data.repository.EventReducer
@@ -844,6 +846,56 @@ class SessionListViewModel @Inject constructor(
                 if (e is CancellationException) throw e
                 Log.e(TAG, "Failed to archive selected sessions", e)
                 _error.value = e.message ?: "Failed to archive selected sessions"
+            }
+        }
+    }
+
+    /**
+     * 批量压缩（摘要）选中的会话以减小上下文。
+     *
+     * 每个会话优先使用其自身记录的模型（[Session.model]），缺失时回退到服务器默认模型。
+     * 逐个调用 [/summarize][org.hiylo.starburst.data.api.summarizeSession]，
+     * 全部完成后清空选择并刷新列表。
+     */
+    fun compactSelected() {
+        viewModelScope.launch {
+            val ids = _selectedIds.value
+            if (ids.isEmpty()) return@launch
+            try {
+                val defaults = runCatching { api.getProviders(conn).default }.getOrDefault(emptyMap())
+                val sessionsById = uiState.value.sessionGroups
+                    .flatMap { it.sessions }
+                    .associateBy { it.session.id }
+                val results = coroutineScope {
+                    ids.map { id ->
+                        async {
+                            val session = sessionsById[id]?.session
+                            val providerId = session?.model?.providerId
+                                ?.takeIf { it.isNotBlank() }
+                                ?: defaults.entries.firstOrNull()?.key
+                            val modelId = session?.model?.id
+                                ?.takeIf { it.isNotBlank() }
+                                ?: defaults.entries.firstOrNull()?.value
+                            if (providerId == null || modelId == null) {
+                                id to false
+                            } else {
+                                id to runCatching {
+                                    api.summarizeSession(conn, id, providerId, modelId)
+                                }.getOrDefault(false)
+                            }
+                        }
+                    }.awaitAll()
+                }
+                val failed = results.filterNot { it.second }
+                if (failed.isNotEmpty()) {
+                    _error.value = "Failed to compact ${failed.size} session(s)"
+                }
+                clearSelection()
+                loadSessions()
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                Log.e(TAG, "Failed to compact selected sessions", e)
+                _error.value = e.message ?: "Failed to compact selected sessions"
             }
         }
     }

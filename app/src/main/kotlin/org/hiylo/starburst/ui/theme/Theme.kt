@@ -18,6 +18,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
@@ -519,7 +520,8 @@ internal val StarBurstSchemes: Map<String, ThemeScheme> = mapOf(
  * - Dynamic color on Android 12+ (Material You)
  * - AMOLED dark mode with pure black surfaces
  * - Selectable accent colors (ignored when dynamic color is enabled)
- * - Cartoon style: larger radii, thick ink outlines, solid shadows
+ * - Cartoon style: rounded display font, larger radii (incl. MaterialTheme.shapes),
+ *   thick ink outlines, solid shadows
  * - Edge-to-edge display
  */
 @Composable
@@ -579,7 +581,8 @@ fun StarBurstTheme(
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
-            typography = Typography,
+            typography = if (cartoonStyle) CartoonTypography else Typography,
+            shapes = if (cartoonStyle) cartoonShapes() else Shapes(),
             content = content
         )
     }

@@ -54,6 +54,8 @@ import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.data.update.UpdateState
 import org.hiylo.starburst.data.update.UpdatePolicy
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.CartoonInkIcon
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppPrimaryButton
@@ -202,16 +204,16 @@ fun HomeScreen(
                 title = { Text(stringResource(R.string.home_title)) },
                 actions = {
                     IconButton(onClick = { viewModel.showAddServerDialog() }) {
-                        Icon(Icons.Default.Add, contentDescription = stringResource(R.string.home_add_server))
+                        CartoonInkIcon(Icons.Default.Add, contentDescription = stringResource(R.string.home_add_server))
                     }
                     IconButton(onClick = onNavigateToGlobalSearch) {
-                        Icon(Icons.Default.Search, contentDescription = stringResource(R.string.global_search_title))
+                        CartoonInkIcon(Icons.Default.Search, contentDescription = stringResource(R.string.global_search_title))
                     }
                     IconButton(onClick = onNavigateToSettings) {
-                        Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
+                        CartoonInkIcon(Icons.Default.Settings, contentDescription = stringResource(R.string.settings_title))
                     }
                     IconButton(onClick = onNavigateToAbout) {
-                        Icon(Icons.Default.Info, contentDescription = stringResource(R.string.about_title))
+                        CartoonInkIcon(Icons.Default.Info, contentDescription = stringResource(R.string.about_title))
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -510,11 +512,13 @@ private fun EmptyServersView(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Icon(
+            CartoonStickerIcon(
                 imageVector = Icons.Default.Add,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
-                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
+                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
+                stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                padding = 12.dp,
             )
             Text(
                 text = stringResource(R.string.home_no_servers),

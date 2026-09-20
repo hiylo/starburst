@@ -51,6 +51,7 @@ import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.ui.screens.home.HomeScreen
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.sessionCategoryColor
@@ -512,11 +513,13 @@ internal fun EmptyPanePlaceholder() {
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(
+            CartoonStickerIcon(
                 Icons.AutoMirrored.Filled.Chat,
                 contentDescription = null,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                padding = 12.dp,
             )
             Spacer(Modifier.height(12.dp))
             Text(

@@ -70,6 +70,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.hiylo.starburst.ui.components.appPopupBorder
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.AppCardShape
@@ -228,11 +229,13 @@ fun DiagnosticsScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(
+                    CartoonStickerIcon(
                         Icons.Default.Info,
                         contentDescription = null,
                         modifier = Modifier.size(48.dp),
                         tint = MaterialTheme.colorScheme.primary,
+                        stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        padding = 10.dp,
                     )
                     Spacer(Modifier.size(16.dp))
                     Text(

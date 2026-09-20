@@ -11,6 +11,7 @@ package org.hiylo.starburst.ui.theme
 
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
@@ -93,6 +94,25 @@ class AdaptiveRoundedShape(
 /** 卡通描边宽度：2.5dp，常规模式 1dp。 */
 @Composable
 fun cartoonStrokeWidth(): Dp = if (isCartoonStyle()) 2.5.dp else 1.dp
+
+/**
+ * 卡通 M3 形状方案。
+ *
+ * M3 组件的默认形状是 `tokens.ContainerShape.value`，而它最终解析到
+ * `MaterialTheme.shapes.fromToken(...)`——所以只换主题 shapes，就能一次性覆盖所有
+ * 没有显式传 shape 的组件：Card(medium)、FAB(large)、Snackbar / 输入框(extraSmall)、
+ * Chip(small)。Button / Switch / Badge 走 CornerFull，本来就是全圆，不受影响。
+ *
+ * 档位取值与 [AdaptiveRoundedShape] 的卡通端对齐（卡片 26dp、对话框 32dp），避免两套体系给出
+ * 两种明显不同的圆角。
+ */
+fun cartoonShapes(): Shapes = Shapes(
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(16.dp),
+    medium = RoundedCornerShape(26.dp),
+    large = RoundedCornerShape(32.dp),
+    extraLarge = RoundedCornerShape(38.dp),
+)
 
 /**
  * 卡通描边色（ink）。
@@ -213,6 +233,39 @@ fun Modifier.cartoonInkOutline(shape: Shape): Modifier {
 }
 
 /**
+ * 贴纸色片：在内容**外围**扩出一块带墨线和硬投影的圆角色片。
+ *
+ * 刻意用"绘制外扩"而不是 padding + 背景：调用点的 modifier 原样保留即可，布局尺寸、
+ * align/padding 语义、以及关闭卡通风格时的外观都不受影响。代价是色片画在自身边界之外，
+ * 祖先若开了 `clipToBounds` 会被裁掉——所以只用于空状态、英雄位这类不在裁剪容器里的位置。
+ *
+ * @param padding 色片相对内容向外扩出的量
+ */
+@Composable
+fun Modifier.cartoonStickerChip(
+    shape: Shape,
+    containerColor: Color,
+    padding: Dp,
+): Modifier {
+    if (!isCartoonStyle()) return this
+    val ink = cartoonInkColor()
+    val shadow = cartoonShadowColor()
+    val stroke = cartoonStrokeWidth()
+    val shift = cartoonShadowOffset()
+    return drawWithContent {
+        val pad = padding.toPx()
+        val dx = shift.toPx()
+        val chip = Size(size.width + pad * 2f, size.height + pad * 2f)
+        translate(-pad + dx, -pad + dx) { drawShapePath(shape, shadow, Fill, chip) }
+        translate(-pad, -pad) { drawShapePath(shape, containerColor, Fill, chip) }
+        drawContent()
+        translate(-pad, -pad) {
+            drawShapePath(shape, ink, Stroke(stroke.toPx(), cap = StrokeCap.Butt), chip)
+        }
+    }
+}
+
+/**
  * 取 [Shape] 当前生效的均匀圆角半径（px）。
  *
  * 只有 [AdaptiveRoundedShape] 暴露半径；不对称圆角的 outline 走 [Outline.Generic] 路径分支，
@@ -224,17 +277,31 @@ private fun DrawScope.cornerRadiusPx(shape: Shape): Float =
 /**
  * 把 [Shape] 的 outline 转成绘制调用。
  *
- * 均匀圆角会返回 [Outline.Rectangle]（不暴露圆角半径），需要按形状自己取半径绘制；
- * 不对称圆角返回 [Outline.Generic]，直接复用其路径即可。
+ * 半径为零时返回 [Outline.Rectangle]；均匀圆角（[RoundedCornerShape] 的常规情况）返回
+ * [Outline.Rounded]（自带 [RoundRect] 与 [CornerRadius]，直接绘制）；不对称圆角返回
+ * [Outline.Generic]，复用其路径即可。
  */
-private fun DrawScope.drawShapePath(shape: Shape, color: Color, style: DrawStyle) {
-    val size = Size(size.width, size.height)
+private fun DrawScope.drawShapePath(
+    shape: Shape,
+    color: Color,
+    style: DrawStyle,
+    outlineSize: Size = this.size,
+) {
+    val size = outlineSize
     when (val outline = shape.createOutline(size, layoutDirection, this)) {
         is Outline.Rectangle -> drawRoundRect(
             color = color,
             topLeft = outline.rect.topLeft,
             size = outline.rect.size,
             cornerRadius = CornerRadius(cornerRadiusPx(shape)),
+            style = style,
+        )
+
+        is Outline.Rounded -> drawRoundRect(
+            color = color,
+            topLeft = Offset(outline.roundRect.left, outline.roundRect.top),
+            size = Size(outline.roundRect.width, outline.roundRect.height),
+            cornerRadius = outline.roundRect.topLeftCornerRadius,
             style = style,
         )
 

@@ -62,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.ServerConfig
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.SessionCardContent
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppSearchShape
@@ -223,7 +224,12 @@ fun GlobalSearchScreen(
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
-                    Icon(Icons.Default.Search, contentDescription = null, modifier = Modifier.size(40.dp))
+                    CartoonStickerIcon(
+                        Icons.Default.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(40.dp),
+                        padding = 9.dp,
+                    )
                     Text(
                         text = stringResource(R.string.global_search_empty),
                         modifier = Modifier.padding(top = 12.dp),

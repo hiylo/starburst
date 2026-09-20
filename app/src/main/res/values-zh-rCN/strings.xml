@@ -265,7 +265,7 @@
     <string name="settings_theme_scheme">主题方案</string>
     <string name="settings_theme_scheme_desc">整套配色方案，整体改变 App 观感；非默认方案会替代强调色。</string>
     <string name="settings_cartoon_style">卡通风格</string>
-    <string name="settings_cartoon_style_desc">更大圆角、粗描边与实体投影，可与任意配色方案叠加。</string>
+    <string name="settings_cartoon_style_desc">更大圆角、圆体标题、墨线图标与实体投影，可与任意配色方案叠加。</string>
     <string name="settings_theme_scheme_default">默认</string>
     <string name="settings_theme_scheme_candy">糖果</string>
     <string name="settings_theme_scheme_ocean">海洋</string>

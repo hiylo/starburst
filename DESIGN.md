@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 version: alpha
 name: StarBurst-design-system
 description: |
-  The design system of the StarBurst client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code. An opt-in Cartoon Style layer (CartoonStyle.kt) sits orthogonal to the palettes: it widens radii, adds 2.5dp ink outlines, hard 3dp offset shadows, a paper dot-grid backdrop and springy press/pop motion — without touching any color token.
+  The design system of the StarBurst client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code. An opt-in Cartoon Style layer (CartoonStyle.kt) sits orthogonal to the palettes: it widens radii (including the whole MaterialTheme.shapes ramp), adds 2.5dp ink outlines, hard 3dp offset shadows, a paper dot-grid backdrop, a rounded Baloo 2 display face for headings, ink-outlined and sticker-backed icons, and springy press/pop motion — without touching any color token.
 
 colors:
   primary: "#6366F1"
@@ -29,6 +29,9 @@ colors:
   status-warning: "#F59E0B"
 
 typography:
+  # values below are the normal (non-cartoon) tokens; with Cartoon Style on,
+  # display*/headline*/title*/label* resolve to Baloo 2 + heavier weights + looser
+  # line heights via CartoonTypography (see the `cartoon:` block and "Cartoon Style")
   display-large:
     fontFamily: system sans-serif
     fontSize: 57sp
@@ -150,6 +153,22 @@ cartoon:
   button-spring: "damping 0.5 / stiffness MediumLow"
   dialog-pop-from: 0.8
   dialog-spring: "damping 0.55 / stiffness MediumLow"
+  # MaterialTheme.shapes ramp (replaces M3 defaults while cartoon is on)
+  shapes-extra-small: 10dp
+  shapes-small: 16dp
+  shapes-medium: 26dp
+  shapes-large: 32dp
+  shapes-extra-large: 38dp
+  # rounded display font (Latin only; body + CJK stay on system fonts)
+  display-font: "Baloo 2 (OFL), semi-bold / bold / extra-bold"
+  display-font-scope: "display * / headline * / title * / label *"
+  display-font-sizes: "57 / 45 / 36 / 32 / 28 / 24 / 22 / 16 / 14 / 14 / 12 / 11sp"
+  display-font-line-heights: "80 / 64 / 52 / 46 / 40 / 34 / 31 / 23 / 21 / 20 / 17 / 16sp"
+  display-font-weights: "ExtraBold x3 / Bold x6 / SemiBold x3 (vs M3 default 400)"
+  icon-ink-ring-samples: 12
+  icon-ink-ring-width: 1.2dp
+  sticker-chip-padding: 9-14dp
+  sticker-chip-tilt: -6deg
 
 spacing:
   xxs: 2dp
@@ -247,7 +266,8 @@ buttons.
 - AMOLED pure-black mode: `#000000` surfaces + 1dp outlined cards + outlined buttons
 - Centralized radius system: dialogs 20dp, cards/list items 12dp, search fields 14dp
 - Terminal emulation and code rendering use a monospace font (`FontFamily.Monospace`); everything
-  else uses the system sans-serif
+  else uses the system sans-serif — except the Cartoon Style layer, which swaps a rounded display
+  face onto headings and labels (see "Cartoon Style") and never onto code
 - Fixed semantic status colors: connected green `#4CAF50`, error red `#EF4444`, warning amber `#F59E0B`
 
 ## Colors
@@ -292,10 +312,12 @@ buttons.
 ## Typography
 
 ### Font family
-- **Body/headings**: `FontFamily.Default` (system sans-serif). No third-party fonts, so Chinese and
-  Latin render consistently.
+- **Body/headings**: `FontFamily.Default` (system sans-serif) by default, so Chinese and Latin
+  render consistently. With Cartoon Style on, `display/headline/title/label` switch to
+  **Baloo 2** (`res/font/`, SIL OFL, 3 static weights ≈ 268KB total) via `CartoonTypography`;
+  `body*` deliberately stays on the system font.
 - **Code/terminal**: `FontFamily.Monospace`, fixed at 13sp/20sp (`CodeTypography`), for chat code
-  blocks and terminal output.
+  blocks and terminal output — in both styles.
 
 ### Hierarchy (full M3 scale)
 
@@ -316,6 +338,10 @@ buttons.
 | label-large | 14sp | 500 | 20sp | 0.1sp | Buttons, labels |
 | label-medium | 12sp | 500 | 16sp | 0.5sp | Section titles, chips |
 | label-small | 11sp | 500 | 16sp | 0.5sp | Status text, badges |
+
+Sizes and weights above are the normal ramp; `body-large/medium/small` are identical under Cartoon
+Style. The cartoon ramp keeps the same sizes (so no layout regressions) and only heavy-ups the
+weights and loosens line heights — see `display-font-*` in the `cartoon:` token block.
 
 ### Principles
 Hierarchy is built mainly from **weight + size**: list-item titles use `titleMedium` (700), body
@@ -424,21 +450,26 @@ icons keep their original form).
 
 ## Cartoon Style
 
-> **Source files**: `ui/theme/CartoonStyle.kt` (state, shapes, ink/shadow tokens),
-> `ui/theme/Theme.kt` (`cartoonStyle` parameter), `ui/components/AppSurfaces.kt`
-> (adaptive shapes + dialog/button chrome). Toggle: Settings → Appearance → **Cartoon style**.
+> **Source files**: `ui/theme/CartoonStyle.kt` (state, shapes, ink/shadow tokens, sticker chip),
+> `ui/theme/Type.kt` (`CartoonTypography`), `ui/theme/Theme.kt` (`cartoonStyle` parameter,
+> `MaterialTheme.shapes` swap), `ui/components/CartoonIcon.kt` (ink-outline + sticker icons),
+> `ui/components/AppSurfaces.kt` (adaptive shapes + dialog/button chrome).
+> Toggle: Settings → Appearance → **Cartoon style**.
 
 Cartoon feel does **not** come from swapping colors — the existing `theme_scheme` palettes
 (candy / ocean / sunset / flame / bubble) only change `ColorScheme`, which is why they read as "recolors".
-Cartoon Style is a separate visual layer with five levers:
+Cartoon Style is a separate visual layer with seven levers:
 
 | Lever | Normal | Cartoon |
 |---|---|---|
 | Radius | dialog 20 / card 12 / picker 12 / search 14 / bubble 12 | dialog 32 / card 26 / picker 24 / search 30 / bubble 26-6-26-22 (user), 24 (assistant) |
+| `MaterialTheme.shapes` | M3 defaults (4 / 8 / 12 / 16 / 28) | 10 / 16 / 26 / 32 / 38 — covers the M3 components that never take `AppCardShape` |
 | Ink outline | none (AMOLED: 1dp `outlineVariant`) | 2.5dp ink — `#241F33`@85% on light surfaces, `onSurface`@45% on dark |
 | Shadow | none (container-color ladder instead) | hard 3dp down-right block, **zero blur**, `#3A2E5C`@30% light / black@65% dark; no M3 elevation |
 | Backdrop | flat container color | paper dot-grid: 18dp spacing, 1.3dp dots, `#241F33`@7% light / white@5% dark |
 | Motion | M3 defaults | buttons scale to 0.9 on press with a low-damping spring; dialogs pop in from 0.8 |
+| Type | system sans, M3 weights | Baloo 2 rounded display font on `display/headline/title/label` (ExtraBold→SemiBold); `body*` and CJK stay on the system font |
+| Icons | flat M3 `Icon` | ink ring around the glyph silhouette, or a tilted sticker chip behind it |
 
 ### How it is wired
 
@@ -476,6 +507,31 @@ Cartoon Style is a separate visual layer with five levers:
   with information hierarchy.
 - Persistence: `cartoon_style` in DataStore, mirrored to `SyncSettings.cartoonStyle` so it
   syncs across devices like every other appearance setting.
+- **Shapes ramp, not per-call-site radii**: `StarBurstTheme` passes
+  `shapes = if (cartoonStyle) cartoonShapes() else Shapes()` into `MaterialTheme`. M3 components
+  resolve their default shape through `ShapeKeyTokens` → `MaterialTheme.shapes`, so 142 Cards,
+  51 Snackbars, 77 OutlinedTextFields, 18 Chips, 7 FABs and 15 DropdownMenus get rounder corners
+  from one line — no call-site edits. This is what makes the layer reach components that never
+  touch `AppCardShape`.
+- **Two typefaces, one toggle**: `Type.kt` exports the M3 default `Typography` plus
+  `CartoonTypography` (a `Typography.copy(...)` over the Baloo 2 family); the theme picks one, so
+  no screen branches on style. Only `display/headline/title/label` are switched — `body*` stays on
+  the system font for long-form readability and so Chinese prose is unaffected.
+  Baloo 2 ships no CJK glyphs, so CJK inside a heading falls back to the system font mid-line: an
+  accepted trade-off, and the reason the font is scoped to short display strings.
+  Line heights are loosened (font line metric ≈ 1.602em) to keep the tall rounded ascenders off
+  each other. `CodeTypography` is monospace in both modes — code never takes the cartoon font.
+- **Icons get two treatments, allocated by position** (`ui/components/CartoonIcon.kt`):
+  `CartoonInkIcon` draws an ink ring by re-drawing the vector painter 12× translated around a
+  small circle, then the tinted glyph on top — a silhouette outline, which is what reads as
+  hand-inked. It deliberately does *not* stroke each subpath with `PathParser`: that would ink the
+  inside of every hole and counter and turn 24dp glyphs into mud.
+  `CartoonStickerIcon` puts the glyph on a filled chip (`primaryContainer` by default) with a
+  −6° tilt, ink outline and offset shadow — sticker-style, used for the large hero/empty-state
+  icons only. Both degrade to a plain `Icon` when the style is off, and both keep the caller's
+  `modifier` / `tint` verbatim so the non-cartoon render is bit-identical.
+- Ink is kept out of long lists (the 39 Settings rows, `LazyColumn` items): 12 extra draw calls
+  per icon is fine on a handful of hero glyphs, wasteful and visually noisy at list density.
 
 ### Coverage
 
@@ -483,23 +539,29 @@ Full chrome (radius + ink + offset shadow): all dialogs, all app buttons
 (`AppPrimaryButton` / `AppSecondaryButton`), Home screen cards, all Settings cards (shared
 `SettingsCard`), chat message bubbles.
 
+Ink-outlined icons: chat input bar (stop / send / attach / mic), top bars (back / overflow),
+Home and session-list actions, FABs, settings back arrow. Sticker chips: the empty-state and
+hero glyphs 40dp and above (Home add, Chat heroes, warning, bookmarks, search, star, git tree,
+diagnostics info).
+
 Radius-only, no chrome: the ~55 remaining `Surface(shape = AppCardShape, ...)` call sites outside
 `HomeScreen` / `SettingsDisplayNames`. They read as "rounder" but not "sticker" — append
 `.cartoonChrome(AppCardShape)` to their `modifier` to bring them up.
 
 ### Known gaps
 
-- **Font is not wired.** `res/font/` does not exist and the whole app uses `FontFamily.Default`
-  (`Type.kt`). A rounded/hand-drawn font family is the single biggest remaining lever for cartoon
-  feel; it needs a licensed `.ttf` (e.g. Baloo 2 / Fredoka for Latin, Smiley Sans / 站酷快乐体 for
-  Chinese) dropped into `app/src/main/res/font/` and a cartoon-aware `Typography` built from it.
-  No dead hook is left in code for this — add it when the asset arrives.
+- **`cartoonStickerChip` paints outside the node bounds** (it expands by `padding` on all sides).
+  Any ancestor with `clipToBounds` — or a fixed-size parent that clips — crops the chip's outline
+  and shadow. Callers must keep the chip unclipped and pass their own `.size(...)` in `modifier`.
+- **Ink weight does not scale with glyph size.** `icon-ink-ring-width` is a fixed dp, so a 14dp
+  glyph needs a thinner ring than a 24dp one; the chat stop/send buttons pass 0.9–1.0dp explicitly.
+  Unverified against real device rendering.
 - **`cornerRadiusPx` only understands `AdaptiveRoundedShape`.** `RoundedCornerShape` stores its
   radii as `CornerSize` and exposes no `Dp`, so a plain `RoundedCornerShape` passed to
   `cartoonChrome` gets a 0-radius ink outline. Always pass an `AdaptiveRoundedShape` (uniform) or
   an asymmetric `RoundedCornerShape` (which takes the `Outline.Generic` path branch).
 - Top bars are not chromed: there is no shared `TopAppBar` component, so it would mean ~30 edits
-  across screens.
+  across screens. Their icons are inked, but the bar surface itself stays flat.
 - No illustrations, mascot, or emoji-as-icon system yet.
 
 ## Do's and Don'ts
@@ -513,7 +575,8 @@ Radius-only, no chrome: the ~55 remaining `Surface(shape = AppCardShape, ...)` c
   are handled by the wrapper, business code never knows.
 - Keep semantic status colors fixed: connected green `#4CAF50`, error red `#EF4444`, warning amber `#F59E0B`.
 - Render code and terminal content in `FontFamily.Monospace` 13sp; Chinese and UI text use the
-  system sans-serif.
+  system sans-serif. Under Cartoon Style, headings/labels may take the bundled rounded display
+  font, but code never does.
 - Follow the radius system: buttons/inputs fully round, containers 12dp, dialogs 20dp, search 14dp.
   Under Cartoon Style the same tokens resolve to their `cartoon-*` values automatically.
 - Read cartoon state only through `isCartoonStyle()` / `LocalCartoonStyle`; never branch on

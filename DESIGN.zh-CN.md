@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 version: alpha
 name: StarBurst-design-system
 description: |
-  StarBurst 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。另有一个可选的卡通风格层（CartoonStyle.kt），与配色方案正交：它放大圆角、加 2.5dp 描边、3dp 硬边偏移投影、纸纹点阵底纹与弹性按压/弹出动效——不改动任何颜色 token。
+  StarBurst 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。另有一个可选的卡通风格层（CartoonStyle.kt），与配色方案正交：它放大圆角（连同整个 MaterialTheme.shapes 阶梯）、加 2.5dp 描边、3dp 硬边偏移投影、纸纹点阵底纹、Baloo 2 圆体标题、墨线勾边与贴纸底片图标，以及弹性按压/弹出动效——不改动任何颜色 token。
 
 colors:
   primary: "#6366F1"
@@ -150,6 +150,22 @@ cartoon:
   button-spring: "damping 0.5 / stiffness MediumLow"
   dialog-pop-from: 0.8
   dialog-spring: "damping 0.55 / stiffness MediumLow"
+  # MaterialTheme.shapes 圆角阶梯（卡通开启时替换 M3 默认值）
+  shapes-extra-small: 10dp
+  shapes-small: 16dp
+  shapes-medium: 26dp
+  shapes-large: 32dp
+  shapes-extra-large: 38dp
+  # 圆体标题字体（仅拉丁文；正文与中文仍走系统字体）
+  display-font: "Baloo 2（OFL），semi-bold / bold / extra-bold"
+  display-font-scope: "display * / headline * / title * / label *"
+  display-font-sizes: "57 / 45 / 36 / 32 / 28 / 24 / 22 / 16 / 14 / 14 / 12 / 11sp"
+  display-font-line-heights: "80 / 64 / 52 / 46 / 40 / 34 / 31 / 23 / 21 / 20 / 17 / 16sp"
+  display-font-weights: "ExtraBold ×3 / Bold ×6 / SemiBold ×3（常规为 M3 默认 400）"
+  icon-ink-ring-samples: 12
+  icon-ink-ring-width: 1.2dp
+  sticker-chip-padding: 9-14dp
+  sticker-chip-tilt: -6deg
 
 spacing:
   xxs: 2dp
@@ -232,7 +248,7 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 - Dark 优先：默认表面 `#121218`，正文 `#E5E1E9`，容器用 `surfaceContainer*` 阶梯替代投影
 - AMOLED 纯黑模式：`#000000` 表面 + 1dp 描边卡片 + 描边按钮
 - 圆角体系集中：对话框 20dp、卡片/列表项 12dp、搜索框 14dp
-- 终端仿真与代码渲染使用等宽字体（`FontFamily.Monospace`），其余全用系统无衬线
+- 终端仿真与代码渲染使用等宽字体（`FontFamily.Monospace`），其余默认用系统无衬线；卡通风格层会把圆体标题字体换进标题与标签，但永远不碰代码
 - 状态语义色固定：连接绿 `#4CAF50`、错误红 `#EF4444`、警告琥珀 `#F59E0B`
 
 ## Colors
@@ -271,8 +287,10 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 ## Typography
 
 ### Font Family
-- **正文/标题**：`FontFamily.Default`（系统无衬线）。不引入第三方字体，保证中英文同构。
-- **代码/终端**：`FontFamily.Monospace`，固定 13sp/20sp（`CodeTypography`），用于会话代码块与终端输出。
+- **正文/标题**：默认 `FontFamily.Default`（系统无衬线），保证中英文同构。开启卡通风格后
+  `display/headline/title/label` 换 **Baloo 2** 圆体（`res/font/`，SIL OFL，3 档字重共约 268KB），
+  由 `CartoonTypography` 提供；`body*` 仍走系统字体。
+- **代码/终端**：`FontFamily.Monospace`，固定 13sp/20sp（`CodeTypography`），用于会话代码块与终端输出，两种模式都一样。
 
 ### Hierarchy（完整 M3 层级表）
 
@@ -293,6 +311,9 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 | label-large | 14sp | 500 | 20sp | 0.1sp | 按钮、标签 |
 | label-medium | 12sp | 500 | 16sp | 0.5sp | Section 标题、chips |
 | label-small | 11sp | 500 | 16sp | 0.5sp | 状态文字、角标 |
+
+上表是常规档位；`body-large/medium/small` 在卡通风格下完全不变。卡通档保持同一批字号（避免布局回归），
+只加重字重、放宽行高——见 `cartoon:` token 块里的 `display-font-*`。
 
 ### 原则
 层级主要靠**字重 + 字号**构建：列表项标题一律 `titleMedium`（700），正文 `bodyLarge/bodyMedium`（400），状态与辅助信息用 `labelSmall/bodySmall`。标题类偏 700（`titleLarge/titleMedium`），正文偏 400，Secondary/辅助用 500。所有文字通过 `MaterialTheme.typography.*` 引用，禁止散落裸 `TextStyle`。
@@ -374,20 +395,25 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 
 ## 卡通风格
 
-> **来源文件**：`ui/theme/CartoonStyle.kt`（开关、形状、描边/投影 token）、`ui/theme/Theme.kt`
-> （`cartoonStyle` 参数）、`ui/components/AppSurfaces.kt`（自适应形状 + 对话框/按钮外观）。
+> **来源文件**：`ui/theme/CartoonStyle.kt`（开关、形状、描边/投影 token、贴纸底座）、
+> `ui/theme/Type.kt`（`CartoonTypography`）、`ui/theme/Theme.kt`（`cartoonStyle` 参数、
+> `MaterialTheme.shapes` 替换）、`ui/components/CartoonIcon.kt`（墨线图标 + 贴纸图标）、
+> `ui/components/AppSurfaces.kt`（自适应形状 + 对话框/按钮外观）。
 > 入口：设置 → 外观 → **卡通风格**。
 
 卡通感**不来自换色**——现有的 `theme_scheme`（candy / ocean / sunset / flame / bubble）只改 `ColorScheme`，
-这正是它们看起来「只是换了个色」的原因。卡通风格是独立于配色的一层视觉语言，五个杠杆：
+这正是它们看起来「只是换了个色」的原因。卡通风格是独立于配色的一层视觉语言，七个杠杆：
 
 | 杠杆 | 常规 | 卡通 |
 |---|---|---|
 | 圆角 | 对话框 20 / 卡片 12 / 选项 12 / 搜索 14 / 气泡 12 | 对话框 32 / 卡片 26 / 选项 24 / 搜索 30 / 气泡 26-6-26-22（用户）、24（助手） |
+| `MaterialTheme.shapes` | M3 默认（4 / 8 / 12 / 16 / 28） | 10 / 16 / 26 / 32 / 38——覆盖那些从不走 `AppCardShape` 的 M3 组件 |
 | 描边 | 无（AMOLED 为 1dp `outlineVariant`） | 2.5dp 描边——浅色表面 `#241F33`@85%，深色表面 `onSurface`@45% |
 | 投影 | 无（用容器色阶梯替代） | 硬边 3dp 右下偏移块，**零模糊**，浅色 `#3A2E5C`@30% / 深色黑@65%；不使用 M3 elevation |
 | 底纹 | 纯色容器 | 纸纹点阵：18dp 间距、1.3dp 点径，浅色 `#241F33`@7% / 深色白@5% |
 | 动效 | M3 默认 | 按钮按下缩到 0.9 并配低阻尼弹簧；对话框从 0.8 弹出 |
+| 字体 | 系统无衬线、M3 字重 | `display/headline/title/label` 换 Baloo 2 圆体（ExtraBold→SemiBold）；`body*` 与中文仍走系统字体 |
+| 图标 | 平面 M3 `Icon` | 字形外圈墨线描边，或背后垫一块 −6° 倾斜的贴纸底片 |
 
 ### 接入方式
 
@@ -420,11 +446,35 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
   透明度刻意压得很低：它不能和信息层级抢注意力。
 - 持久化：DataStore 的 `cartoon_style`，并镜像到 `SyncSettings.cartoonStyle`，
   与其他外观设置一样跨设备同步。
+- **换的是 shapes 阶梯，不是逐个调用点**：`StarBurstTheme` 向 `MaterialTheme` 传
+  `shapes = if (cartoonStyle) cartoonShapes() else Shapes()`。M3 组件的默认形状走
+  `ShapeKeyTokens` → `MaterialTheme.shapes` 解析，所以 142 处 Card、51 处 Snackbar、
+  77 处 OutlinedTextField、18 处 Chip、7 处 FAB、15 处 DropdownMenu 一行改动就整体变圆——
+  这才是让卡通层覆盖到那些从不接触 `AppCardShape` 的组件的关键。
+- **两套字体、一个开关**：`Type.kt` 同时导出 M3 默认 `Typography` 与 `CartoonTypography`
+  （基于 Baloo 2 字族的 `Typography.copy(...)`），由主题二选一，任何页面都不按风格分支。
+  只换 `display/headline/title/label`——`body*` 保留系统字体，既为长文可读性，也为不影响中文正文。
+  Baloo 2 不含中日韩字形，因此标题里的中文会在行内回退到系统字体：这是已知取舍，
+  也正是字体只作用在短展示文本上的原因。行高整体放宽（字体 line metric ≈ 1.602em），
+  避免圆体偏高的上伸部互相压字。`CodeTypography` 两种模式下都是等宽——代码永远不用卡通字体。
+- **图标两种处理，按位置分配**（`ui/components/CartoonIcon.kt`）：
+  `CartoonInkIcon` 把 vector painter 沿小圆平移重绘 12 次得到墨圈，再把着色字形盖在上面——
+  描的是字形剪影，这才是手绘勾边的观感。刻意**不**用 `PathParser` 逐条子路径描边：
+  那会把每个洞和字腔内侧也描上墨，24dp 字形会糊成一团。
+  `CartoonStickerIcon` 把字形垫在一块填充底片（默认 `primaryContainer`）上，带 −6° 倾斜、
+  墨线与偏移投影——贴纸感，只用于大号 hero / 空态图标。两者在风格关闭时都退化为普通 `Icon`，
+  并且原样沿用调用方的 `modifier` / `tint`，所以非卡通渲染结果与改动前逐像素一致。
+- 墨线不进长列表（设置页 39 行、`LazyColumn` 条目）：每个图标多 12 次绘制调用，
+  用在少量 hero 字形上没问题，铺到列表密度上既浪费又嘈杂。
 
 ### 覆盖范围
 
 完整外观（圆角 + 描边 + 偏移投影）：全部对话框、全部 App 按钮（`AppPrimaryButton` /
 `AppSecondaryButton`）、首页卡片、全部设置卡片（共用 `SettingsCard`）、聊天消息气泡。
+
+墨线图标：聊天输入栏（停止 / 发送 / 附件 / 麦克风）、顶栏（返回 / 更多）、首页与会话列表操作、
+FAB、设置页返回箭头。贴纸底片：40dp 及以上的空态与 hero 图标（首页添加、Chat hero、警告、
+收藏、搜索、收藏星、Git 树、诊断信息）。
 
 只有圆角、没有外观：`HomeScreen` / `SettingsDisplayNames` 之外约 55 处
 `Surface(shape = AppCardShape, ...)` 只拿到更大的圆角，观感是「更圆」还不是「贴纸」——
@@ -432,15 +482,17 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 
 ### 已知缺口
 
-- **字体未接入。** `res/font/` 目录不存在，全套走 `FontFamily.Default`（`Type.kt`）。圆体/手写体
-  是卡通感剩下最大的一块杠杆，需要一份有授权的 `.ttf`（拉丁文 Baloo 2 / Fredoka，中文
-  Smiley Sans / 站酷快乐体）放进 `app/src/main/res/font/`，再据此构建卡通版 `Typography`。
-  代码里没有为它留死钩子——资源到位时再补。
+- **`cartoonStickerChip` 画在节点边界之外**（四边各外扩 `padding`）。任何带 `clipToBounds`
+  的祖先、或会裁剪的固定尺寸父级都会切掉贴纸的描边与投影。调用方必须保证不被裁剪，
+  并在 `modifier` 里自带 `.size(...)`。
+- **墨线粗细不随字形尺寸缩放。** `icon-ink-ring-width` 是固定 dp，14dp 字形该比 24dp 更细，
+  所以聊天停止/发送按钮显式传了 0.9–1.0dp。真机渲染效果尚未验证。
 - **`cornerRadiusPx` 只认识 `AdaptiveRoundedShape`。** `RoundedCornerShape` 把半径存成
   `CornerSize`、不暴露 `Dp`，所以把普通 `RoundedCornerShape` 传给 `cartoonChrome` 时描边会按
   0 圆角画。请传 `AdaptiveRoundedShape`（均匀圆角）或不对称 `RoundedCornerShape`
   （走 `Outline.Generic` 路径分支）。
-- 顶栏未接入外观：没有共享的 `TopAppBar` 组件，接入要改约 30 处页面。
+- 顶栏未接入外观：没有共享的 `TopAppBar` 组件，接入要改约 30 处页面。顶栏图标已描墨线，
+  但栏体本身仍是平面。
 - 尚无插画、吉祥物或 emoji 图标体系。
 
 ## Do's and Don'ts
@@ -450,7 +502,7 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 - 层级用 `surfaceContainer*` 阶梯表达，默认不投影。
 - 按钮走 `AppPrimaryButton / AppSecondaryButton` 封装——AMOLED 语义（黑底描边）由封装自动处理，业务代码不感知。
 - 状态语义固定：连接绿 `#4CAF50`、错误红 `#EF4444`、警告琥珀 `#F59E0B`。
-- 代码与终端统一 `FontFamily.Monospace` 13sp；中文与界面文字用系统无衬线。
+- 代码与终端统一 `FontFamily.Monospace` 13sp；中文与界面文字默认用系统无衬线。开启卡通风格后标题与标签可用内置圆体，但代码永远不用。
 - 圆角遵循：按钮/输入全圆、容器 12dp、对话框 20dp、搜索框 14dp；开启卡通风格后同一 token
   自动解析为对应的 `cartoon-*` 值。
 - 卡通状态只从 `isCartoonStyle()` / `LocalCartoonStyle` 读取；不要靠判断 `themeScheme`

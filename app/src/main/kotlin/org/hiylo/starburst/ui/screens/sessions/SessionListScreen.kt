@@ -97,6 +97,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.ui.graphics.graphicsLayer
 import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppDialogShape
+import org.hiylo.starburst.ui.components.CartoonInkIcon
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSearchShape
 import org.hiylo.starburst.ui.components.AppSecondaryButton
@@ -322,6 +324,7 @@ fun SessionListScreen(
     var archiveSessionTitle by remember { mutableStateOf("") }
     var showPinnedSortDialog by remember { mutableStateOf(false) }
     var showArchiveSelectedDialog by remember { mutableStateOf(false) }
+    var showCompactSelectedDialog by remember { mutableStateOf(false) }
 
     // Project picker dialog state
     var showOpenProject by remember { mutableStateOf(false) }
@@ -445,6 +448,13 @@ fun SessionListScreen(
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                        IconButton(onClick = { showCompactSelectedDialog = true }) {
+                            Icon(
+                                Icons.Default.Compress,
+                                contentDescription = stringResource(R.string.sessions_compact_selected),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         IconButton(onClick = { showDeleteSelectedDialog = true }) {
                             Icon(
                                 Icons.Default.Delete,
@@ -531,7 +541,7 @@ fun SessionListScreen(
                                 }
                             },
                         ) {
-                            Icon(
+                            CartoonInkIcon(
                                 Icons.AutoMirrored.Filled.ArrowBack,
                                 contentDescription = stringResource(if (searchActive) R.string.close else R.string.back),
                             )
@@ -541,7 +551,7 @@ fun SessionListScreen(
                         if (!searchActive) {
                             if (backendReady) {
                                 IconButton(onClick = onNavigateToWorkbench) {
-                                    Icon(
+                                    CartoonInkIcon(
                                         Icons.Default.Dashboard,
                                         contentDescription = stringResource(R.string.workbench_enter),
                                     )
@@ -550,7 +560,7 @@ fun SessionListScreen(
                             IconButton(
                                 onClick = { onOpenBookmarks(viewModel.serverId) },
                             ) {
-                                Icon(
+                                CartoonInkIcon(
                                     Icons.Default.BookmarkBorder,
                                     contentDescription = stringResource(R.string.bookmarks_title),
                                 )
@@ -558,14 +568,14 @@ fun SessionListScreen(
                             IconButton(
                                 onClick = { onOpenFtsSearch(viewModel.serverId) },
                             ) {
-                                Icon(
+                                CartoonInkIcon(
                                     Icons.Default.ManageSearch,
                                     contentDescription = stringResource(R.string.fts_search_title),
                                 )
                             }
                             Box {
                                 IconButton(onClick = { showFilterMenu = true }) {
-                                    Icon(
+                                    CartoonInkIcon(
                                         Icons.Default.FilterList,
                                         contentDescription = stringResource(R.string.sessions_filter),
                                     )
@@ -775,7 +785,7 @@ fun SessionListScreen(
                         Modifier
                     }
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = stringResource(R.string.sessions_new))
+                    CartoonInkIcon(Icons.Default.Add, contentDescription = stringResource(R.string.sessions_new))
                 }
             }
         }
@@ -822,11 +832,14 @@ fun SessionListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(
+                        CartoonStickerIcon(
                             imageVector = Icons.Default.Warning,
                             contentDescription = null,
                             modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.error
+                            tint = MaterialTheme.colorScheme.error,
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
+                            stickerTint = MaterialTheme.colorScheme.onErrorContainer,
+                            padding = 10.dp,
                         )
                         Text(
                             text = uiState.error ?: stringResource(R.string.session_unknown_error),
@@ -846,11 +859,13 @@ fun SessionListScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Icon(
+                        CartoonStickerIcon(
                             imageVector = Icons.AutoMirrored.Filled.Chat,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                            stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            padding = 12.dp,
                         )
                         Text(
                             text = stringResource(R.string.sessions_empty),
@@ -1227,6 +1242,38 @@ fun SessionListScreen(
                             },
                         ) {
                             Text(stringResource(R.string.session_archive))
+                        }
+                    }
+                }
+        }
+    }
+
+    // Compact selected dialog
+    if (showCompactSelectedDialog) {
+        AppDialog(onDismissRequest = { showCompactSelectedDialog = false }, modifier = Modifier.fillMaxWidth()) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(
+                        text = stringResource(R.string.sessions_compact_selected),
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(stringResource(R.string.sessions_compact_selected_confirm, uiState.selectedIds.size))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        AppSecondaryButton(onClick = { showCompactSelectedDialog = false }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        AppPrimaryButton(
+                            onClick = {
+                                viewModel.compactSelected()
+                                showCompactSelectedDialog = false
+                            },
+                        ) {
+                            Text(stringResource(R.string.sessions_compact_selected))
                         }
                     }
                 }

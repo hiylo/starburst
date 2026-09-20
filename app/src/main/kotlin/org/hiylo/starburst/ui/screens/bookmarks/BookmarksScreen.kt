@@ -72,6 +72,7 @@ import java.util.Locale
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.MessageBookmark
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
@@ -148,11 +149,13 @@ fun BookmarksScreen(
                         verticalArrangement = Arrangement.Center,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Icon(
+                        CartoonStickerIcon(
                             Icons.Default.BookmarkBorder,
                             contentDescription = null,
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
                             modifier = Modifier.size(48.dp),
+                            stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            padding = 10.dp,
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
@@ -206,11 +209,13 @@ private fun EmptyBookmarks() {
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Icon(
+        CartoonStickerIcon(
             Icons.Default.BookmarkBorder,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
             modifier = Modifier.size(48.dp),
+            stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
+            padding = 10.dp,
         )
         Spacer(Modifier.height(12.dp))
         Text(

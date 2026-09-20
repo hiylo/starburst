@@ -11,6 +11,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Cartoon style: rounded display font** — headings and labels now switch to a bundled
+  Baloo 2 family (SIL OFL, 3 static weights, Latin-only, ~268KB) when Cartoon style is on.
+  `body*` text and code stay on the system font / monospace in both modes, so long-form reading
+  and Chinese prose are untouched. OFL notice ships at `assets/licenses/Baloo2-OFL.txt`.
+- **Cartoon style: icon treatments** — two new wrappers in `ui/components/CartoonIcon.kt`.
+  `CartoonInkIcon` inks the glyph silhouette (a 12-sample offset ring) and is used on the chat
+  composer, top bars, list actions and FABs; `CartoonStickerIcon` sits the glyph on a tilted,
+  outlined, hard-shadowed chip and is used on the 40dp+ empty-state and hero icons.
+- **Cartoon style: `MaterialTheme.shapes` ramp** — the whole shape scale (10/16/26/32/38dp) is
+  swapped while Cartoon style is on, so the M3 components that never took an adaptive shape
+  (cards, snackbars, outlined text fields, chips, FABs, dropdown menus) round out too.
+
+### Changed
+- Settings → Appearance → Cartoon style description now mentions the rounded heading font and the
+  ink-outlined icons (both locales).
+- **Session list: batch compact** — a Compress action in the multi-select top bar now summarizes
+  every selected session in one go (using each session's own model, falling back to the server
+  default) to reduce context, mirroring the single-session Compact menu item.
+
 ## [3.0.0] - 2026-09-20
 
 ### Added

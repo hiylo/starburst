@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
+import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusWarning
@@ -238,11 +239,14 @@ private fun NotRepositoryView() {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Icon(
+        CartoonStickerIcon(
             Icons.Default.AccountTree,
             contentDescription = null,
             modifier = Modifier.size(56.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+            stickerTint = MaterialTheme.colorScheme.onSecondaryContainer,
+            padding = 11.dp,
         )
         Spacer(Modifier.height(16.dp))
         Text(

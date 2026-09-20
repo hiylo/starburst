@@ -34,6 +34,7 @@ import android.content.Intent
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppLoadingEdge
+import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
@@ -136,7 +137,7 @@ internal fun ChatScreenTopBar(
         },
         navigationIcon = {
             IconButton(onClick = onNavigateBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                CartoonInkIcon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
             }
         },
         actions = {
@@ -176,7 +177,7 @@ internal fun ChatScreenTopBar(
             if (uiState.parentSessionId == null) Box {
                 val isAmoled = isAmoledTheme()
                 IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
+                    CartoonInkIcon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
                 }
                 if (inputText.text.isNotEmpty()) {
                     Surface(
