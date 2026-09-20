@@ -81,13 +81,19 @@ class ServerAsrRecorder(
             listener.onError("stt service unavailable")
             return@withContext false
         }
-        val rec = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            sampleRate * 2,
-        )
+        val rec = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                sampleRate * 2,
+            )
+        } catch (e: SecurityException) {
+            listener.onError("Microphone permission denied")
+            api.deleteSession(backendUrl, backendToken, sid)
+            return@withContext false
+        }
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
             api.deleteSession(backendUrl, backendToken, sid)

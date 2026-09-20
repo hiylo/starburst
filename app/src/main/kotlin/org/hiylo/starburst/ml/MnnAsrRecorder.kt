@@ -68,13 +68,20 @@ class MnnAsrRecorder(private val context: Context) : AsrSession {
         }
         this@MnnAsrRecorder.stream = stream
         this@MnnAsrRecorder.listener = listener
-        val rec = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_FLOAT,
-            sampleRate * 2,
-        )
+        val rec = try {
+            AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_FLOAT,
+                sampleRate * 2,
+            )
+        } catch (e: SecurityException) {
+            listener.onError("Microphone permission denied")
+            MnnAsr.releaseStream(stream)
+            this@MnnAsrRecorder.stream = null
+            return@withContext false
+        }
         if (rec.state != AudioRecord.STATE_INITIALIZED) {
             rec.release()
             listener.onError("AudioRecord init failed")

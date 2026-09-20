@@ -266,8 +266,9 @@ fun NavGraphBuilder.SessionsRoutes(
          * 仅在回到栈底占位页时清空 paneSessionId。
          */
         fun paneBack() {
-            val stack = paneNavController.currentBackStack.value
-            if (stack.size <= 1) {
+            // 用公开 API 判断是否已回到栈底（仅剩占位页）：previousBackStackEntry 为 null
+            // 表示当前无上层条目，等同于旧 currentBackStack.value.size <= 1（受限 API）。
+            if (paneNavController.previousBackStackEntry == null) {
                 paneSessionId = null
                 paneOpenTerminal = false
                 return
