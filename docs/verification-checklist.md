@@ -41,13 +41,17 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 - [x] 中文长会话下对照服务端真实 token 数，预算指示器占比合理。
 - [x] 长模型名已在底部选择栏截断（`MODEL_LABEL_MAX_CHARS=24` + 省略号），预算圆环与预算文字不再被挤出屏幕。（模拟器 Compose instrumentation 实测：`ChatInputBarModelLabelTest` 2 例通过）
 
-### 4.1 上下文占用口径统一 ⏳ 修复已出包（12:14），待真机复验
+### 4.1 上下文占用口径统一 ✅ 模拟器实测通过（13:37 包），真机复核
 > 修复前：顶栏副标题用「每轮 tokens.input 累加」（各轮都含历史上下文，相加虚高到兆级，如 13.1M）、
 > 圆环用最近一轮、弹窗/输入框各用其它口径，同一会话出现多个互不一致的 token 数，无法判断真实占用。
 > 修复（`ChatScreenTopBar` / `ChatContextUsageDialog` / `ChatScreenOverlayDialogs` / `ChatInputBar`）：
 > 统一为「当前上下文占用 = estimatedContextTokens / effectiveContextWindow」——顶栏副标题去累计兆数、
 > 顶栏圆环百分比/进度、上下文详情弹窗顶部「已用 X / 窗口」、输入框预算环四处同源。
-- [ ] 真机装 12:14 包：打开多轮会话，确认顶栏显示「已用 X（估算）/ 窗口」，圆环、上下文档弹窗、输入框预算环三/四处数字一致，不再出现 13.1M 级累计数。
+- [x] 模拟器（emulator-5554，13:37 包，含上下文修复 + 未读推送）实测：顶栏副标题显示 `/workspaces · 36.6k of 262.1k used`
+      ——当前上下文估算/有效窗口（≈14%），无累计兆数；窗口按模型正确显示（262k），口径符合预期。
+- [x] 同轮全量回归：release 日志分级（仅 REQUEST/RESPONSE/FROM 概要，`Authorization/Bearer/Basic` 零明文）、
+      直连按目录并发 `session/status`（无聚合探针）均通过。
+- [ ] 真机复核：多模型会话（如 1.0M 窗口模型）确认顶栏/圆环/详情弹窗/输入框预算环四处一致。
 - [ ] 未读红点改推送（9b95e2c）：弱网下会话有新活动/读后清除的未读刷新及时性（不再 10s 轮询）。
 
 ### 5. 加密备份全链路
