@@ -281,7 +281,7 @@
     <string name="llm_provider_model">模型</string>
     <string name="llm_provider_model_hint">gpt-4o-mini / deepseek-chat</string>
     <string name="llm_provider_api_key">API Key</string>
-    <string name="llm_provider_api_key_hint">sk-...（已保存的密钥不会显示，留空则保持原值）</string>
+    <string name="llm_provider_api_key_hint">sk-…（已保存的密钥不会显示，留空则保持原值）</string>
     <string name="llm_provider_show_hide">显示/隐藏</string>
     <string name="llm_provider_save">保存</string>
     <string name="llm_provider_saved">已保存</string>

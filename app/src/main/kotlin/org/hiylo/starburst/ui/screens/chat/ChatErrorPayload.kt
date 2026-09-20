@@ -34,12 +34,14 @@ import android.webkit.WebViewClient
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import android.annotation.SuppressLint
 
 private enum class HtmlErrorViewMode {
     Page,
     Code,
 }
 
+@SuppressLint("ClickableViewAccessibility")
 @Composable
 internal fun ErrorPayloadContent(
     text: String,

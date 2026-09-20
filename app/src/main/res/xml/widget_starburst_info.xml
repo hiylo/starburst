@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:minWidth="180dp"
     android:minHeight="110dp"
     android:targetCellWidth="4"
@@ -9,4 +10,5 @@
     android:resizeMode="horizontal|vertical"
     android:widgetCategory="home_screen"
     android:label="@string/app_name"
-    android:description="@string/widget_starburst_name" />
+    android:description="@string/widget_starburst_name"
+    tools:targetApi="31" />

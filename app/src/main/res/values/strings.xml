@@ -398,7 +398,7 @@
     <string name="llm_provider_model">Model</string>
     <string name="llm_provider_model_hint">gpt-4o-mini / deepseek-chat</string>
     <string name="llm_provider_api_key">API Key</string>
-    <string name="llm_provider_api_key_hint">sk-... (saved keys are not shown; leave blank to keep the current one)</string>
+    <string name="llm_provider_api_key_hint">sk-… (saved keys are not shown; leave blank to keep the current one)</string>
     <string name="llm_provider_show_hide">Show / hide</string>
     <string name="llm_provider_save">Save</string>
     <string name="llm_provider_saved">Saved</string>
