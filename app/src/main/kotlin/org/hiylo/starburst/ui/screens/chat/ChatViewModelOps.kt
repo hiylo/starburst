@@ -599,17 +599,15 @@ internal fun ChatViewModel.exportSession(context: android.content.Context, uri: 
         val notificationId = 9999
 
         // Create notification channel
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            val channel = android.app.NotificationChannel(
-                channelId,
-                context.getString(R.string.menu_export_session),
-                android.app.NotificationManager.IMPORTANCE_LOW
-            ).apply {
-                description = context.getString(R.string.notification_export_progress)
-                setShowBadge(false)
-            }
-            notificationManager.createNotificationChannel(channel)
+        val channel = android.app.NotificationChannel(
+            channelId,
+            context.getString(R.string.menu_export_session),
+            android.app.NotificationManager.IMPORTANCE_LOW
+        ).apply {
+            description = context.getString(R.string.notification_export_progress)
+            setShowBadge(false)
         }
+        notificationManager.createNotificationChannel(channel)
 
         val builder = androidx.core.app.NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.stat_sys_download)

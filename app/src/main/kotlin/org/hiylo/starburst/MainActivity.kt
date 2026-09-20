@@ -342,11 +342,7 @@ class MainActivity : ComponentActivity() {
                     putExtra("server_url", savedServer.url)
                     putExtra("server_username", savedServer.username)
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
+                startForegroundService(serviceIntent)
                 Log.i(TAG, "Widget connect server: ${savedServer.displayName} (serverId=$resolvedServerId)")
                 _deepLinkFlow.emit(
                     SessionDeepLink(
@@ -422,11 +418,7 @@ class MainActivity : ComponentActivity() {
                     putExtra("server_url", savedServer.url)
                     putExtra("server_username", savedServer.username)
                 }
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    startForegroundService(serviceIntent)
-                } else {
-                    startService(serviceIntent)
-                }
+                startForegroundService(serviceIntent)
             } else {
                 Log.w(TAG, "Deep-link server is not configured: $serverUrl")
             }

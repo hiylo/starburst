@@ -19,7 +19,7 @@ import java.io.File
 
 object UpdateInstaller {
     fun canRequestPackageInstalls(context: Context): Boolean {
-        return Build.VERSION.SDK_INT < Build.VERSION_CODES.O || context.packageManager.canRequestPackageInstalls()
+        return context.packageManager.canRequestPackageInstalls()
     }
 
     fun unknownSourcesSettingsIntent(context: Context): Intent {
