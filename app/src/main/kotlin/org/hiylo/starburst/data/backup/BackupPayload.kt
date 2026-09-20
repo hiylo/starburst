@@ -34,7 +34,6 @@ data class BackupPayload(
     val llmProviderModel: String = "",
     val servers: List<ServerConfig> = emptyList(),
     val serverSavedPaths: Map<String, List<String>> = emptyMap(),
-    val serverSessionTemplates: Map<String, List<SettingsRepository.SessionTemplate>> = emptyMap(),
     val serverRecentProjects: Map<String, List<String>> = emptyMap(),
     val sessionCategoryAssignments: Map<String, Map<String, String>> = emptyMap(),
     val favoriteSessionIds: Map<String, List<String>> = emptyMap(),

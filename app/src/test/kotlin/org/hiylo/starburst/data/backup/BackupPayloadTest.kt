@@ -50,16 +50,6 @@ class BackupPayloadTest {
             ServerConfig(id = "server-1", url = "http://127.0.0.1:4096", name = "Local"),
         ),
         serverSavedPaths = mapOf("server-1" to listOf("/tmp", "/workspaces")),
-        serverSessionTemplates = mapOf(
-            "server-1" to listOf(
-                SettingsRepository.SessionTemplate(
-                    id = "st-1",
-                    name = "Agent",
-                    directory = "/project",
-                    systemPrompt = "You are a helpful assistant",
-                ),
-            ),
-        ),
         hiddenModels = mapOf("server-1" to setOf("provider:model")),
     )
 
@@ -79,7 +69,6 @@ class BackupPayloadTest {
         assertEquals("model-x", restored.llmProviderModel)
         assertEquals("server-1", restored.servers.single().id)
         assertEquals(listOf("/tmp", "/workspaces"), restored.serverSavedPaths["server-1"])
-        assertEquals("Agent", restored.serverSessionTemplates.getValue("server-1").single().name)
         assertEquals(setOf("provider:model"), restored.hiddenModels.getValue("server-1"))
     }
 

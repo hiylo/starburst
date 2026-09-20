@@ -47,6 +47,7 @@ data class SyncSettings(
     val dynamicColor: Boolean = false,
     val accentColor: String = "indigo",
     val themeScheme: String = "default",
+    val cartoonStyle: Boolean = false,
     val chatFontSize: String = "medium",
     val notificationsEnabled: Boolean = true,
     val initialMessageCount: Int = 50,

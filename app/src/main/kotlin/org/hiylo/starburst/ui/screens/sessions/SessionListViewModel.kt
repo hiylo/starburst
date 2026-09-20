@@ -29,6 +29,7 @@ import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
+import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.runShellCommand
 import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.repository.BackendRepository
@@ -45,6 +46,7 @@ import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
 import org.hiylo.starburst.domain.model.PendingInteraction
+import org.hiylo.starburst.domain.model.Message
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -55,6 +57,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -175,6 +180,8 @@ data class SessionItem(
     val unconfirmedCompletedAt: Long = 0L,
     /** Last time the user sent a message in this session (stable; does not change during streaming). */
     val lastUserMessageAt: Long = 0L,
+    /** 会话级错误（session.error 事件），非空表示会话异常结束而非正常完成。 */
+    val sessionError: Message.Assistant.ErrorInfo? = null,
 ) {
     val isFavorite: Boolean get() = favoriteIndex != null
     val isPinned: Boolean get() = pinnedIndex != null
@@ -284,47 +291,6 @@ class SessionListViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.removeSavedPath(serverId, path) }
     }
 
-    val sessionTemplates: StateFlow<List<SettingsRepository.SessionTemplate>> =
-        settingsRepository.sessionTemplates(serverId).stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5_000),
-            emptyList(),
-        )
-
-    fun saveSessionTemplate(template: SettingsRepository.SessionTemplate) {
-        viewModelScope.launch { settingsRepository.saveSessionTemplate(serverId, template) }
-    }
-
-    fun deleteSessionTemplate(id: String) {
-        viewModelScope.launch { settingsRepository.deleteSessionTemplate(serverId, id) }
-    }
-
-    fun moveSessionTemplate(id: String, offset: Int) {
-        viewModelScope.launch { settingsRepository.moveSessionTemplate(serverId, id, offset) }
-    }
-
-    /** 一键按会话模板新建会话：应用目录与标题预设，随后跳转到新会话。 */
-    fun createSessionFromTemplate(template: SettingsRepository.SessionTemplate) {
-        viewModelScope.launch {
-            try {
-                val directory = template.directory.trim().takeIf(String::isNotBlank)
-                val session = api.createSession(
-                    conn,
-                    title = template.name.trim().takeIf(String::isNotBlank),
-                    directory = directory,
-                )
-                eventReducer.upsertSession(serverId, session)
-                directory?.let { settingsRepository.recordRecentProject(serverId, it) }
-                if (BuildConfig.DEBUG) Log.d(TAG, "Created session from template: ${session.id}")
-                _navigateToSession.tryEmit(session.id)
-            } catch (e: Exception) {
-                if (e is CancellationException) throw e
-                Log.e(TAG, "Failed to create session from template", e)
-                _error.value = e.message ?: "Failed to create session"
-            }
-        }
-    }
-
     private val sessionCategories: StateFlow<List<SessionCategory>> = settingsRepository.sessionCategories.stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -389,6 +355,7 @@ class SessionListViewModel @Inject constructor(
             serverRepository.servers,
             connectionStateRepository.connectedServerIds,
             pendingQuestionSessionIds,
+            eventReducer.sessionErrors,
         )
     ) { values ->
         val allSessions = values[0] as List<Session>
@@ -409,6 +376,7 @@ class SessionListViewModel @Inject constructor(
         val servers = values[15] as List<ServerConfig>
         val connectedServerIds = values[16] as Set<String>
         val pendingQuestionIds = values[17] as Set<String>
+        val sessionErrors = values[18] as Map<String, Message.Assistant.ErrorInfo>
         val favoriteOrder = favoriteIds.withIndex().associate { (index, id) -> id to index }
         val pinnedOrder = pinnedIds.withIndex().associate { (index, id) -> id to index }
         val categoriesById = categories.associateBy { it.id }
@@ -454,6 +422,7 @@ class SessionListViewModel @Inject constructor(
                     isUnconfirmedCompleted = session.id in unconfirmedCompleted,
                     unconfirmedCompletedAt = unconfirmedCompleted[session.id] ?: 0L,
                     lastUserMessageAt = lastUserMessageAt[session.id] ?: session.time.created,
+                    sessionError = sessionErrors[session.id],
                 )
             }
 
@@ -643,15 +612,8 @@ class SessionListViewModel @Inject constructor(
             .distinct()
             .toList()
         if (directories.isEmpty()) return emptyMap()
-        return directories.flatMap { dir ->
-            runCatching { api.listSessionStatuses(conn, directory = dir) }
-                .getOrElse { e ->
-                    if (e is CancellationException) throw e
-                    if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load session status for $dir: ${e.message}")
-                    emptyMap()
-                }
-                .toList()
-        }.toMap()
+        // 后端镜像走一次聚合请求；直连上游自动退回按目录并发拉取（helper 自适配）。
+        return api.listSessionStatusesForDirectories(conn, directories)
     }
 
     /**
@@ -689,13 +651,17 @@ class SessionListViewModel @Inject constructor(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .toList()
-            val requests = directories.flatMap { dir ->
-                runCatching { api.listPendingQuestions(conn, directory = dir) }
-                    .getOrElse { e ->
-                        if (e is CancellationException) throw e
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
-                        emptyList()
+            val requests = coroutineScope {
+                directories.map { dir ->
+                    async {
+                        runCatching { api.listPendingQuestions(conn, directory = dir) }
+                            .getOrElse { e ->
+                                if (e is CancellationException) throw e
+                                if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
+                                emptyList()
+                            }
                     }
+                }.awaitAll().flatten()
             }
             _pendingQuestionSessionIds.value = requests.mapTo(mutableSetOf<String>()) { it.sessionId }
             if (BuildConfig.DEBUG) {

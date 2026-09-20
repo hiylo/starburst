@@ -317,8 +317,6 @@ fun SessionListScreen(
     // Project picker dialog state
     var showOpenProject by remember { mutableStateOf(false) }
     var showQuickNewSession by remember { mutableStateOf(false) }
-    var showSessionTemplates by remember { mutableStateOf(false) }
-    val sessionTemplates by viewModel.sessionTemplates.collectAsState()
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var searchActive by rememberSaveable { mutableStateOf(false) }
     var collapsedProjects by rememberSaveable { mutableStateOf(emptySet<String>()) }
@@ -1029,28 +1027,11 @@ fun SessionListScreen(
                 showQuickNewSession = false
                 viewModel.createNewSession(directory = directory)
             },
-            onOpenTemplates = { showSessionTemplates = true },
             onBrowse = {
                 showQuickNewSession = false
                 showOpenProject = true
             },
             onDismiss = { showQuickNewSession = false }
-        )
-    }
-
-    // Session templates management dialog
-    if (showSessionTemplates) {
-        SessionTemplatesDialog(
-            templates = sessionTemplates,
-            onCreate = { template ->
-                showSessionTemplates = false
-                showQuickNewSession = false
-                viewModel.createSessionFromTemplate(template)
-            },
-            onSave = viewModel::saveSessionTemplate,
-            onDelete = viewModel::deleteSessionTemplate,
-            onMove = viewModel::moveSessionTemplate,
-            onDismiss = { showSessionTemplates = false },
         )
     }
 
