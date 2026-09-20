@@ -49,9 +49,16 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 > 顶栏圆环百分比/进度、上下文详情弹窗顶部「已用 X / 窗口」、输入框预算环四处同源。
 - [x] 模拟器（emulator-5554，13:37 包，含上下文修复 + 未读推送）实测：顶栏副标题显示 `/workspaces · 36.6k of 262.1k used`
       ——当前上下文估算/有效窗口（≈14%），无累计兆数；窗口按模型正确显示（262k），口径符合预期。
+- [x] 模拟器（专属 AVD `starburst_test`，14:34 包 = 含上下文修复 + 未读推送 + #1 会话并行化）完整复查：
+  - 顶栏副标题 `3.1k of 1.0M used`、`33.7k of 1.0M used`（估算/有效窗口，无累计兆数）；
+  - 输入框预算环 `0%` + 预算文字 `4.0k / 1.0M tokens`（`contextBudgetRatio(估算/窗口)`，与顶栏同源）；
+  - 源码同源确认：`estimatedContextTokens`（15 处）+ `effectiveContextWindow`（12 处）覆盖顶栏副标题/圆环、
+    `ChatContextUsageDialog`、`ChatInputBar` 预算环；圆环 progress 亦为 `估算/窗口`（ChatScreenTopBar.kt:164）；
+  - 顶栏 3.1k vs 输入框 4.0k 系会话 Working 中 token 实时增长，非口径不一致。
 - [x] 同轮全量回归：release 日志分级（仅 REQUEST/RESPONSE/FROM 概要，`Authorization/Bearer/Basic` 零明文）、
       直连按目录并发 `session/status`（无聚合探针）均通过。
-- [ ] 真机复核：多模型会话（如 1.0M 窗口模型）确认顶栏/圆环/详情弹窗/输入框预算环四处一致。
+- [ ] 真机复核：多模型会话（如 1.0M 窗口模型）确认顶栏/圆环/详情弹窗/输入框预算环四处一致（模拟器仅顶栏+输入框实测，
+      圆环仅子会话显示、当前后端无 fork 会话未 UI 实测，源码同源已保证）。
 - [ ] 未读红点改推送（9b95e2c）：弱网下会话有新活动/读后清除的未读刷新及时性（不再 10s 轮询）。
 
 ### 5. 加密备份全链路

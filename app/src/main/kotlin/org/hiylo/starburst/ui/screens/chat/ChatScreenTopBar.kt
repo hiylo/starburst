@@ -72,6 +72,7 @@ internal fun ChatScreenTopBar(
     showRenameDialogState: MutableState<Boolean>,
     showSessionDiffDialogState: MutableState<Boolean>,
     showTimelineDialogState: MutableState<Boolean>,
+    showProjectOverviewState: MutableState<Boolean>,
     showAttachmentOptionsState: MutableState<Boolean>,
     showSubagentContextDetailsState: MutableState<Boolean>,
     onNavigateBack: () -> Unit,
@@ -89,6 +90,7 @@ internal fun ChatScreenTopBar(
     var showRenameDialog by showRenameDialogState
     var showSessionDiffDialog by showSessionDiffDialogState
     var showTimelineDialog by showTimelineDialogState
+    var showProjectOverview by showProjectOverviewState
     var showAttachmentOptions by showAttachmentOptionsState
     var showSubagentContextDetails by showSubagentContextDetailsState
 
@@ -240,6 +242,17 @@ internal fun ChatScreenTopBar(
                         },
                         leadingIcon = {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_project_overview)) },
+                        onClick = {
+                            showMenu = false
+                            showProjectOverview = true
+                            viewModel.loadProjectOverview()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Analytics, contentDescription = null)
                         },
                     )
                     DropdownMenuItem(
