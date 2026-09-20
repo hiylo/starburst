@@ -61,7 +61,7 @@ import kotlinx.serialization.json.Json
             hapticDurationMillis = hapticDuration,
             hapticAmplitude = hapticAmplitude,
             reconnectMode = preferences[SettingsRepository.RECONNECT_MODE_KEY] ?: "normal",
-            backgroundWakeLock = preferences[SettingsRepository.BACKGROUND_WAKE_LOCK_KEY] ?: true,
+            backgroundWakeLock = preferences[SettingsRepository.BACKGROUND_WAKE_LOCK_KEY] ?: false,
             keepScreenOn = preferences[SettingsRepository.KEEP_SCREEN_ON_KEY] ?: false,
             silentNotifications = preferences[SettingsRepository.SILENT_NOTIFICATIONS_KEY] ?: false,
             groupNotifications = preferences[SettingsRepository.GROUP_NOTIFICATIONS_KEY] ?: false,

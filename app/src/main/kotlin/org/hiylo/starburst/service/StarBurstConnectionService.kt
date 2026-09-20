@@ -359,7 +359,7 @@ class StarBurstConnectionService : Service() {
                 if (backgroundWakeLockEnabled == enabled) return@collect
                 backgroundWakeLockEnabled = enabled
                 if (enabled && connections.isNotEmpty()) {
-                    acquireWakeLock()
+                    updateWakeLockForActiveSessions()
                 } else if (!enabled) {
                     releaseWakeLock()
                 }
@@ -380,6 +380,7 @@ class StarBurstConnectionService : Service() {
         serviceScope.launch {
             while (isActive) {
                 delay(COMPLETION_POLL_INTERVAL_MS)
+                updateWakeLockForActiveSessions()
                 pollSessionCompletions()
             }
         }
@@ -560,7 +561,7 @@ class StarBurstConnectionService : Service() {
                 }
                 if (BuildConfig.DEBUG) Log.d(TAG, "Connecting to configured server")
                 ensureForegroundStarted()
-                acquireWakeLock()
+                updateWakeLockForActiveSessions()
                 // 连接中状态写入也放进锁内，与 disconnect 串行，避免「disconnect 后仍显示 connecting」。
                 _connectingServerIds.update { it + server.id }
                 _connectionErrors.update { it - server.id }
@@ -823,6 +824,25 @@ class StarBurstConnectionService : Service() {
             }
         }
         wakeLock = null
+    }
+
+    /**
+     * 按是否有活跃会话（busy/retry）决定 WakeLock 的持有与释放。
+     *
+     * 耗电优化：旧逻辑在「任一服务器连接」期间无条件持有 WakeLock，导致后台挂机时 CPU 也不睡。
+     * 改为仅在存在 busy/retry 会话（真正有任务在跑）时持有、空闲即释放；由 15s 兜底轮询驱动，
+     * 状态变化最多延迟一轮（约 15s）生效。用户显式关闭后台保活时始终不持有。
+     */
+    @Synchronized
+    private fun updateWakeLockForActiveSessions() {
+        if (!backgroundWakeLockEnabled || connections.isEmpty()) {
+            releaseWakeLock()
+            return
+        }
+        val hasActiveSession = eventReducer.sessionStatuses.value.values.any {
+            it is SessionStatus.Busy || it is SessionStatus.Retry
+        }
+        if (hasActiveSession) acquireWakeLock() else releaseWakeLock()
     }
 
     /**

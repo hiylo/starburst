@@ -10,6 +10,7 @@
 package org.hiylo.starburst.logging
 
 import android.util.Log as AndroidLog
+import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.data.repository.DiagnosticLogEntry
 import org.hiylo.starburst.data.repository.DiagnosticLogRepository
 import kotlinx.coroutines.CoroutineScope
@@ -44,7 +45,8 @@ object AppLogger {
         },
     )
     @Volatile private var repository: DiagnosticLogRepository? = null
-    @Volatile private var minimumLevel = "INFO"
+    // release 默认不落盘 INFO，减少流式期间的 SQLite 写入（耗电优化）；仍走 logcat。
+    @Volatile private var minimumLevel = if (BuildConfig.DEBUG) "INFO" else "WARN"
 
     fun initialize(logRepository: DiagnosticLogRepository) {
         if (repository != null) return

@@ -134,9 +134,10 @@ class BackendPushListener @Inject constructor(
             header("Authorization", "Bearer $token")
         }
         // 健康空闲 WS 无应用层心跳时会被 OkHttp readTimeout 掐断，导致 120s 后频繁重连。
-        // Ktor 2.3.x 支持 pingIntervalMillis：启动内置 pinger，每 20s 发一次 Ping 保活，
+        // Ktor 2.3.x 支持 pingIntervalMillis：启动内置 pinger，每 60s 发一次 Ping 保活，
         // 让底层 socket 在 120s readTimeout 内持续有读写，空闲也被判定为健康。
-        session.pingIntervalMillis = 20_000L
+        // 60s 仍有 2 倍余量，较 20s 把保活流量与 radio 唤醒降到 1/3（耗电优化）。
+        session.pingIntervalMillis = 60_000L
         for (frame in session.incoming) {
             if (frame !is Frame.Text) continue
             val root = runCatching { json.parseToJsonElement(frame.readText()).jsonObject }.getOrNull() ?: continue

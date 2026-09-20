@@ -71,7 +71,7 @@ data class SyncSettings(
     val hapticDurationMillis: Int? = null,
     val hapticAmplitude: Int? = null,
     val reconnectMode: String = "normal",
-    val backgroundWakeLock: Boolean = true,
+    val backgroundWakeLock: Boolean = false,
     val keepScreenOn: Boolean = false,
     val silentNotifications: Boolean = false,
     val groupNotifications: Boolean = false,
