@@ -19,6 +19,7 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import org.hiylo.starburst.BuildConfig
 import io.ktor.client.*
 import io.ktor.client.engine.okhttp.*
 import io.ktor.client.plugins.*
@@ -104,9 +105,9 @@ object NetworkModule {
         // 无需另装 Compression 插件；后端代理会把上游 gzip 透传回来。
         
         install(Logging) {
-            // HEADERS：记请求行 + 状态行 + 耗时（Ktor 无更轻等级；不打印响应体，量可控），
-            // 便于真机定位「哪次请求慢」——弱网归因的关键。
-            level = LogLevel.HEADERS
+            // HEADERS：记请求行 + 状态行 + 耗时（Ktor 无更轻等级；不打印响应头之外的正文），
+            // 便于真机定位「哪次请求慢」——弱网归因的关键。release 降为 INFO 避免刷屏。
+            level = if (BuildConfig.DEBUG) LogLevel.HEADERS else LogLevel.INFO
             // 高危防护：HEADERS 会把 Authorization（Basic 明文 Base64 密码 / Bearer token）、
             // Cookie、Proxy-Authorization 等凭据原样打进 Logcat。改用自定义 Logger，
             // 命中敏感 header 时 value 打码为 <redacted>（名称照打）。请求(Send)与响应
