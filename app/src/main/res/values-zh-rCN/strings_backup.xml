@@ -18,4 +18,13 @@
     <string name="backup_error_unsupported_version">不支持的备份版本</string>
     <string name="backup_error_io">无法读取或写入文件</string>
     <string name="backup_error_generic">备份失败</string>
+
+    <string name="backup_sftp_section">SFTP / NAS</string>
+    <string name="backup_sftp_host">主机</string>
+    <string name="backup_sftp_port">端口</string>
+    <string name="backup_sftp_username">用户名</string>
+    <string name="backup_sftp_password">密码</string>
+    <string name="backup_sftp_dir">远程目录</string>
+    <string name="backup_sftp_export">备份到 NAS</string>
+    <string name="backup_sftp_import">从 NAS 恢复</string>
 </resources>

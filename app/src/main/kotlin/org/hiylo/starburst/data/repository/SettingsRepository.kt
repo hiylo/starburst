@@ -19,6 +19,7 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
+import org.hiylo.starburst.data.backup.SftpBackupSettings
 import org.hiylo.starburst.data.sync.SyncSettings
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
 import org.hiylo.starburst.domain.model.SessionCategory
@@ -60,6 +61,7 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_DYNAMIC_COLOR = false
         const val DEFAULT_ACCENT_COLOR = "indigo"
         const val DEFAULT_THEME_SCHEME = "default"
+        const val DEFAULT_CARTOON_STYLE = false
 
         private const val DEFAULT_DND_START = "22:00"
         private const val DEFAULT_DND_END = "07:00"
@@ -79,6 +81,7 @@ class SettingsRepository @Inject constructor(
         private val AMOLED_DARK_KEY = booleanPreferencesKey("amoled_dark")
         private val ACCENT_COLOR_KEY = stringPreferencesKey("accent_color")
         private val THEME_SCHEME_KEY = stringPreferencesKey("theme_scheme")
+        private val CARTOON_STYLE_KEY = booleanPreferencesKey("cartoon_style")
         private val COMPACT_MESSAGES_KEY = booleanPreferencesKey("compact_messages")
         private val COLLAPSE_TOOLS_KEY = booleanPreferencesKey("collapse_tools")
         private val EXPAND_REASONING_KEY = booleanPreferencesKey("expand_reasoning")
@@ -109,6 +112,11 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
          private val CUSTOM_COMMANDS_KEY = stringPreferencesKey("custom_commands")
          private val PROMPT_TEMPLATES_KEY = stringPreferencesKey("prompt_templates")
 
+         private val SFTP_BACKUP_HOST_KEY = stringPreferencesKey("sftp_backup_host")
+         private val SFTP_BACKUP_PORT_KEY = intPreferencesKey("sftp_backup_port")
+         private val SFTP_BACKUP_USERNAME_KEY = stringPreferencesKey("sftp_backup_username")
+         private val SFTP_BACKUP_DIR_KEY = stringPreferencesKey("sftp_backup_dir")
+
         /** SharedPreferences name used for synchronous locale reads in attachBaseContext. */
         private const val LOCALE_PREFS = "locale_prefs"
         private const val LOCALE_PREFS_KEY = "app_language"
@@ -120,7 +128,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         private const val SERVER_PINNED_IDS_PREFIX = "server_pinned_ids_"
          private const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
          private const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
-         private const val SERVER_SESSION_TEMPLATES_PREFIX = "server_session_templates_"
          private const val SERVER_SYSTEM_PROMPT_PREFIX = "server_system_prompt_"
          private const val SERVER_CONTEXT_LIMIT_PREFIX = "server_context_limit_"
 
@@ -160,9 +167,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
 
     private fun serverSavedPathsKey(serverId: String) =
         stringPreferencesKey(SERVER_SAVED_PATHS_PREFIX + serverId)
-
-    private fun serverSessionTemplatesKey(serverId: String) =
-        stringPreferencesKey(SERVER_SESSION_TEMPLATES_PREFIX + serverId)
 
     private fun serverSystemPromptKey(serverId: String) =
         stringPreferencesKey(SERVER_SYSTEM_PROMPT_PREFIX + serverId)
@@ -580,18 +584,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         val prompt: String,
     )
 
-    /** 可复用的「新会话」预设模板：目录 + 系统提示词 + 模型 + Prompt 模板（每服务器独立）。 */
-    @kotlinx.serialization.Serializable
-    data class SessionTemplate(
-        val id: String,
-        val name: String,
-        val directory: String = "",
-        val systemPrompt: String = "",
-        val modelProviderId: String = "",
-        val modelId: String = "",
-        val prompt: String = "",
-    )
-
     val promptTemplates: Flow<List<PromptTemplate>> = dataStore.data.mapDecoded { preferences ->
         decodePromptTemplates(preferences)
     }
@@ -636,63 +628,9 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    fun sessionTemplates(serverId: String): Flow<List<SessionTemplate>> = dataStore.data.mapDecoded { preferences ->
-        decodeSessionTemplates(preferences, serverSessionTemplatesKey(serverId))
-    }
-
-    /** 新增或更新一个会话模板，id 为空时生成新 id；返回保存后的模板。 */
-    suspend fun saveSessionTemplate(serverId: String, template: SessionTemplate): SessionTemplate {
-        val target = if (template.id.isBlank()) {
-            template.copy(id = java.util.UUID.randomUUID().toString())
-        } else {
-            template
-        }
-        dataStore.edit { preferences ->
-            val key = serverSessionTemplatesKey(serverId)
-            val current = decodeSessionTemplates(preferences, key).toMutableList()
-            val index = current.indexOfFirst { it.id == target.id }
-            if (index >= 0) current[index] = target else current.add(target)
-            preferences[key] = json.encodeToString(current)
-        }
-        return target
-    }
-
-    suspend fun deleteSessionTemplate(serverId: String, id: String) {
-        dataStore.edit { preferences ->
-            val key = serverSessionTemplatesKey(serverId)
-            val current = decodeSessionTemplates(preferences, key).filterNot { it.id == id }
-            preferences[key] = json.encodeToString(current)
-        }
-    }
-
-    /** 上移/下移一个会话模板（在模板列表内交换相邻项）。 */
-    suspend fun moveSessionTemplate(serverId: String, id: String, offset: Int) {
-        if (offset == 0) return
-        dataStore.edit { preferences ->
-            val key = serverSessionTemplatesKey(serverId)
-            val current = decodeSessionTemplates(preferences, key).toMutableList()
-            val from = current.indexOfFirst { it.id == id }
-            if (from < 0) return@edit
-            val to = (from + offset).coerceIn(0, current.lastIndex)
-            if (from == to) return@edit
-            val tmp = current[from]
-            current[from] = current[to]
-            current[to] = tmp
-            preferences[key] = json.encodeToString(current)
-        }
-    }
-
     private fun decodePromptTemplates(preferences: Preferences): List<PromptTemplate> {
         val raw = preferences[PROMPT_TEMPLATES_KEY] ?: return emptyList()
         return runCatching { json.decodeFromString<List<PromptTemplate>>(raw) }.getOrDefault(emptyList())
-    }
-
-    private fun decodeSessionTemplates(
-        preferences: Preferences,
-        key: Preferences.Key<String>,
-    ): List<SessionTemplate> {
-        val raw = preferences[key] ?: return emptyList()
-        return runCatching { json.decodeFromString<List<SessionTemplate>>(raw) }.getOrDefault(emptyList())
     }
 
     /**
@@ -818,7 +756,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /**
-     * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset".
+     * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset", "bubble".
      * Default: "default".
      */
     val themeScheme: Flow<String> = dataStore.data.mapDecoded { preferences ->
@@ -828,6 +766,43 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     suspend fun setThemeScheme(scheme: String) {
         dataStore.edit { preferences ->
             preferences[THEME_SCHEME_KEY] = scheme
+        }
+    }
+
+    /**
+     * 卡通风格开关：放大圆角、加粗描边、实体投影。与配色方案正交，可叠加使用。
+     * 默认关闭。
+     */
+    val cartoonStyle: Flow<Boolean> = dataStore.data.mapDecoded { preferences ->
+        preferences[CARTOON_STYLE_KEY] ?: DEFAULT_CARTOON_STYLE
+    }
+
+    suspend fun setCartoonStyle(enabled: Boolean) {
+        dataStore.edit { preferences ->
+            preferences[CARTOON_STYLE_KEY] = enabled
+        }
+    }
+
+    /**
+     * SFTP 备份目标的可持久化配置（不含口令，口令由 Keystore 加密存储）。
+     * 供「备份到 NAS」功能使用；默认端口 22。
+     */
+    val sftpBackupSettings: Flow<SftpBackupSettings> = dataStore.data.mapDecoded { preferences ->
+        SftpBackupSettings(
+            host = preferences[SFTP_BACKUP_HOST_KEY].orEmpty(),
+            port = preferences[SFTP_BACKUP_PORT_KEY] ?: 22,
+            username = preferences[SFTP_BACKUP_USERNAME_KEY].orEmpty(),
+            remoteDir = preferences[SFTP_BACKUP_DIR_KEY].orEmpty(),
+        )
+    }
+
+    /** 保存 SFTP 备份目标配置（host/port/username/remoteDir）。 */
+    suspend fun setSftpBackupSettings(settings: SftpBackupSettings) {
+        dataStore.edit { preferences ->
+            preferences[SFTP_BACKUP_HOST_KEY] = settings.host
+            preferences[SFTP_BACKUP_PORT_KEY] = settings.port
+            preferences[SFTP_BACKUP_USERNAME_KEY] = settings.username
+            preferences[SFTP_BACKUP_DIR_KEY] = settings.remoteDir
         }
     }
 
@@ -1174,6 +1149,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
             dynamicColor = dynamicColorEnabled(preferences),
             accentColor = preferences[ACCENT_COLOR_KEY] ?: DEFAULT_ACCENT_COLOR,
             themeScheme = preferences[THEME_SCHEME_KEY] ?: DEFAULT_THEME_SCHEME,
+            cartoonStyle = preferences[CARTOON_STYLE_KEY] ?: DEFAULT_CARTOON_STYLE,
             chatFontSize = preferences[FONT_SIZE_KEY] ?: "medium",
             notificationsEnabled = preferences[NOTIFICATIONS_KEY] ?: true,
             initialMessageCount = preferences[INITIAL_MESSAGE_COUNT_KEY] ?: 50,
@@ -1310,13 +1286,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
             .orEmpty()
     }
 
-    internal fun syncSessionTemplatesFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, List<SessionTemplate>> = serverIds.associateWith { serverId ->
-        decodeSessionTemplates(preferences, serverSessionTemplatesKey(serverId))
-    }
-
     internal fun syncRecentProjectsFrom(
         preferences: Preferences,
         serverIds: Collection<String>,
@@ -1348,6 +1317,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         preferences[DYNAMIC_COLOR_KEY] = settings.dynamicColor
         preferences[ACCENT_COLOR_KEY] = settings.accentColor
         preferences[THEME_SCHEME_KEY] = settings.themeScheme
+        preferences[CARTOON_STYLE_KEY] = settings.cartoonStyle
         preferences[FONT_SIZE_KEY] = settings.chatFontSize
         preferences[NOTIFICATIONS_KEY] = settings.notificationsEnabled
         preferences[INITIAL_MESSAGE_COUNT_KEY] = settings.initialMessageCount
@@ -1470,17 +1440,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
                 .filter(String::isNotBlank)
                 .distinct()
                 .joinToString("\n")
-        }
-    }
-
-    internal fun applySyncSessionTemplatesTo(
-        preferences: MutablePreferences,
-        templates: Map<String, List<SessionTemplate>>,
-        serverIdMapping: Map<String, String>,
-    ) {
-        templates.forEach { (remoteServerId, list) ->
-            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
-            preferences[serverSessionTemplatesKey(localServerId)] = json.encodeToString(list)
         }
     }
 

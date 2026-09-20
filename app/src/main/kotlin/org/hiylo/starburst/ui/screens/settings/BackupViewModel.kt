@@ -19,6 +19,8 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.data.backup.BackupException
 import org.hiylo.starburst.data.backup.BackupFailure
 import org.hiylo.starburst.data.backup.BackupRepository
+import org.hiylo.starburst.data.backup.SftpBackupConfig
+import org.hiylo.starburst.data.backup.SftpBackupSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -42,10 +44,25 @@ class BackupViewModel @Inject constructor(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage = _errorMessage.asStateFlow()
 
+    /** 已保存的 SFTP 目标配置（不含口令），用于预填对话框字段。 */
+    private val _sftpSettings = MutableStateFlow(SftpBackupSettings())
+    val sftpSettings = _sftpSettings.asStateFlow()
+
     /** 清空上次操作结果，供对话框打开时调用。 */
     fun reset() {
         _outcome.value = null
         _errorMessage.value = null
+    }
+
+    /** 载入已保存的 SFTP 目标配置（host/port/username/remoteDir）。 */
+    fun loadSftpSettings() {
+        viewModelScope.launch { _sftpSettings.value = repository.savedSftpSettings() }
+    }
+
+    /** 保存 SFTP 目标配置与口令（口令走 Keystore 加密）。 */
+    fun saveSftpConfig(settings: SftpBackupSettings, password: String) {
+        viewModelScope.launch { repository.saveSftpSettings(settings) }
+        repository.saveSftpPassword(password)
     }
 
     fun export(uri: Uri, passphrase: String) = runBackup(passphrase, BackupOutcome.EXPORTED) { chars ->
@@ -54,6 +71,14 @@ class BackupViewModel @Inject constructor(
 
     fun import(uri: Uri, passphrase: String) = runBackup(passphrase, BackupOutcome.IMPORTED) { chars ->
         repository.restoreBackup(uri, chars)
+    }
+
+    fun exportToSftp(config: SftpBackupConfig, passphrase: String) = runBackup(passphrase, BackupOutcome.EXPORTED) { chars ->
+        repository.exportBackupToSftp(config, chars)
+    }
+
+    fun importFromSftp(config: SftpBackupConfig, passphrase: String) = runBackup(passphrase, BackupOutcome.IMPORTED) { chars ->
+        repository.restoreBackupFromSftp(config, chars)
     }
 
     private fun runBackup(passphrase: String, success: BackupOutcome, block: suspend (CharArray) -> Unit) {

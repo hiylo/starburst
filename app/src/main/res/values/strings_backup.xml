@@ -18,4 +18,13 @@
     <string name="backup_error_unsupported_version">Unsupported backup version</string>
     <string name="backup_error_io">Could not read or write the file</string>
     <string name="backup_error_generic">Backup failed</string>
+
+    <string name="backup_sftp_section">SFTP / NAS</string>
+    <string name="backup_sftp_host">Host</string>
+    <string name="backup_sftp_port">Port</string>
+    <string name="backup_sftp_username">Username</string>
+    <string name="backup_sftp_password">Password</string>
+    <string name="backup_sftp_dir">Remote directory</string>
+    <string name="backup_sftp_export">Back up to NAS</string>
+    <string name="backup_sftp_import">Restore from NAS</string>
 </resources>

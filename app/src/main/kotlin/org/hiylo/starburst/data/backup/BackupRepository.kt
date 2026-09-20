@@ -23,6 +23,7 @@ import kotlinx.serialization.json.Json
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.repository.isPortableSyncServerUrl
+import org.hiylo.starburst.data.sync.LocalSyncSecretStore
 import org.hiylo.starburst.data.sync.PasswordCrypto
 import java.io.IOException
 import javax.crypto.AEADBadTagException
@@ -50,10 +51,62 @@ class BackupRepository @Inject constructor(
     private val serverRepository: ServerRepository,
     private val json: Json,
     @ApplicationContext private val context: Context,
+    private val localSyncSecretStore: LocalSyncSecretStore,
+    private val sftpBackupTransport: SftpBackupTransport,
 ) {
 
     /** 将当前本地数据快照加密后写入 [uri] 指定的文件。 */
     suspend fun exportBackup(uri: Uri, passphrase: CharArray) = withContext(Dispatchers.IO) {
+        val file = buildBackupFile(passphrase)
+        writeDocument(uri, json.encodeToString(file))
+    }
+
+    /** 读取并解密 [uri] 指定的备份文件，校验版本后写回各仓库。 */
+    suspend fun restoreBackup(uri: Uri, passphrase: CharArray) = withContext(Dispatchers.IO) {
+        val content = readDocument(uri)
+        restoreContent(content, passphrase)
+    }
+
+    /** 将当前本地数据快照加密后通过 SFTP 上传到 [config] 指定的远程目录。 */
+    suspend fun exportBackupToSftp(config: SftpBackupConfig, passphrase: CharArray) = withContext(Dispatchers.IO) {
+        val file = buildBackupFile(passphrase)
+        val content = json.encodeToString(file).toByteArray(Charsets.UTF_8)
+        try {
+            sftpBackupTransport.upload(content, config, BACKUP_FILENAME)
+        } catch (e: BackupException) {
+            throw e
+        } catch (e: Exception) {
+            throw BackupException(BackupFailure.WRITE_ERROR, e)
+        }
+    }
+
+    /** 通过 SFTP 从 [config] 下载加密备份并还原。 */
+    suspend fun restoreBackupFromSftp(config: SftpBackupConfig, passphrase: CharArray) = withContext(Dispatchers.IO) {
+        val content = try {
+            sftpBackupTransport.download(config, BACKUP_FILENAME).decodeToString()
+        } catch (e: BackupException) {
+            throw e
+        } catch (e: Exception) {
+            throw BackupException(BackupFailure.READ_ERROR, e)
+        }
+        restoreContent(content, passphrase)
+    }
+
+    /** 读取已保存的 SFTP 目标配置（不含口令）。 */
+    suspend fun savedSftpSettings(): SftpBackupSettings = settingsRepository.sftpBackupSettings.first()
+
+    /** 保存 SFTP 目标配置（host/port/username/remoteDir）。 */
+    suspend fun saveSftpSettings(settings: SftpBackupSettings) = settingsRepository.setSftpBackupSettings(settings)
+
+    /** 保存 SFTP 口令（Keystore 加密）。 */
+    fun saveSftpPassword(password: String) {
+        localSyncSecretStore.put(LocalSyncSecretStore.SecretKey.SFTP_PASSWORD, password)
+    }
+
+    /** 读取已保存的 SFTP 口令（Keystore 解密，可能为 null）。 */
+    fun savedSftpPassword(): String? = localSyncSecretStore.get(LocalSyncSecretStore.SecretKey.SFTP_PASSWORD)
+
+    private suspend fun buildBackupFile(passphrase: CharArray): BackupFile {
         val payload = snapshot()
         val plaintext = json.encodeToString(payload).toByteArray(Charsets.UTF_8)
         val encrypted = try {
@@ -61,13 +114,10 @@ class BackupRepository @Inject constructor(
         } finally {
             plaintext.fill(0)
         }
-        val file = BackupFile(createdAt = System.currentTimeMillis(), encrypted = encrypted)
-        writeDocument(uri, json.encodeToString(file))
+        return BackupFile(createdAt = System.currentTimeMillis(), encrypted = encrypted)
     }
 
-    /** 读取并解密 [uri] 指定的备份文件，校验版本后写回各仓库。 */
-    suspend fun restoreBackup(uri: Uri, passphrase: CharArray) = withContext(Dispatchers.IO) {
-        val content = readDocument(uri)
+    private suspend fun restoreContent(content: String, passphrase: CharArray) {
         val file = runCatching { json.decodeFromString<BackupFile>(content) }
             .getOrElse { throw BackupException(BackupFailure.INVALID_FILE, it) }
         if (file.version != BackupFile.VERSION) throw BackupException(BackupFailure.UNSUPPORTED_VERSION)
@@ -103,7 +153,6 @@ class BackupRepository @Inject constructor(
             llmProviderModel = llmProvider.second,
             servers = servers,
             serverSavedPaths = settingsRepository.syncSavedPathsFrom(preferences, serverIds),
-            serverSessionTemplates = settingsRepository.syncSessionTemplatesFrom(preferences, serverIds),
             serverRecentProjects = settingsRepository.syncRecentProjectsFrom(preferences, serverIds),
             sessionCategoryAssignments =
                 settingsRepository.syncSessionCategoryAssignmentsSnapshotFrom(preferences, serverIds),
@@ -136,7 +185,6 @@ class BackupRepository @Inject constructor(
                 serverIdMapping = serverIdMapping,
             )
             settingsRepository.applySyncSavedPathsTo(preferences, payload.serverSavedPaths, serverIdMapping)
-            settingsRepository.applySyncSessionTemplatesTo(preferences, payload.serverSessionTemplates, serverIdMapping)
             settingsRepository.applySyncRecentProjectsTo(preferences, payload.serverRecentProjects, serverIdMapping)
         }
         settingsRepository.updateSynchronousLocale(payload.settings.appLanguage)
@@ -162,5 +210,10 @@ class BackupRepository @Inject constructor(
         } catch (e: Exception) {
             throw BackupException(BackupFailure.READ_ERROR, e)
         }
+    }
+
+    companion object {
+        /** 备份文件的固定文件名（本地 SAF 与 SFTP 远程目录均使用）。 */
+        const val BACKUP_FILENAME = "starburst-backup.json"
     }
 }

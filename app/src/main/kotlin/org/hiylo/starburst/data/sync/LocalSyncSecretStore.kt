@@ -73,6 +73,7 @@ class LocalSyncSecretStore @Inject constructor(
         WEBDAV_PASSWORD("webdav_password"),
         SYNC_PASSPHRASE("sync_passphrase"),
         LLM_PROVIDER_API_KEY("llm_provider_api_key"),
+        SFTP_PASSWORD("sftp_backup_password"),
     }
 
     companion object {

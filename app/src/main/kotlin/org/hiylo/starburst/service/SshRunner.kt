@@ -103,15 +103,22 @@ object SshRunner {
      * 构建一个采用 known_hosts TOFU（首次信任、之后校验，防 MITM）的 SSH 会话。
      * 首次连接的主机指纹自动信任并持久化；已记录的主机指纹变化时 JSch 会直接拒绝。
      */
-    internal fun buildSession(server: ServerConfig): Session {
+    internal fun buildSession(server: ServerConfig): Session =
+        buildSession(server.host, server.sshPort, server.sshUsername, server.sshPassword ?: "")
+
+    /**
+     * 按独立主机参数构建 SSH 会话（供 SFTP 备份等非 OpenCode 服务器目标复用）。
+     * 与 [buildSession] 共享同一 known_hosts TOFU 策略与 UserInfo。
+     */
+    internal fun buildSession(host: String, port: Int, username: String, password: String): Session {
         val jsch = JSch()
         knownHostsFile?.let { file ->
             file.parentFile?.mkdirs()
             // 载入（或首次创建）known_hosts，用于主机密钥 TOFU：首次信任、之后变更即拒绝。
             runCatching { jsch.setKnownHosts(file.absolutePath) }
         }
-        val session = jsch.getSession(server.sshUsername, server.host, server.sshPort)
-        session.setPassword(server.sshPassword ?: "")
+        val session = jsch.getSession(username, host, port)
+        session.setPassword(password)
         // ask + UserInfo 自动确认 = 首次信任（TOFU）；已变更的主机密钥仍会被 JSch 硬性拒绝。
         session.setConfig("StrictHostKeyChecking", "ask")
         session.setConfig("PreferredAuthentications", "password")
