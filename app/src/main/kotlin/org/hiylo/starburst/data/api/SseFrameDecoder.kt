@@ -12,8 +12,8 @@ package org.hiylo.starburst.data.api
 // 与后端 StreamEvents 的 maxSSEEventSize（16MiB）对齐：附件 data URL 单帧可能达到
 // 10~13MB，默认 1MiB 会把大 patch/附件整帧丢弃，App 只能靠轮询补齐——弱网正反馈。
 // 单帧改用单个 StringBuilder 累积（不再逐行存 dataLines），消除 joinToString 的整帧拷贝；
-// 上限按 UTF-8 字节计（utf8Size），与后端 maxSSEEventSize 口径一致。RAM 内 String 仍是
-// UTF-16（每字符 2 字节），极端附件帧峰值约 2×，正常文本事件远小于此，可接受。
+// 上限按 UTF-8 字节计（toByteArray(UTF_8).size），与后端 maxSSEEventSize 口径一致。
+// RAM 内 String 仍是 UTF-16（每字符 2 字节），极端附件帧峰值约 2×，正常文本事件远小于此。
 internal const val DEFAULT_MAX_SSE_FRAME_SIZE = 16 * 1024 * 1024
 
 internal class SseFrameDecoder(
@@ -33,7 +33,7 @@ internal class SseFrameDecoder(
         if (value.startsWith(' ')) value = value.substring(1)
 
         if (field == "data") {
-            val addedSize = value.utf8Size() + if (hasDataLine) 1 else 0
+            val addedSize = value.toByteArray(Charsets.UTF_8).size + if (hasDataLine) 1 else 0
             if (size + addedSize > maxFrameSize) {
                 clear()
                 throw SseFrameTooLargeException(maxFrameSize)
