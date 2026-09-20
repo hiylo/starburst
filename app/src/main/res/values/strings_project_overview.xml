@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Project overview (file/line statistics by type) -->
+    <string name="menu_project_overview">Project overview</string>
+    <string name="project_overview_title">Project overview</string>
+    <string name="project_overview_loading">Scanning project files…</string>
+    <string name="project_overview_empty">No source files found in this project</string>
+    <string name="project_overview_no_directory">This session has no project directory</string>
+    <string name="project_overview_error">Failed to scan project</string>
+    <string name="project_overview_retry">Retry</string>
+    <string name="project_overview_summary">%1$d files · %2$d lines · %3$s</string>
+    <string name="project_overview_file_count_section">Files by type</string>
+    <string name="project_overview_line_count_section">Lines by type</string>
+    <string name="project_overview_largest_files_section">Largest files</string>
+    <string name="project_overview_type_column">Type</string>
+    <string name="project_overview_count_column">Files</string>
+    <string name="project_overview_code_column">Code</string>
+    <string name="project_overview_comment_column">Comment</string>
+    <string name="project_overview_blank_column">Blank</string>
+    <string name="project_overview_approximate_note">Comment lines are approximated by common syntax</string>
+</resources>

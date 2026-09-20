@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 项目概览（按类型统计文件数量与行数） -->
+    <string name="menu_project_overview">项目概览</string>
+    <string name="project_overview_title">项目概览</string>
+    <string name="project_overview_loading">正在扫描项目文件…</string>
+    <string name="project_overview_empty">该项目中未找到源文件</string>
+    <string name="project_overview_no_directory">当前会话没有项目目录</string>
+    <string name="project_overview_error">扫描项目失败</string>
+    <string name="project_overview_retry">重试</string>
+    <string name="project_overview_summary">共 %1$d 个文件 · %2$d 行 · %3$s</string>
+    <string name="project_overview_file_count_section">按类型统计文件数</string>
+    <string name="project_overview_line_count_section">按类型统计代码行</string>
+    <string name="project_overview_largest_files_section">最大的文件</string>
+    <string name="project_overview_type_column">类型</string>
+    <string name="project_overview_count_column">文件数</string>
+    <string name="project_overview_code_column">代码</string>
+    <string name="project_overview_comment_column">注释</string>
+    <string name="project_overview_blank_column">空行</string>
+    <string name="project_overview_approximate_note">注释行按常见语法近似统计</string>
+</resources>
