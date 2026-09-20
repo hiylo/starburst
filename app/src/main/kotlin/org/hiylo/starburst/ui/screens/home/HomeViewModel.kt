@@ -34,6 +34,7 @@ import org.hiylo.starburst.data.repository.DiagnosticLogRepository
 import org.hiylo.starburst.data.update.UpdateRepository
 import org.hiylo.starburst.data.update.UpdateState
 import org.hiylo.starburst.data.update.AvailableUpdate
+import org.hiylo.starburst.data.repository.favoriteSessionIds
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.service.StarBurstConnectionService
 import org.hiylo.starburst.service.SshRunner

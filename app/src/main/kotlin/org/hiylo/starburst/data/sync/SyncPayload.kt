@@ -8,6 +8,11 @@
  * Version : V1.0
  */
 package org.hiylo.starburst.data.sync
+import org.hiylo.starburst.data.repository.crossServerFavoriteOrder
+import org.hiylo.starburst.data.repository.favoriteSessionIds
+import org.hiylo.starburst.data.repository.favoriteSessionSnapshots
+import org.hiylo.starburst.data.repository.sessionCategories
+import org.hiylo.starburst.data.repository.sessionCategoryAssignments
 
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
 import org.hiylo.starburst.domain.model.SessionCategory

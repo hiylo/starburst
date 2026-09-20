@@ -13,6 +13,11 @@ import kotlinx.serialization.Serializable
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.sync.EncryptedSecrets
 import org.hiylo.starburst.data.sync.SyncSettings
+import org.hiylo.starburst.data.repository.crossServerFavoriteOrder
+import org.hiylo.starburst.data.repository.favoriteSessionIds
+import org.hiylo.starburst.data.repository.favoriteSessionSnapshots
+import org.hiylo.starburst.data.repository.sessionCategories
+import org.hiylo.starburst.data.repository.sessionCategoryAssignments
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionCategory

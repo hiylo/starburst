@@ -33,6 +33,11 @@ import org.hiylo.starburst.data.sync.WebDavSyncTransport
 import org.hiylo.starburst.data.sync.decideBackupSync
 import org.hiylo.starburst.data.sync.decideSync
 import org.hiylo.starburst.data.sync.decodeSyncPayload
+import org.hiylo.starburst.data.repository.crossServerFavoriteOrder
+import org.hiylo.starburst.data.repository.favoriteSessionIds
+import org.hiylo.starburst.data.repository.favoriteSessionSnapshots
+import org.hiylo.starburst.data.repository.sessionCategories
+import org.hiylo.starburst.data.repository.sessionCategoryAssignments
 import io.ktor.client.HttpClient
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow

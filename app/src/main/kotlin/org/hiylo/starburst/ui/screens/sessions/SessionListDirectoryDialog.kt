@@ -76,6 +76,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.FileNode
 import org.hiylo.starburst.data.repository.SettingsRepository
+import org.hiylo.starburst.data.repository.addSavedPath
+import org.hiylo.starburst.data.repository.removeSavedPath
+import org.hiylo.starburst.data.repository.savedPaths
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionStatus

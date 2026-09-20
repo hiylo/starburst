@@ -17,6 +17,8 @@ import org.hiylo.starburst.data.repository.EventReducer
 import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
+import org.hiylo.starburst.data.repository.sessionCategories
+import org.hiylo.starburst.data.repository.sessionCategoryAssignments
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session

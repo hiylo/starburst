@@ -76,6 +76,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.FileNode
 import org.hiylo.starburst.data.repository.SettingsRepository
+import org.hiylo.starburst.data.repository.saveSessionCategory
+import org.hiylo.starburst.data.repository.deleteSessionCategory
+import org.hiylo.starburst.data.repository.setSessionCategory
+import org.hiylo.starburst.data.repository.recordRecentProject
+import org.hiylo.starburst.data.repository.recentProjects
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionStatus

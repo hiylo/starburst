@@ -37,7 +37,7 @@ import javax.inject.Singleton
  * DataStore 偏好读取统一收口：`data` 的 map 变换（含 JSON 反序列化）移到 IO 线程执行，
  * 避免每次偏好变更都在主线程解码大集合（会话分类/收藏快照等随会话数线性增长）。
  */
-private fun <T> Flow<Preferences>.mapDecoded(
+internal fun <T> Flow<Preferences>.mapDecoded(
     transform: (Preferences) -> T,
 ): Flow<T> = map(transform).flowOn(Dispatchers.IO)
 
@@ -53,9 +53,9 @@ internal fun remapServerScopedKey(key: String, serverIdMapping: Map<String, Stri
  */
 @Singleton
 class SettingsRepository @Inject constructor(
-    private val dataStore: DataStore<Preferences>,
-    private val json: Json,
-    @dagger.hilt.android.qualifiers.ApplicationContext private val context: Context
+    internal val dataStore: DataStore<Preferences>,
+    internal val json: Json,
+    @dagger.hilt.android.qualifiers.ApplicationContext internal val context: Context
 ) {
     companion object {
         const val DEFAULT_DYNAMIC_COLOR = false
@@ -63,78 +63,78 @@ class SettingsRepository @Inject constructor(
         const val DEFAULT_THEME_SCHEME = "default"
         const val DEFAULT_CARTOON_STYLE = false
 
-        private const val DEFAULT_DND_START = "22:00"
-        private const val DEFAULT_DND_END = "07:00"
+        internal const val DEFAULT_DND_START = "22:00"
+        internal const val DEFAULT_DND_END = "07:00"
 
-        private val LANGUAGE_KEY = stringPreferencesKey("app_language")
-        private val THEME_KEY = stringPreferencesKey("app_theme")
-        private val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
-        private val FONT_SIZE_KEY = stringPreferencesKey("chat_font_size")
-        private val LINE_HEIGHT_KEY = floatPreferencesKey("chat_line_height")
-        private val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
+        internal val LANGUAGE_KEY = stringPreferencesKey("app_language")
+        internal val THEME_KEY = stringPreferencesKey("app_theme")
+        internal val DYNAMIC_COLOR_KEY = booleanPreferencesKey("dynamic_color")
+        internal val FONT_SIZE_KEY = stringPreferencesKey("chat_font_size")
+        internal val LINE_HEIGHT_KEY = floatPreferencesKey("chat_line_height")
+        internal val NOTIFICATIONS_KEY = booleanPreferencesKey("notifications_enabled")
 
-        private val INITIAL_MESSAGE_COUNT_KEY = intPreferencesKey("initial_message_count")
-        private val MESSAGE_HISTORY_RESPONSE_LIMIT_MB_KEY = intPreferencesKey("message_history_response_limit_mb")
-        private val RECENT_DIRECTORY_COUNT_KEY = intPreferencesKey("recent_directory_count")
-        private val CODE_WORD_WRAP_KEY = booleanPreferencesKey("code_word_wrap")
-        private val CONFIRM_BEFORE_SEND_KEY = booleanPreferencesKey("confirm_before_send")
-        private val AMOLED_DARK_KEY = booleanPreferencesKey("amoled_dark")
-        private val ACCENT_COLOR_KEY = stringPreferencesKey("accent_color")
-        private val THEME_SCHEME_KEY = stringPreferencesKey("theme_scheme")
-        private val CARTOON_STYLE_KEY = booleanPreferencesKey("cartoon_style")
-        private val COMPACT_MESSAGES_KEY = booleanPreferencesKey("compact_messages")
-        private val COLLAPSE_TOOLS_KEY = booleanPreferencesKey("collapse_tools")
-        private val EXPAND_REASONING_KEY = booleanPreferencesKey("expand_reasoning")
-        private val SHOW_TURN_DIVIDERS_KEY = booleanPreferencesKey("show_turn_dividers")
-        private val GROUP_SESSIONS_BY_PROJECT_KEY = booleanPreferencesKey("group_sessions_by_project")
-        private val HAPTIC_FEEDBACK_KEY = booleanPreferencesKey("haptic_feedback")
-        private val HAPTIC_STRENGTH_KEY = stringPreferencesKey("haptic_strength")
-        private val HAPTIC_DURATION_KEY = intPreferencesKey("haptic_duration_ms")
-        private val HAPTIC_AMPLITUDE_KEY = intPreferencesKey("haptic_amplitude")
-        private val RECONNECT_MODE_KEY = stringPreferencesKey("reconnect_mode")
-        private val BACKGROUND_WAKE_LOCK_KEY = booleanPreferencesKey("background_wake_lock")
-        private val KEEP_SCREEN_ON_KEY = booleanPreferencesKey("keep_screen_on")
-        private val SILENT_NOTIFICATIONS_KEY = booleanPreferencesKey("silent_notifications")
-        private val GROUP_NOTIFICATIONS_KEY = booleanPreferencesKey("group_notifications")
-        private val DND_ENABLED_KEY = booleanPreferencesKey("dnd_enabled")
-        private val DND_START_KEY = stringPreferencesKey("dnd_start") // "HH:mm"
-        private val DND_END_KEY = stringPreferencesKey("dnd_end") // "HH:mm"
-        private val COMPRESS_IMAGE_ATTACHMENTS_KEY = booleanPreferencesKey("compress_image_attachments")
-        private val IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY = intPreferencesKey("image_attachment_max_long_side")
-        private val IMAGE_ATTACHMENT_WEBP_QUALITY_KEY = intPreferencesKey("image_attachment_webp_quality")
-        private val TERMINAL_FONT_SIZE_KEY = floatPreferencesKey("terminal_font_size")
-        private val SHOW_TERMINAL_PANEL_HINT_KEY = booleanPreferencesKey("show_terminal_panel_hint")
-private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
-         private val CROSS_SERVER_FAVORITE_ORDER_KEY = stringPreferencesKey("cross_server_favorite_order")
-         private val FAVORITE_SESSION_SNAPSHOTS_KEY = stringPreferencesKey("favorite_session_snapshots")
-         private val LLM_PROVIDER_BASE_URL_KEY = stringPreferencesKey("llm_provider_base_url")
-         private val LLM_PROVIDER_MODEL_KEY = stringPreferencesKey("llm_provider_model")
-         private val CUSTOM_COMMANDS_KEY = stringPreferencesKey("custom_commands")
-         private val PROMPT_TEMPLATES_KEY = stringPreferencesKey("prompt_templates")
+        internal val INITIAL_MESSAGE_COUNT_KEY = intPreferencesKey("initial_message_count")
+        internal val MESSAGE_HISTORY_RESPONSE_LIMIT_MB_KEY = intPreferencesKey("message_history_response_limit_mb")
+        internal val RECENT_DIRECTORY_COUNT_KEY = intPreferencesKey("recent_directory_count")
+        internal val CODE_WORD_WRAP_KEY = booleanPreferencesKey("code_word_wrap")
+        internal val CONFIRM_BEFORE_SEND_KEY = booleanPreferencesKey("confirm_before_send")
+        internal val AMOLED_DARK_KEY = booleanPreferencesKey("amoled_dark")
+        internal val ACCENT_COLOR_KEY = stringPreferencesKey("accent_color")
+        internal val THEME_SCHEME_KEY = stringPreferencesKey("theme_scheme")
+        internal val CARTOON_STYLE_KEY = booleanPreferencesKey("cartoon_style")
+        internal val COMPACT_MESSAGES_KEY = booleanPreferencesKey("compact_messages")
+        internal val COLLAPSE_TOOLS_KEY = booleanPreferencesKey("collapse_tools")
+        internal val EXPAND_REASONING_KEY = booleanPreferencesKey("expand_reasoning")
+        internal val SHOW_TURN_DIVIDERS_KEY = booleanPreferencesKey("show_turn_dividers")
+        internal val GROUP_SESSIONS_BY_PROJECT_KEY = booleanPreferencesKey("group_sessions_by_project")
+        internal val HAPTIC_FEEDBACK_KEY = booleanPreferencesKey("haptic_feedback")
+        internal val HAPTIC_STRENGTH_KEY = stringPreferencesKey("haptic_strength")
+        internal val HAPTIC_DURATION_KEY = intPreferencesKey("haptic_duration_ms")
+        internal val HAPTIC_AMPLITUDE_KEY = intPreferencesKey("haptic_amplitude")
+        internal val RECONNECT_MODE_KEY = stringPreferencesKey("reconnect_mode")
+        internal val BACKGROUND_WAKE_LOCK_KEY = booleanPreferencesKey("background_wake_lock")
+        internal val KEEP_SCREEN_ON_KEY = booleanPreferencesKey("keep_screen_on")
+        internal val SILENT_NOTIFICATIONS_KEY = booleanPreferencesKey("silent_notifications")
+        internal val GROUP_NOTIFICATIONS_KEY = booleanPreferencesKey("group_notifications")
+        internal val DND_ENABLED_KEY = booleanPreferencesKey("dnd_enabled")
+        internal val DND_START_KEY = stringPreferencesKey("dnd_start") // "HH:mm"
+        internal val DND_END_KEY = stringPreferencesKey("dnd_end") // "HH:mm"
+        internal val COMPRESS_IMAGE_ATTACHMENTS_KEY = booleanPreferencesKey("compress_image_attachments")
+        internal val IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY = intPreferencesKey("image_attachment_max_long_side")
+        internal val IMAGE_ATTACHMENT_WEBP_QUALITY_KEY = intPreferencesKey("image_attachment_webp_quality")
+        internal val TERMINAL_FONT_SIZE_KEY = floatPreferencesKey("terminal_font_size")
+        internal val SHOW_TERMINAL_PANEL_HINT_KEY = booleanPreferencesKey("show_terminal_panel_hint")
+internal val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
+         internal val CROSS_SERVER_FAVORITE_ORDER_KEY = stringPreferencesKey("cross_server_favorite_order")
+         internal val FAVORITE_SESSION_SNAPSHOTS_KEY = stringPreferencesKey("favorite_session_snapshots")
+         internal val LLM_PROVIDER_BASE_URL_KEY = stringPreferencesKey("llm_provider_base_url")
+         internal val LLM_PROVIDER_MODEL_KEY = stringPreferencesKey("llm_provider_model")
+         internal val CUSTOM_COMMANDS_KEY = stringPreferencesKey("custom_commands")
+         internal val PROMPT_TEMPLATES_KEY = stringPreferencesKey("prompt_templates")
 
-         private val SFTP_BACKUP_HOST_KEY = stringPreferencesKey("sftp_backup_host")
-         private val SFTP_BACKUP_PORT_KEY = intPreferencesKey("sftp_backup_port")
-         private val SFTP_BACKUP_USERNAME_KEY = stringPreferencesKey("sftp_backup_username")
-         private val SFTP_BACKUP_DIR_KEY = stringPreferencesKey("sftp_backup_dir")
+         internal val SFTP_BACKUP_HOST_KEY = stringPreferencesKey("sftp_backup_host")
+         internal val SFTP_BACKUP_PORT_KEY = intPreferencesKey("sftp_backup_port")
+         internal val SFTP_BACKUP_USERNAME_KEY = stringPreferencesKey("sftp_backup_username")
+         internal val SFTP_BACKUP_DIR_KEY = stringPreferencesKey("sftp_backup_dir")
 
         /** SharedPreferences name used for synchronous locale reads in attachBaseContext. */
-        private const val LOCALE_PREFS = "locale_prefs"
-        private const val LOCALE_PREFS_KEY = "app_language"
+        internal const val LOCALE_PREFS = "locale_prefs"
+        internal const val LOCALE_PREFS_KEY = "app_language"
 
-        private const val SERVER_MODEL_HIDDEN_PREFIX = "server_model_hidden_"
-        private const val SERVER_PINNED_SESSIONS_PREFIX = "server_pinned_sessions_"
-        private const val SERVER_FAVORITE_SESSIONS_PREFIX = "server_favorite_sessions_"
-        private const val SERVER_SESSION_CATEGORY_PREFIX = "server_session_category_"
-        private const val SERVER_PINNED_IDS_PREFIX = "server_pinned_ids_"
-         private const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
-         private const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
-         private const val SERVER_SYSTEM_PROMPT_PREFIX = "server_system_prompt_"
-         private const val SERVER_CONTEXT_LIMIT_PREFIX = "server_context_limit_"
+        internal const val SERVER_MODEL_HIDDEN_PREFIX = "server_model_hidden_"
+        internal const val SERVER_PINNED_SESSIONS_PREFIX = "server_pinned_sessions_"
+        internal const val SERVER_FAVORITE_SESSIONS_PREFIX = "server_favorite_sessions_"
+        internal const val SERVER_SESSION_CATEGORY_PREFIX = "server_session_category_"
+        internal const val SERVER_PINNED_IDS_PREFIX = "server_pinned_ids_"
+         internal const val SERVER_RECENT_PROJECTS_PREFIX = "server_recent_projects_"
+         internal const val SERVER_SAVED_PATHS_PREFIX = "server_saved_paths_"
+         internal const val SERVER_SYSTEM_PROMPT_PREFIX = "server_system_prompt_"
+         internal const val SERVER_CONTEXT_LIMIT_PREFIX = "server_context_limit_"
 
         internal fun dynamicColorEnabled(preferences: Preferences): Boolean =
             preferences[DYNAMIC_COLOR_KEY] ?: DEFAULT_DYNAMIC_COLOR
 
-        private fun hapticPatternForStrength(strength: String): Pair<Int, Int> = when (strength) {
+        internal fun hapticPatternForStrength(strength: String): Pair<Int, Int> = when (strength) {
             "light" -> 18 to 80
             "strong" -> 48 to 255
             else -> 30 to 160
@@ -147,25 +147,25 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    private fun serverModelHiddenKey(serverId: String) =
+    internal fun serverModelHiddenKey(serverId: String) =
         stringSetPreferencesKey(SERVER_MODEL_HIDDEN_PREFIX + serverId)
 
-    private fun serverPinnedSessionsKey(serverId: String) =
+    internal fun serverPinnedSessionsKey(serverId: String) =
         stringPreferencesKey(SERVER_PINNED_SESSIONS_PREFIX + serverId)
 
-    private fun serverFavoriteSessionsKey(serverId: String) =
+    internal fun serverFavoriteSessionsKey(serverId: String) =
         stringPreferencesKey(SERVER_FAVORITE_SESSIONS_PREFIX + serverId)
 
-    private fun serverSessionCategoryKey(serverId: String) =
+    internal fun serverSessionCategoryKey(serverId: String) =
         stringPreferencesKey(SERVER_SESSION_CATEGORY_PREFIX + serverId)
 
-    private fun serverPinnedIdsKey(serverId: String) =
+    internal fun serverPinnedIdsKey(serverId: String) =
         stringPreferencesKey(SERVER_PINNED_IDS_PREFIX + serverId)
 
-    private fun serverRecentProjectsKey(serverId: String) =
+    internal fun serverRecentProjectsKey(serverId: String) =
         stringPreferencesKey(SERVER_RECENT_PROJECTS_PREFIX + serverId)
 
-    private fun serverSavedPathsKey(serverId: String) =
+    internal fun serverSavedPathsKey(serverId: String) =
         stringPreferencesKey(SERVER_SAVED_PATHS_PREFIX + serverId)
 
     private fun serverSystemPromptKey(serverId: String) =
@@ -173,299 +173,6 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
 
     private fun serverContextLimitKey(serverId: String) =
         intPreferencesKey(SERVER_CONTEXT_LIMIT_PREFIX + serverId)
-
-    val sessionCategories: Flow<List<SessionCategory>> = dataStore.data.mapDecoded { preferences ->
-        preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
-            runCatching { json.decodeFromString<List<SessionCategory>>(encoded) }.getOrDefault(emptyList())
-        }.orEmpty()
-    }
-
-    val crossServerFavoriteOrder: Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
-        preferences[CROSS_SERVER_FAVORITE_ORDER_KEY]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    val favoriteSessionSnapshots: Flow<Map<String, FavoriteSessionSnapshot>> = dataStore.data.mapDecoded { preferences ->
-        preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
-            runCatching { json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded) }.getOrDefault(emptyMap())
-        }.orEmpty()
-    }
-
-    fun sessionCategoryAssignments(serverId: String): Flow<Map<String, String>> = dataStore.data.mapDecoded { preferences ->
-        preferences[serverSessionCategoryKey(serverId)]?.let { encoded ->
-            runCatching { json.decodeFromString<Map<String, String>>(encoded) }.getOrDefault(emptyMap())
-        }.orEmpty()
-    }
-
-    suspend fun saveSessionCategory(category: SessionCategory) {
-        dataStore.edit { preferences ->
-            val categories = preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
-                runCatching { json.decodeFromString<List<SessionCategory>>(encoded) }.getOrDefault(emptyList())
-            }.orEmpty().toMutableList()
-            val index = categories.indexOfFirst { it.id == category.id }
-            if (index >= 0) categories[index] = category else categories += category
-            preferences[SESSION_CATEGORIES_KEY] = json.encodeToString(categories)
-        }
-    }
-
-    suspend fun deleteSessionCategory(categoryId: String) {
-        dataStore.edit { preferences ->
-            val categories = preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
-                runCatching { json.decodeFromString<List<SessionCategory>>(encoded) }.getOrDefault(emptyList())
-            }.orEmpty().filterNot { it.id == categoryId }
-            preferences[SESSION_CATEGORIES_KEY] = json.encodeToString(categories)
-        }
-    }
-
-    suspend fun setSessionCategory(serverId: String, sessionId: String, categoryId: String?) {
-        dataStore.edit { preferences ->
-            val key = serverSessionCategoryKey(serverId)
-            val assignments = preferences[key]?.let { encoded ->
-                runCatching { json.decodeFromString<Map<String, String>>(encoded) }.getOrDefault(emptyMap())
-            }.orEmpty().toMutableMap()
-            if (categoryId == null) assignments.remove(sessionId) else assignments[sessionId] = categoryId
-            preferences[key] = json.encodeToString(assignments)
-        }
-    }
-
-    fun favoriteSessionIds(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
-        (preferences[serverFavoriteSessionsKey(serverId)] ?: preferences[serverPinnedSessionsKey(serverId)])
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    suspend fun setSessionFavorite(
-        serverId: String,
-        sessionId: String,
-        favorite: Boolean,
-        snapshot: FavoriteSessionSnapshot? = null,
-    ) {
-        dataStore.edit { preferences ->
-            val key = serverFavoriteSessionsKey(serverId)
-            val legacyKey = serverPinnedSessionsKey(serverId)
-            val current = (preferences[key] ?: preferences[legacyKey])
-                ?.lineSequence()
-                ?.filter(String::isNotBlank)
-                ?.distinct()
-                ?.toList()
-                .orEmpty()
-            val updated = if (favorite) {
-                listOf(sessionId) + current.filterNot { it == sessionId }
-            } else {
-                current.filterNot { it == sessionId }
-            }
-            preferences[key] = updated.joinToString("\n")
-            preferences.remove(legacyKey)
-            val snapshotKey = favoriteSessionSnapshotKey(serverId, sessionId)
-            val snapshots = preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
-                runCatching {
-                    json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded)
-                }.getOrDefault(emptyMap())
-            }.orEmpty().toMutableMap()
-            if (!favorite) snapshots.remove(snapshotKey) else if (snapshot != null) snapshots[snapshotKey] = snapshot
-            preferences[FAVORITE_SESSION_SNAPSHOTS_KEY] = json.encodeToString(snapshots)
-        }
-    }
-
-    suspend fun cacheFavoriteSessionSnapshots(snapshots: Map<String, FavoriteSessionSnapshot>) {
-        if (snapshots.isEmpty()) return
-        dataStore.edit { preferences ->
-            val current = preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
-                runCatching {
-                    json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded)
-                }.getOrDefault(emptyMap())
-            }.orEmpty()
-            val updated = current + snapshots
-            if (updated != current) {
-                preferences[FAVORITE_SESSION_SNAPSHOTS_KEY] = json.encodeToString(updated)
-            }
-        }
-    }
-
-    fun favoriteSessionSnapshotKey(serverId: String, sessionId: String): String = "$serverId:$sessionId"
-
-    suspend fun moveFavoriteSession(serverId: String, sessionId: String, offset: Int) {
-        if (offset == 0) return
-        dataStore.edit { preferences ->
-            val key = serverFavoriteSessionsKey(serverId)
-            val legacyKey = serverPinnedSessionsKey(serverId)
-            val current = (preferences[key] ?: preferences[legacyKey])
-                ?.lineSequence()
-                ?.filter(String::isNotBlank)
-                ?.distinct()
-                ?.toMutableList()
-                ?: mutableListOf()
-            val from = current.indexOf(sessionId)
-            if (from < 0) return@edit
-            val to = (from + offset).coerceIn(0, current.lastIndex)
-            if (from == to) return@edit
-            current[from] = current[to]
-            current[to] = sessionId
-            preferences[key] = current.joinToString("\n")
-            preferences.remove(legacyKey)
-        }
-    }
-
-    fun pinnedSessionIds(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
-        preferences[serverPinnedIdsKey(serverId)]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    suspend fun setSessionPinned(serverId: String, sessionId: String, pinned: Boolean) {
-        dataStore.edit { preferences ->
-            val key = serverPinnedIdsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toMutableList()
-            val updated = if (pinned) {
-                listOf(sessionId) + current.filterNot { it == sessionId }
-            } else {
-                current.filterNot { it == sessionId }
-            }
-            preferences[key] = updated.joinToString("\n")
-        }
-    }
-
-    suspend fun movePinnedSession(serverId: String, sessionId: String, offset: Int) {
-        if (offset == 0) return
-        dataStore.edit { preferences ->
-            val key = serverPinnedIdsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toMutableList()
-            val from = current.indexOf(sessionId)
-            if (from < 0) return@edit
-            val to = (from + offset).coerceIn(0, current.lastIndex)
-            if (from == to) return@edit
-            val tmp = current[from]
-            current[from] = current[to]
-            current[to] = tmp
-            preferences[key] = current.joinToString("\n")
-        }
-    }
-
-    /**
-     * 批量重排置顶会话顺序（拖拽排序后按新的顺序整体写入）。
-     */
-    suspend fun reorderPinnedSessions(serverId: String, orderedIds: List<String>) {
-        val clean = orderedIds.filter(String::isNotBlank).distinct()
-        if (clean.isEmpty()) return
-        dataStore.edit { preferences ->
-            val key = serverPinnedIdsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toList()
-            if (current.isEmpty()) return@edit
-            val currentSet = current.toSet()
-            if (clean.any { it !in currentSet }) return@edit
-            // Preserve any pinned ids that were not part of the drag as trailing entries.
-            val reordered = (clean + current.filter { it !in clean }).distinct()
-            preferences[key] = reordered.joinToString("\n")
-        }
-    }
-
-    fun recentProjects(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
-        preferences[serverRecentProjectsKey(serverId)]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    suspend fun recordRecentProject(serverId: String, directory: String) {
-        val trimmed = directory.trim().trimEnd('/')
-        if (trimmed.isBlank()) return
-        dataStore.edit { preferences ->
-            val key = serverRecentProjectsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toMutableList()
-            val updated = (listOf(trimmed) + current.filterNot { it == trimmed }).take(20)
-            preferences[key] = updated.joinToString("\n")
-        }
-    }
-
-    /** 用户在 Open Project 里手动固定的常用路径（每服务器独立，保序，最近添加在前）。 */
-    fun savedPaths(serverId: String): Flow<List<String>> = dataStore.data.mapDecoded { preferences ->
-        preferences[serverSavedPathsKey(serverId)]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    suspend fun addSavedPath(serverId: String, path: String) {
-        val trimmed = path.trim().trimEnd('/')
-        if (trimmed.isBlank()) return
-        dataStore.edit { preferences ->
-            val key = serverSavedPathsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toMutableList()
-            val updated = (listOf(trimmed) + current.filterNot { it == trimmed }).take(30)
-            preferences[key] = updated.joinToString("\n")
-        }
-    }
-
-    suspend fun removeSavedPath(serverId: String, path: String) {
-        val trimmed = path.trim().trimEnd('/')
-        if (trimmed.isBlank()) return
-        dataStore.edit { preferences ->
-            val key = serverSavedPathsKey(serverId)
-            val current = (preferences[key] ?: "")
-                .lineSequence()
-                .filter(String::isNotBlank)
-                .distinct()
-                .toList()
-            preferences[key] = current.filterNot { it == trimmed }.joinToString("\n")
-        }
-    }
-
-    suspend fun setCrossServerFavoriteOrderItem(itemKey: String, favorite: Boolean) {
-        dataStore.edit { preferences ->
-            val current = preferences[CROSS_SERVER_FAVORITE_ORDER_KEY]
-                ?.lineSequence()
-                ?.filter(String::isNotBlank)
-                ?.distinct()
-                ?.toList()
-                .orEmpty()
-            val updated = if (favorite) {
-                if (itemKey in current) current else current + itemKey
-            } else {
-                current.filterNot { it == itemKey }
-            }
-            preferences[CROSS_SERVER_FAVORITE_ORDER_KEY] = updated.joinToString("\n")
-        }
-    }
-
-    suspend fun setCrossServerFavoriteOrder(itemKeys: List<String>) {
-        dataStore.edit { preferences ->
-            preferences[CROSS_SERVER_FAVORITE_ORDER_KEY] = itemKeys.distinct().joinToString("\n")
-        }
-    }
 
     /**
      * Selected language code (e.g. "en", "ru", "de") or empty string for system default.
@@ -571,7 +278,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    private fun decodeCustomCommands(preferences: Preferences): List<CustomCommand> {
+    internal fun decodeCustomCommands(preferences: Preferences): List<CustomCommand> {
         val raw = preferences[CUSTOM_COMMANDS_KEY] ?: return emptyList()
         return runCatching { Json.decodeFromString<List<CustomCommand>>(raw) }.getOrDefault(emptyList())
     }
@@ -628,7 +335,7 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    private fun decodePromptTemplates(preferences: Preferences): List<PromptTemplate> {
+    internal fun decodePromptTemplates(preferences: Preferences): List<PromptTemplate> {
         val raw = preferences[PROMPT_TEMPLATES_KEY] ?: return emptyList()
         return runCatching { json.decodeFromString<List<PromptTemplate>>(raw) }.getOrDefault(emptyList())
     }
@@ -1137,329 +844,4 @@ private val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
         }
     }
 
-    suspend fun syncSettingsSnapshot(): SyncSettings = syncSettingsSnapshotFrom(dataStore.data.first())
-
-    internal fun syncSettingsSnapshotFrom(preferences: Preferences): SyncSettings {
-        val fallbackHaptic = hapticPatternForStrength(preferences[HAPTIC_STRENGTH_KEY] ?: "medium")
-        val hapticDuration = (preferences[HAPTIC_DURATION_KEY] ?: fallbackHaptic.first).coerceIn(5, 100)
-        val hapticAmplitude = (preferences[HAPTIC_AMPLITUDE_KEY] ?: fallbackHaptic.second).coerceIn(1, 255)
-        return SyncSettings(
-            appLanguage = preferences[LANGUAGE_KEY] ?: "",
-            appTheme = preferences[THEME_KEY] ?: "system",
-            dynamicColor = dynamicColorEnabled(preferences),
-            accentColor = preferences[ACCENT_COLOR_KEY] ?: DEFAULT_ACCENT_COLOR,
-            themeScheme = preferences[THEME_SCHEME_KEY] ?: DEFAULT_THEME_SCHEME,
-            cartoonStyle = preferences[CARTOON_STYLE_KEY] ?: DEFAULT_CARTOON_STYLE,
-            chatFontSize = preferences[FONT_SIZE_KEY] ?: "medium",
-            notificationsEnabled = preferences[NOTIFICATIONS_KEY] ?: true,
-            initialMessageCount = preferences[INITIAL_MESSAGE_COUNT_KEY] ?: 50,
-            messageHistoryResponseLimitMb =
-                (preferences[MESSAGE_HISTORY_RESPONSE_LIMIT_MB_KEY] ?: 24).coerceIn(8, 128),
-            recentDirectoryCount = (preferences[RECENT_DIRECTORY_COUNT_KEY] ?: 20).coerceIn(5, 50),
-            codeWordWrap = preferences[CODE_WORD_WRAP_KEY] ?: false,
-            confirmBeforeSend = preferences[CONFIRM_BEFORE_SEND_KEY] ?: false,
-            amoledDark = preferences[AMOLED_DARK_KEY] ?: false,
-            compactMessages = preferences[COMPACT_MESSAGES_KEY] ?: false,
-            collapseTools = preferences[COLLAPSE_TOOLS_KEY] ?: false,
-            expandReasoning = preferences[EXPAND_REASONING_KEY] ?: false,
-            showTurnDividers = preferences[SHOW_TURN_DIVIDERS_KEY] ?: true,
-            groupSessionsByProject = preferences[GROUP_SESSIONS_BY_PROJECT_KEY] ?: false,
-            hapticFeedback = preferences[HAPTIC_FEEDBACK_KEY] ?: true,
-            hapticStrength = when {
-                hapticAmplitude < 96 -> "light"
-                hapticAmplitude < 208 -> "medium"
-                else -> "strong"
-            },
-            hapticDurationMillis = hapticDuration,
-            hapticAmplitude = hapticAmplitude,
-            reconnectMode = preferences[RECONNECT_MODE_KEY] ?: "normal",
-            backgroundWakeLock = preferences[BACKGROUND_WAKE_LOCK_KEY] ?: true,
-            keepScreenOn = preferences[KEEP_SCREEN_ON_KEY] ?: false,
-            silentNotifications = preferences[SILENT_NOTIFICATIONS_KEY] ?: false,
-            groupNotifications = preferences[GROUP_NOTIFICATIONS_KEY] ?: false,
-            dndEnabled = preferences[DND_ENABLED_KEY] ?: false,
-            dndStart = preferences[DND_START_KEY] ?: DEFAULT_DND_START,
-            dndEnd = preferences[DND_END_KEY] ?: DEFAULT_DND_END,
-            compressImageAttachments = preferences[COMPRESS_IMAGE_ATTACHMENTS_KEY] ?: true,
-            imageAttachmentMaxLongSide = preferences[IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY] ?: 1440,
-            imageAttachmentWebpQuality = preferences[IMAGE_ATTACHMENT_WEBP_QUALITY_KEY] ?: 60,
-            terminalFontSize = preferences[TERMINAL_FONT_SIZE_KEY] ?: 13f,
-            showTerminalPanelHint = preferences[SHOW_TERMINAL_PANEL_HINT_KEY] ?: true,
-        )
-    }
-
-    suspend fun applySyncSettings(settings: SyncSettings, categories: List<SessionCategory>) {
-        dataStore.edit { preferences ->
-            applySyncSettingsTo(preferences, settings, categories)
-        }
-        updateSynchronousLocale(settings.appLanguage)
-    }
-
-    suspend fun syncSessionCategoryAssignmentsSnapshot(
-        serverIds: Collection<String>,
-    ): Map<String, Map<String, String>> {
-        return syncSessionCategoryAssignmentsSnapshotFrom(dataStore.data.first(), serverIds)
-    }
-
-    internal fun syncSessionCategoriesFrom(preferences: Preferences): List<SessionCategory> {
-        return preferences[SESSION_CATEGORIES_KEY]?.let { encoded ->
-            runCatching { json.decodeFromString<List<SessionCategory>>(encoded) }.getOrDefault(emptyList())
-        }.orEmpty()
-    }
-
-    internal fun syncSessionCategoryAssignmentsSnapshotFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, Map<String, String>> {
-        return serverIds.associateWith { serverId ->
-            preferences[serverSessionCategoryKey(serverId)]?.let { encoded ->
-                runCatching { json.decodeFromString<Map<String, String>>(encoded) }.getOrDefault(emptyMap())
-            }.orEmpty()
-        }
-    }
-
-    internal fun syncFavoriteSessionIdsFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, List<String>> = serverIds.associateWith { serverId ->
-        (preferences[serverFavoriteSessionsKey(serverId)] ?: preferences[serverPinnedSessionsKey(serverId)])
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    internal fun syncCrossServerFavoriteOrderFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): List<String> {
-        val includedServerIds = serverIds.toSet()
-        return preferences[CROSS_SERVER_FAVORITE_ORDER_KEY]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.filter { it.substringBefore(':') in includedServerIds }
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    internal fun syncFavoriteSessionSnapshotsFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, FavoriteSessionSnapshot> {
-        val includedServerIds = serverIds.toSet()
-        return preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
-            runCatching { json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded) }
-                .getOrDefault(emptyMap())
-        }.orEmpty().filterKeys { it.substringBefore(':') in includedServerIds }
-    }
-
-    internal fun syncHiddenModelsFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, Set<String>> = serverIds.associateWith { serverId ->
-        preferences[serverModelHiddenKey(serverId)] ?: emptySet()
-    }
-
-    internal fun syncChatLineHeightFrom(preferences: Preferences): Float =
-        (preferences[LINE_HEIGHT_KEY] ?: 1f).coerceIn(1f, 2f)
-
-    internal fun syncPromptTemplatesFrom(preferences: Preferences): List<PromptTemplate> =
-        decodePromptTemplates(preferences)
-
-    internal fun syncCustomCommandsFrom(preferences: Preferences): List<CustomCommand> =
-        decodeCustomCommands(preferences)
-
-    internal fun syncLlmProviderFrom(preferences: Preferences): Pair<String, String> =
-        (preferences[LLM_PROVIDER_BASE_URL_KEY] ?: "") to (preferences[LLM_PROVIDER_MODEL_KEY] ?: "")
-
-    internal fun syncSavedPathsFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, List<String>> = serverIds.associateWith { serverId ->
-        preferences[serverSavedPathsKey(serverId)]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    internal fun syncRecentProjectsFrom(
-        preferences: Preferences,
-        serverIds: Collection<String>,
-    ): Map<String, List<String>> = serverIds.associateWith { serverId ->
-        preferences[serverRecentProjectsKey(serverId)]
-            ?.lineSequence()
-            ?.filter(String::isNotBlank)
-            ?.distinct()
-            ?.toList()
-            .orEmpty()
-    }
-
-    suspend fun applySyncSessionCategoryAssignments(
-        assignments: Map<String, Map<String, String>>,
-        serverIdMapping: Map<String, String>,
-    ) {
-        dataStore.edit { preferences ->
-            applySyncSessionCategoryAssignmentsTo(preferences, assignments, serverIdMapping)
-        }
-    }
-
-    internal fun applySyncSettingsTo(
-        preferences: MutablePreferences,
-        settings: SyncSettings,
-        categories: List<SessionCategory>,
-    ) {
-        preferences[LANGUAGE_KEY] = settings.appLanguage
-        preferences[THEME_KEY] = settings.appTheme
-        preferences[DYNAMIC_COLOR_KEY] = settings.dynamicColor
-        preferences[ACCENT_COLOR_KEY] = settings.accentColor
-        preferences[THEME_SCHEME_KEY] = settings.themeScheme
-        preferences[CARTOON_STYLE_KEY] = settings.cartoonStyle
-        preferences[FONT_SIZE_KEY] = settings.chatFontSize
-        preferences[NOTIFICATIONS_KEY] = settings.notificationsEnabled
-        preferences[INITIAL_MESSAGE_COUNT_KEY] = settings.initialMessageCount
-        preferences[MESSAGE_HISTORY_RESPONSE_LIMIT_MB_KEY] = settings.messageHistoryResponseLimitMb.coerceIn(8, 128)
-        preferences[RECENT_DIRECTORY_COUNT_KEY] = settings.recentDirectoryCount.coerceIn(5, 50)
-        preferences[CODE_WORD_WRAP_KEY] = settings.codeWordWrap
-        preferences[CONFIRM_BEFORE_SEND_KEY] = settings.confirmBeforeSend
-        preferences[AMOLED_DARK_KEY] = settings.amoledDark
-        preferences[COMPACT_MESSAGES_KEY] = settings.compactMessages
-        preferences[COLLAPSE_TOOLS_KEY] = settings.collapseTools
-        preferences[EXPAND_REASONING_KEY] = settings.expandReasoning
-        preferences[SHOW_TURN_DIVIDERS_KEY] = settings.showTurnDividers
-        preferences[GROUP_SESSIONS_BY_PROJECT_KEY] = settings.groupSessionsByProject
-        preferences[HAPTIC_FEEDBACK_KEY] = settings.hapticFeedback
-        preferences[HAPTIC_STRENGTH_KEY] = settings.hapticStrength
-        val fallbackHaptic = hapticPatternForStrength(settings.hapticStrength)
-        preferences[HAPTIC_DURATION_KEY] =
-            (settings.hapticDurationMillis ?: fallbackHaptic.first).coerceIn(5, 100)
-        preferences[HAPTIC_AMPLITUDE_KEY] =
-            (settings.hapticAmplitude ?: fallbackHaptic.second).coerceIn(1, 255)
-        preferences[RECONNECT_MODE_KEY] = settings.reconnectMode
-        preferences[BACKGROUND_WAKE_LOCK_KEY] = settings.backgroundWakeLock
-        preferences[KEEP_SCREEN_ON_KEY] = settings.keepScreenOn
-        preferences[SILENT_NOTIFICATIONS_KEY] = settings.silentNotifications
-        preferences[GROUP_NOTIFICATIONS_KEY] = settings.groupNotifications
-        preferences[DND_ENABLED_KEY] = settings.dndEnabled
-        preferences[DND_START_KEY] = settings.dndStart
-        preferences[DND_END_KEY] = settings.dndEnd
-        preferences[COMPRESS_IMAGE_ATTACHMENTS_KEY] = settings.compressImageAttachments
-        preferences[IMAGE_ATTACHMENT_MAX_LONG_SIDE_KEY] = settings.imageAttachmentMaxLongSide.coerceIn(0, 4096)
-        preferences[IMAGE_ATTACHMENT_WEBP_QUALITY_KEY] = settings.imageAttachmentWebpQuality.coerceIn(1, 100)
-        preferences[TERMINAL_FONT_SIZE_KEY] = settings.terminalFontSize.coerceIn(6f, 20f)
-        settings.showTerminalPanelHint?.let { preferences[SHOW_TERMINAL_PANEL_HINT_KEY] = it }
-        preferences[SESSION_CATEGORIES_KEY] = json.encodeToString(categories)
-    }
-
-    internal fun applySyncSessionCategoryAssignmentsTo(
-        preferences: MutablePreferences,
-        assignments: Map<String, Map<String, String>>,
-        serverIdMapping: Map<String, String>,
-    ) {
-        assignments.forEach { (remoteServerId, values) ->
-            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
-            preferences[serverSessionCategoryKey(localServerId)] = json.encodeToString(values)
-        }
-    }
-
-    internal fun applySyncSessionCollectionsTo(
-        preferences: MutablePreferences,
-        favoriteSessionIds: Map<String, List<String>>?,
-        crossServerFavoriteOrder: List<String>?,
-        favoriteSessionSnapshots: Map<String, FavoriteSessionSnapshot>?,
-        hiddenModels: Map<String, Set<String>>?,
-        serverIdMapping: Map<String, String>,
-    ) {
-        favoriteSessionIds?.let { favorites ->
-            serverIdMapping.forEach { (remoteServerId, localServerId) ->
-                preferences[serverFavoriteSessionsKey(localServerId)] = favorites[remoteServerId]
-                    .orEmpty()
-                    .filter(String::isNotBlank)
-                    .distinct()
-                    .joinToString("\n")
-                preferences.remove(serverPinnedSessionsKey(localServerId))
-            }
-        }
-        hiddenModels?.let { models ->
-            serverIdMapping.forEach { (remoteServerId, localServerId) ->
-                preferences[serverModelHiddenKey(localServerId)] = models[remoteServerId].orEmpty()
-            }
-        }
-        crossServerFavoriteOrder?.let { order ->
-            val mappedLocalIds = serverIdMapping.values.toSet()
-            val preservedLocalOnly = preferences[CROSS_SERVER_FAVORITE_ORDER_KEY]
-                ?.lineSequence()
-                ?.filter(String::isNotBlank)
-                ?.filterNot { it.substringBefore(':') in mappedLocalIds }
-                .orEmpty()
-            val mapped = order.mapNotNull { remapServerScopedKey(it, serverIdMapping) }
-            preferences[CROSS_SERVER_FAVORITE_ORDER_KEY] = (mapped + preservedLocalOnly).distinct().joinToString("\n")
-        }
-        favoriteSessionSnapshots?.let { snapshots ->
-            val mappedLocalIds = serverIdMapping.values.toSet()
-            val current = preferences[FAVORITE_SESSION_SNAPSHOTS_KEY]?.let { encoded ->
-                runCatching { json.decodeFromString<Map<String, FavoriteSessionSnapshot>>(encoded) }
-                    .getOrDefault(emptyMap())
-            }.orEmpty()
-            val preservedLocalOnly = current.filterKeys { it.substringBefore(':') !in mappedLocalIds }
-            val mapped = snapshots.mapNotNull { (key, snapshot) ->
-                remapServerScopedKey(key, serverIdMapping)?.let { it to snapshot }
-            }.toMap()
-            preferences[FAVORITE_SESSION_SNAPSHOTS_KEY] = json.encodeToString(preservedLocalOnly + mapped)
-        }
-    }
-
-    internal fun applyChatLineHeightTo(preferences: MutablePreferences, value: Float) {
-        preferences[LINE_HEIGHT_KEY] = value.coerceIn(1f, 2f)
-    }
-
-    internal fun applyPromptTemplatesTo(preferences: MutablePreferences, templates: List<PromptTemplate>) {
-        preferences[PROMPT_TEMPLATES_KEY] = json.encodeToString(templates)
-    }
-
-    internal fun applyCustomCommandsTo(preferences: MutablePreferences, commands: List<CustomCommand>) {
-        preferences[CUSTOM_COMMANDS_KEY] = Json.encodeToString(commands)
-    }
-
-    internal fun applyLlmProviderTo(preferences: MutablePreferences, baseUrl: String, model: String) {
-        preferences[LLM_PROVIDER_BASE_URL_KEY] = baseUrl.trim()
-        preferences[LLM_PROVIDER_MODEL_KEY] = model.trim()
-    }
-
-    internal fun applySyncSavedPathsTo(
-        preferences: MutablePreferences,
-        savedPaths: Map<String, List<String>>,
-        serverIdMapping: Map<String, String>,
-    ) {
-        savedPaths.forEach { (remoteServerId, paths) ->
-            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
-            preferences[serverSavedPathsKey(localServerId)] = paths
-                .filter(String::isNotBlank)
-                .distinct()
-                .joinToString("\n")
-        }
-    }
-
-    internal fun applySyncRecentProjectsTo(
-        preferences: MutablePreferences,
-        projects: Map<String, List<String>>,
-        serverIdMapping: Map<String, String>,
-    ) {
-        projects.forEach { (remoteServerId, paths) ->
-            val localServerId = serverIdMapping[remoteServerId] ?: return@forEach
-            preferences[serverRecentProjectsKey(localServerId)] = paths
-                .filter(String::isNotBlank)
-                .distinct()
-                .joinToString("\n")
-        }
-    }
-
-    internal fun updateSynchronousLocale(language: String) {
-        context.getSharedPreferences(LOCALE_PREFS, Context.MODE_PRIVATE).edit()
-            .putString(LOCALE_PREFS_KEY, language)
-            .apply()
-    }
 }
