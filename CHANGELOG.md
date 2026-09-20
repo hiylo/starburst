@@ -12,6 +12,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
+- **Top bar subtitle** — the chat top bar now shows the session's cumulative token usage
+  (`totalInputTokens + totalOutputTokens`) and cost, distinct from the input bar's budget ring
+  which shows the current context occupancy (`estimatedContextTokens / effectiveContextWindow`).
+  The previous unified-estimate subtitle duplicated the input bar's figure; the two now have
+  different purposes: the subtitle reports total consumption, the ring reports current context fill.
+- **Flame theme** — palette retuned for a more vivid "passionate red": primary
+  `#E53935`→`#FF1744` (Red A400), secondary `#F4511E`→`#FF6D00` (Orange A700),
+  tertiary `#B71C1C`→`#D50000` (Red A700); dark-mode counterparts brightened accordingly.
 - **Single-file size governance** — the largest Kotlin sources were split by responsibility with no
   behaviour change: chat screen (`ChatScreen*.kt`, `ChatInputBar.kt`), message bubble, chat
   dialogs and overlay cards, terminal panel, Git screen, settings screen, plus the SSE event
@@ -21,6 +29,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **CI** — JVM unit tests now run on every push and pull request (`./gradlew test` on JDK 17,
   `.github/workflows/ci.yml`), alongside the existing gitleaks secret scan and a new
   `scripts/check-file-size.sh` line-count guard wired into the same job.
+
+### Added
+- **Project Overview** — a new entry in the chat top-bar ⋮ menu that scans the session's project
+  directory and shows file/line statistics by type (code/comment/blank), largest files, and Git
+  repository info (branch, commit count, last commit, modified files and diffstat). Shell-side
+  scanning uses `find | xargs wc -c` + an awk line-classifier with C-style and `#`-style comment
+  detection; Git stats are extracted via a separate command block.
 
 ### Fixed
 - Long model display names pushed the context-budget ring and budget text off-screen in the bottom
