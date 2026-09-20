@@ -20,6 +20,8 @@ import org.hiylo.starburst.data.api.listMessages
 import org.hiylo.starburst.data.api.listMessagesPage
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.domain.model.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -86,41 +88,59 @@ internal suspend fun ChatViewModel.loadSession() {
             sessionDirectory = session.directory
             if (BuildConfig.DEBUG) Log.d(TAG, "Session directory resolved")
         }
-        val sessions = mutableListOf(session)
-        val queue = ArrayDeque<String>().apply { add(session.id) }
-        val visited = mutableSetOf(session.id)
-        while (queue.isNotEmpty() && visited.size < MAX_CHILD_SESSIONS) {
-            val parentId = queue.removeFirst()
-            val children = try {
-                api.listChildSessions(conn, parentId, directory = sessionDirectory)
-                    .filter { visited.add(it.id) }
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load children for session $parentId", e)
-                emptyList()
-            }
-            sessions += children
-            children.forEach { queue.addLast(it.id) }
-        }
-        // 用 upsert 逐个合并当前会话及其子会话，避免用 setSessions（权威替换）
-        // 传入局部列表会把列表里其它项目的根会话全部清掉，导致返回会话列表时被清空。
-        sessions.forEach { eventReducer.upsertSession(serverId, it) }
-        refreshGitRepositoryState()
-        // 会话的文件变更列表：SSE session.diff 只在「本次连接期间 agent 改动」时推送，
-        // 打开已有会话不会重放历史 diff，故用 REST /session/{id}/diff 拉一次初始状态，
-        // 否则「查看变更」菜单在重进会话时不会出现。
-        try {
-            val diffs = api.getSessionDiff(conn, sessionId)
-            eventReducer.setSessionDiffs(sessionId, diffs)
-        } catch (e: Exception) {
-            e.rethrowCancellation()
-            Log.e(TAG, "Failed to load session diff", e)
+        // 子会话 BFS、git 状态、文件变更列表互不依赖，且都不影响首屏消息，
+        // 并行执行以缩短打开会话的串行等待（原先 BFS→git→diff 串行）。
+        coroutineScope {
+            val childrenJob = async { loadChildSessions(session) }
+            val gitJob = async { refreshGitRepositoryState() }
+            val diffJob = async { loadInitialDiff() }
+            childrenJob.await()
+            gitJob.await()
+            diffJob.await()
         }
     } catch (e: Exception) {
         e.rethrowCancellation()
         Log.e(TAG, "Failed to load session info", e)
     } finally {
         sessionLoaded.complete(Unit)
+    }
+}
+
+/** BFS 拉取当前会话及其子会话，逐个 upsert 合并，避免权威替换清掉其它项目根会话。 */
+private suspend fun ChatViewModel.loadChildSessions(root: Session) {
+    val sessions = mutableListOf(root)
+    val queue = ArrayDeque<String>().apply { add(root.id) }
+    val visited = mutableSetOf(root.id)
+    while (queue.isNotEmpty() && visited.size < MAX_CHILD_SESSIONS) {
+        val parentId = queue.removeFirst()
+        val children = try {
+            api.listChildSessions(conn, parentId, directory = sessionDirectory)
+                .filter { visited.add(it.id) }
+        } catch (e: Exception) {
+            e.rethrowCancellation()
+            Log.e(TAG, "Failed to load children for session $parentId", e)
+            emptyList()
+        }
+        sessions += children
+        children.forEach { queue.addLast(it.id) }
+    }
+    // 用 upsert 逐个合并当前会话及其子会话，避免用 setSessions（权威替换）
+    // 传入局部列表会把列表里其它项目的根会话全部清掉，导致返回会话列表时被清空。
+    sessions.forEach { eventReducer.upsertSession(serverId, it) }
+}
+
+/**
+ * 会话的文件变更列表：SSE session.diff 只在「本次连接期间 agent 改动」时推送，
+ * 打开已有会话不会重放历史 diff，故用 REST /session/{id}/diff 拉一次初始状态，
+ * 否则「查看变更」菜单在重进会话时不会出现。
+ */
+private suspend fun ChatViewModel.loadInitialDiff() {
+    try {
+        val diffs = api.getSessionDiff(conn, sessionId)
+        eventReducer.setSessionDiffs(sessionId, diffs)
+    } catch (e: Exception) {
+        e.rethrowCancellation()
+        Log.e(TAG, "Failed to load session diff", e)
     }
 }
 
