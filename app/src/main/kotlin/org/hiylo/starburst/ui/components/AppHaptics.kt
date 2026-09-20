@@ -57,7 +57,11 @@ object AppHaptics {
                 when {
                     amplitude < 96 -> HapticFeedbackConstants.CLOCK_TICK
                     amplitude < 208 -> HapticFeedbackConstants.CONTEXT_CLICK
-                    else -> HapticFeedbackConstants.CONFIRM
+                    else -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                        HapticFeedbackConstants.CONFIRM
+                    } else {
+                        HapticFeedbackConstants.CONTEXT_CLICK
+                    }
                 },
                 HapticFeedbackConstants.FLAG_IGNORE_VIEW_SETTING or
                     HapticFeedbackConstants.FLAG_IGNORE_GLOBAL_SETTING,
