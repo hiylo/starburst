@@ -1,0 +1,30 @@
+appId: org.hiylo.starburst.debug
+name: E2E - Session List Navigation
+properties:
+  priority: P1
+  suite: e2e
+---
+# 1. 启动并连接
+- launchApp:
+    clearState: true
+- runFlow:
+    file: subflows/setup-connected.yml
+
+# 2. 进入 Sessions（服务器卡片上的 Sessions 按钮）
+- tapOn:
+    text: "^Sessions$"
+- waitForAnimationToEnd
+
+# 3. 验证会话列表页（服务器名 + 顶部动作 + 新建会话入口）
+- assertVisible:
+    text: "emu-test"
+- assertVisible:
+    text: "New Session"
+- takeScreenshot:
+    path: session-list
+
+# 4. 返回主页，验证仍保持连接
+- back
+- waitForAnimationToEnd
+- assertVisible:
+    text: "^Connected$"

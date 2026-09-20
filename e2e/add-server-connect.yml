@@ -1,0 +1,31 @@
+appId: org.hiylo.starburst.debug
+name: E2E - Add Server and Connect
+properties:
+  priority: P0
+  suite: e2e
+---
+# 1. 启动 app（清空状态）
+- launchApp:
+    clearState: true
+
+# 2. 等待冷启动渲染完成，再验证空状态
+- extendedWaitUntil:
+    visible: "StarBurst"
+    timeout: 30000
+- assertVisible:
+    text: "No servers configured"
+- waitForAnimationToEnd
+
+# 3. 复用共享子流程：添加服务器并连接
+- runFlow:
+    file: subflows/setup-connected.yml
+
+# 4. 验证连接后服务器卡片状态
+- assertVisible:
+    text: "Connected"
+- assertVisible:
+    text: "Disconnect"
+- assertVisible:
+    text: "Sessions"
+- takeScreenshot:
+    path: connected

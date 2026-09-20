@@ -1,0 +1,44 @@
+appId: org.hiylo.starburst.debug
+name: E2E - Settings Navigation
+properties:
+  priority: P1
+  suite: e2e
+---
+# 1. 启动 app（清空状态）
+- launchApp:
+    clearState: true
+
+# 2. 验证空状态主页（顶部设置入口可见）
+- extendedWaitUntil:
+    visible: "StarBurst"
+    timeout: 30000
+- assertVisible:
+    text: "No servers configured"
+- assertVisible:
+    text: "^Settings$"
+- waitForAnimationToEnd
+
+# 3. 进入设置页
+- tapOn:
+    text: "^Settings$"
+- waitForAnimationToEnd
+
+# 4. 验证设置页标题与关键分组
+- assertVisible:
+    text: "General"
+- assertVisible:
+    text: "Language"
+- assertVisible:
+    text: "Reconnect mode"
+- assertVisible:
+    text: "On-device model"
+- assertVisible:
+    text: "Settings sync"
+- takeScreenshot:
+    path: settings
+
+# 5. 返回主页
+- back
+- waitForAnimationToEnd
+- assertVisible:
+    text: "StarBurst"

@@ -1,0 +1,61 @@
+appId: org.hiylo.starburst.debug
+name: Setup - Add Server and Connect
+---
+# 共享子流程：从空状态添加服务器并连接（不 launchApp，由父流程负责启动）
+- extendedWaitUntil:
+    visible: "No servers configured"
+    timeout: 30000
+- tapOn:
+    text: "Add Server"
+- waitForAnimationToEnd
+
+# Server Name（空，输入）
+- tapOn:
+    text: "Server Name"
+- inputText: "emu-test"
+- hideKeyboard
+
+# Server address（空，输入；hint 192.0.2.100 仅为占位）
+- tapOn:
+    text: "Server address"
+- inputText: "10.0.2.2"
+- hideKeyboard
+
+# OpenCode port=4096 / Username=opencode / Backend token=ocb_default 均有默认值，跳过
+# 滚动到 Password 填写（键盘收起后再滚动，避免被键盘遮挡）
+- scrollUntilVisible:
+    element: "Password"
+    direction: DOWN
+- tapOn:
+    text: "Password"
+- inputText: "admin"
+- hideKeyboard
+
+# 保存
+- tapOn:
+    text: "Save"
+- waitForAnimationToEnd
+
+# 验证服务器已添加
+- assertVisible:
+    text: "emu-test"
+- assertVisible:
+    text: "Connect"
+
+# 连接
+- tapOn:
+    text: "Connect"
+- waitForAnimationToEnd
+
+# 可选处理通知权限弹窗（时序不定，出现才点 Allow）
+- runFlow:
+    when:
+      visible: "Allow"
+    commands:
+      - tapOn: "Allow"
+
+# 验证连接成功
+- extendedWaitUntil:
+    visible: "Connected"
+    timeout: 30000
+- waitForAnimationToEnd

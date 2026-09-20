@@ -1,0 +1,26 @@
+appId: org.hiylo.starburst.debug
+name: Smoke - Launch and Empty State
+properties:
+  priority: P0
+  suite: smoke
+---
+- launchApp:
+    clearState: true
+- assertVisible:
+    text: "StarBurst"
+- assertVisible:
+    text: "No servers configured"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: main-empty-state
+- tapOn:
+    text: "Add Server"
+- waitForAnimationToEnd
+- takeScreenshot:
+    path: add-server-screen
+- back
+- waitForAnimationToEnd
+- assertVisible:
+    text: "StarBurst"
+- takeScreenshot:
+    path: back-to-main

@@ -1,0 +1,32 @@
+appId: org.hiylo.starburst.debug
+name: E2E - AI Workbench Entry
+properties:
+  priority: P1
+  suite: e2e
+---
+# 1. 启动并连接
+- launchApp:
+    clearState: true
+- runFlow:
+    file: subflows/setup-connected.yml
+
+# 2. 进入 Sessions
+- tapOn:
+    text: "^Sessions$"
+- waitForAnimationToEnd
+
+# 3. 后端探测为异步，等待 AI Workbench 入口出现
+- extendedWaitUntil:
+    visible: "Open AI Workbench"
+    timeout: 20000
+
+# 4. 进入 AI Workbench
+- tapOn:
+    text: "Open AI Workbench"
+- waitForAnimationToEnd
+
+# 5. 验证工作台标题
+- assertVisible:
+    text: "AI Workbench"
+- takeScreenshot:
+    path: workbench
