@@ -25,8 +25,6 @@ import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.findFiles
 import org.hiylo.starburst.data.api.runShellCommand
 import org.hiylo.starburst.data.sync.LocalSyncSecretStore
-import org.hiylo.starburst.data.shell.ServerShellRegistry
-import org.hiylo.starburst.data.shell.ServerShellSession
 import org.hiylo.starburst.data.repository.DraftRepository
 import org.hiylo.starburst.data.repository.Draft
 import org.hiylo.starburst.data.repository.EventReducer
@@ -73,7 +71,6 @@ class ChatViewModel @Inject constructor(
     internal val backendRepository: BackendRepository,
     internal val serverRepository: ServerRepository,
     internal val serverAsrApi: ServerAsrApi,
-    internal val shellRegistry: ServerShellRegistry,
 ) : ViewModel() {
 
     @Volatile
@@ -107,17 +104,6 @@ class ChatViewModel @Inject constructor(
     /** Whether the current project is a Git repository (Project.vcs == "git"). */
     internal val _isGitRepository = MutableStateFlow(false)
     val isGitRepository: StateFlow<Boolean> = _isGitRepository
-    // ============ Project overview ============
-    /** 项目概览（按类型统计文件数量与行数）的加载状态。 */
-    internal val _projectOverview = MutableStateFlow<ProjectOverviewState>(ProjectOverviewState.Idle)
-    val projectOverview: StateFlow<ProjectOverviewState> = _projectOverview
-
-    /** 项目概览用的连接级常驻 PTY（按 serverId 复用，onCleared 时释放引用）。 */
-    private var overviewShellAcquired = false
-    internal val overviewShell: ServerShellSession by lazy {
-        overviewShellAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, sessionDirectory.orEmpty())
-    }
     // ============ Conversation summary ============
     /** True while a message/conversation summary is being generated. */
     internal val _isSummarizing = MutableStateFlow(false)
@@ -836,9 +822,6 @@ class ChatViewModel @Inject constructor(
     override fun onCleared() {
         closeTerminalSession()
         cancelListening()
-        if (overviewShellAcquired) {
-            shellRegistry.release(serverId.ifBlank { conn.baseUrl })
-        }
         super.onCleared()
         saveDraft()
         // 释放本会话在 EventReducer 中的消息/parts 缓存，避免所有打开过的会话常驻内存

@@ -83,7 +83,6 @@ internal fun ChatScreenOverlayDialogs(
     showCustomCommandsDialogState: MutableState<Boolean>,
     showSessionDiffDialogState: MutableState<Boolean>,
     showTimelineDialogState: MutableState<Boolean>,
-    showProjectOverviewState: MutableState<Boolean>,
     showAttachmentOptionsState: MutableState<Boolean>,
     showTemplatePickerState: MutableState<Boolean>,
     showSubagentContextDetailsState: MutableState<Boolean>,
@@ -98,15 +97,12 @@ internal fun ChatScreenOverlayDialogs(
     var showCustomCommandsDialog by showCustomCommandsDialogState
     var showSessionDiffDialog by showSessionDiffDialogState
     var showTimelineDialog by showTimelineDialogState
-    var showProjectOverview by showProjectOverviewState
     var showAttachmentOptions by showAttachmentOptionsState
     var showTemplatePicker by showTemplatePickerState
     var showSubagentContextDetails by showSubagentContextDetailsState
     var showSendConfirmDialog by showSendConfirmDialogState
     var pendingSendAction by pendingSendActionState
     var pendingTemplatePrompt by pendingTemplatePromptState
-
-    val projectOverviewState by viewModel.projectOverview.collectAsState()
 
     // Model picker dialog
     if (showModelPicker) {
@@ -345,14 +341,6 @@ internal fun ChatScreenOverlayDialogs(
                 )
             },
             onDismiss = { showTimelineDialog = false },
-        )
-    }
-
-    if (showProjectOverview) {
-        ProjectOverviewDialog(
-            state = projectOverviewState,
-            onRetry = viewModel::loadProjectOverview,
-            onDismiss = { showProjectOverview = false },
         )
     }
 
