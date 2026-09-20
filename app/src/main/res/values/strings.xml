@@ -387,6 +387,7 @@
     <string name="settings_theme_scheme_candy">Candy</string>
     <string name="settings_theme_scheme_ocean">Ocean</string>
     <string name="settings_theme_scheme_sunset">Sunset</string>
+    <string name="settings_theme_scheme_flame">Flame</string>
     <string name="settings_theme_scheme_bubble">Bubble</string>
 
     <!-- LLM provider settings -->

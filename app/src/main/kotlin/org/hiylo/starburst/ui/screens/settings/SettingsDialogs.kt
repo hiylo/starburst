@@ -423,7 +423,7 @@ internal fun ThemeSchemeDialog(
     onSchemeSelected: (String) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val schemeIds = listOf("default", "candy", "ocean", "sunset", "bubble")
+    val schemeIds = listOf("default", "candy", "ocean", "sunset", "flame", "bubble")
     AppDialog(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier.padding(24.dp),

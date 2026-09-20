@@ -81,6 +81,7 @@ internal fun themeSchemeNameRes(scheme: String): Int = when (scheme) {
     "candy" -> R.string.settings_theme_scheme_candy
     "ocean" -> R.string.settings_theme_scheme_ocean
     "sunset" -> R.string.settings_theme_scheme_sunset
+    "flame" -> R.string.settings_theme_scheme_flame
     "bubble" -> R.string.settings_theme_scheme_bubble
     else -> R.string.settings_theme_scheme_default
 }

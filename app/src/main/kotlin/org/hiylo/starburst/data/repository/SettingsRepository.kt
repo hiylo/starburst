@@ -463,7 +463,7 @@ internal val SESSION_CATEGORIES_KEY = stringPreferencesKey("session_categories")
     }
 
     /**
-     * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset", "bubble".
+     * Selected full theme scheme: "default" (accent-based), "candy", "ocean", "sunset", "flame", "bubble".
      * Default: "default".
      */
     val themeScheme: Flow<String> = dataStore.data.mapDecoded { preferences ->

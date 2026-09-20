@@ -270,6 +270,7 @@
     <string name="settings_theme_scheme_candy">糖果</string>
     <string name="settings_theme_scheme_ocean">海洋</string>
     <string name="settings_theme_scheme_sunset">日落</string>
+    <string name="settings_theme_scheme_flame">火焰</string>
     <string name="settings_theme_scheme_bubble">泡泡</string>
 
     <!-- LLM provider settings -->
