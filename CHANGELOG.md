@@ -11,6 +11,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-09-20
+
+### Added
+- **Project Overview** — a new entry in the chat top-bar ⋮ menu that scans the session's project
+  directory and shows file/line statistics by type (code/comment/blank), largest files, and Git
+  repository info (branch, commit count, last commit, modified files and diffstat). Shell-side
+  scanning uses `find | xargs wc -c` + an awk line-classifier with C-style and `#`-style comment
+  detection; Git stats are extracted via a separate command block.
+- **Prompt & session templates** — an editable prompt-template library (add/edit/delete/reorder) and
+  reusable session templates (directory + system prompt + model + prompt) for one-tap new sessions.
+- **Session timeline** — a per-session timeline reconstructing tool calls, permission requests,
+  questions, sub-agent spawns, and todo progress from in-memory event state.
+- **Custom system prompt + context budget** — per-server system prompt (injected on first message) and
+  a live token-usage estimate with a warning when approaching the model's context window.
+- **File diff viewer** — syntax-highlighted diff of working-tree and pending-vs-saved edits in the
+  workspace file browser.
+- **In-editor AI actions** — explain / refactor / write tests on selected code (backend LLM with
+  on-device MNN fallback), with copy/apply and a diff preview.
+- **On-device code assist** — an offline complete/rewrite action via the on-device MNN model.
+- **Service log live tail** — a streaming server-log viewer with keyword filter and auto-scroll.
+- **Bookmark tags & groups** — tag bookmarks and filter/group the bookmark list by tag.
+- **Encrypted backup & restore** — export/import settings + server configs as a passphrase-encrypted
+  bundle (AES-256-GCM + PBKDF2) via the Storage Access Framework.
+- **Token usage card** — a workbench card surfacing `/api/stats` (token usage / tasks / archives).
+- **Notification quick actions** — inline RemoteInput reply from question/completion notifications.
+
 ### Changed
 - **Top bar subtitle** — the chat top bar now shows the session's cumulative token usage
   (`totalInputTokens + totalOutputTokens`) and cost, distinct from the input bar's budget ring
@@ -30,12 +56,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/workflows/ci.yml`), alongside the existing gitleaks secret scan and a new
   `scripts/check-file-size.sh` line-count guard wired into the same job.
 
-### Added
-- **Project Overview** — a new entry in the chat top-bar ⋮ menu that scans the session's project
-  directory and shows file/line statistics by type (code/comment/blank), largest files, and Git
-  repository info (branch, commit count, last commit, modified files and diffstat). Shell-side
-  scanning uses `find | xargs wc -c` + an awk line-classifier with C-style and `#`-style comment
-  detection; Git stats are extracted via a separate command block.
+### Security
+- SSH host-key verification via known_hosts TOFU (previously `StrictHostKeyChecking=no`).
+- Server config stored encrypted at rest (Android Keystore AES-GCM) with legacy plaintext migration.
+- Passwords removed from Intents/PendingIntents (service resolves config by server id).
+- WebView hardening (no mixed content, external links open in browser, HTTP-auth host check,
+  block network loads for HTML previews).
+- Install script pinned to a release tag with a randomized backend token.
 
 ### Fixed
 - Long model display names pushed the context-budget ring and budget text off-screen in the bottom
@@ -51,37 +78,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   missing class. 2.52 removes the runtime reference; both debug and release now build and the app
   launches. Verified with a Compose instrumentation test (`ChatInputBarModelLabelTest`) on an
   Android 34 emulator.
-
-## [3.0.0] - 2026-09-17
-
-### Added
-- **Prompt & session templates** — an editable prompt-template library (add/edit/delete/reorder) and
-  reusable session templates (directory + system prompt + model + prompt) for one-tap new sessions.
-- **Session timeline** — a per-session timeline reconstructing tool calls, permission requests,
-  questions, sub-agent spawns, and todo progress from in-memory event state.
-- **Custom system prompt + context budget** — per-server system prompt (injected on first message) and
-  a live token-usage estimate with a warning when approaching the model's context window.
-- **File diff viewer** — syntax-highlighted diff of working-tree and pending-vs-saved edits in the
-  workspace file browser.
-- **In-editor AI actions** — explain / refactor / write tests on selected code (backend LLM with
-  on-device MNN fallback), with copy/apply and a diff preview.
-- **On-device code assist** — an offline complete/rewrite action via the on-device MNN model.
-- **Service log live tail** — a streaming server-log viewer with keyword filter and auto-scroll.
-- **Bookmark tags & groups** — tag bookmarks and filter/group the bookmark list by tag.
-- **Encrypted backup & restore** — export/import settings + server configs as a passphrase-encrypted
-  bundle (AES-256-GCM + PBKDF2) via the Storage Access Framework.
-- **Token usage card** — a workbench card surfacing `/api/stats` (token usage / tasks / archives).
-- **Notification quick actions** — inline RemoteInput reply from question/completion notifications.
-
-### Security
-- SSH host-key verification via known_hosts TOFU (previously `StrictHostKeyChecking=no`).
-- Server config stored encrypted at rest (Android Keystore AES-GCM) with legacy plaintext migration.
-- Passwords removed from Intents/PendingIntents (service resolves config by server id).
-- WebView hardening (no mixed content, external links open in browser, HTTP-auth host check,
-  block network loads for HTML previews).
-- Install script pinned to a release tag with a randomized backend token.
-
-### Fixed
 - Server connection could hang on "connecting" and block disconnect; blocking SSH/gateway work now
   runs outside the connection lock.
 - Connection state could desync (working but shown as disconnected/connecting); flags now reconcile

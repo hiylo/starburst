@@ -113,9 +113,10 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Source split: ChatScreen / NavGraph / OpenCodeApi broken into per-concern files
 - [x] Renamed project to StarBurst (app id, label, keystore)
 
-## Now — 3.0.0 (Planned ⏳)
+## 3.0.0 (Released ✅)
 
-> 2026-09-17. Test Intelligence (智能测试体系) + client increments.
+> Released 2026-09-20. Test Intelligence roadmap kickoff + client increments: project overview,
+> battery optimization, lifecycle-aware polling, E2E test suite, refined Flame theme.
 
 ### Test Intelligence (智能测试体系)
 
@@ -143,26 +144,27 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### Client features (客户端增量)
 
-- [ ] Token/usage stats (per session/server; backend aggregation + workbench card)
-- [ ] Prompt template library (add/edit/delete) + session templates (directory + system prompt + model + prompt one-tap reuse)
-- [ ] File diff viewer (PTY `git diff` / file compare, syntax highlight)
-- [ ] Service log live tail (PTY `tail -f` + keyword filter)
-- [ ] Bookmark tags/groups
+- [x] Token/usage stats (per session/server; backend aggregation + workbench card)
+- [x] Prompt template library (add/edit/delete) + session templates (directory + system prompt + model + prompt one-tap reuse)
+- [x] File diff viewer (PTY `git diff` / file compare, syntax highlight)
+- [x] Service log live tail (PTY `tail -f` + keyword filter)
+- [x] Bookmark tags/groups
 - [ ] Server monitoring alerts (CPU/memory/disk thresholds → push)
-- [ ] Notification quick actions (RemoteInput reply to launch a task)
+- [x] Notification quick actions (RemoteInput reply to launch a task)
 - [ ] Material You dynamic color theme
-- [ ] On-device code completion/rewrite model (MNN, offline)
-- [ ] In-editor AI actions (select code → explain/refactor/write tests → diff preview then apply)
-- [ ] Session timeline replay (agent decision-process visualization)
-- [ ] Custom system prompt + context-budget management (per server)
+- [x] On-device code completion/rewrite model (MNN, offline)
+- [x] In-editor AI actions (select code → explain/refactor/write tests → diff preview then apply)
+- [x] Session timeline replay (agent decision-process visualization)
+- [x] Custom system prompt + context-budget management (per server)
 - [ ] Multi-device/team sync (backend sync of config/templates/bookmarks/archives)
-- [ ] Encrypted backup & restore (Keystore backup bundle, cross-device restore)
+- [x] Encrypted backup & restore (Keystore backup bundle, cross-device restore)
 
 ### Engineering quality
 
-- [ ] Unit tests (ServerRepository encryption read/write, SettingsRepository persistence, …) —
+- [x] Unit tests (ServerRepository encryption read/write, SettingsRepository persistence, …) —
   `EventReducer` is already covered by `EventReducerTest` (33 cases), as is the encrypted backup
-  envelope (`PasswordCrypto` round-trip and wrong-passphrase rejection in `BackupPayloadTest`)
+  envelope (`PasswordCrypto` round-trip and wrong-passphrase rejection in `BackupPayloadTest`).
+  2026-09-20: 259 JVM unit tests + 2 Compose instrumentation + 5 Maestro E2E flows all green.
 - [ ] Startup time / memory / jank performance baseline
 
 ### Removed (product decision)
