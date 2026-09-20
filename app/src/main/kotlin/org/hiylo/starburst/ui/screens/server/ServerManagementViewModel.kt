@@ -274,7 +274,7 @@ class ServerManagementViewModel @Inject constructor(
 
         runCatching {
             shell.runCommand(
-                "ps -eo pcpu,pmem,rss,args | grep -i opencode | grep -v grep | head -1",
+                "ps -eo pcpu,pmem,rss,args | grep -i -- 'opencode' | grep -v grep | head -1",
                 timeoutMs = 20_000,
             )
         }

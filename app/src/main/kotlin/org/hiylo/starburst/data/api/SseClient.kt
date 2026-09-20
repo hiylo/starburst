@@ -96,9 +96,12 @@ class SseClient @Inject constructor(
             val statusCode = response.status.value
             Log.i(TAG, "SSE response: status=$statusCode, contentType=${response.headers["content-type"]}")
 
-            if (statusCode == 401) {
-                Log.e(TAG, "SSE auth failed (401). Check username/password.")
-                throw SseAuthException("Authentication failed (401)")
+            // 401 与 403 语义同源：均为鉴权失败。403 常见于密码被拒（Basic 认证）
+            // 以及镜像 Bearer token 失效；统一走 SseAuthException 终止重连并给出
+            // 认证错误提示，避免落入 retryable=false 的「服务器不响应」误导性文案。
+            if (statusCode == 401 || statusCode == 403) {
+                Log.e(TAG, "SSE auth failed ($statusCode). Check username/password or token.")
+                throw SseAuthException("Authentication failed ($statusCode)")
             }
 
             if (statusCode !in 200..299) {
@@ -332,15 +335,21 @@ class SseClient @Inject constructor(
                     val statusObj = props["status"]?.jsonObject
                     val statusType = statusObj?.get("type")?.jsonPrimitive?.content ?: "idle"
 
+                    if (statusType != "idle" && statusType != "busy" && statusType != "retry") {
+                        // 未知 status type：跳过整条事件而非降级 Idle——降级会把活跃会话
+                        // 误判为空闲，进而抑制完成/忙碌状态，造成通知丢失。
+                        if (BuildConfig.DEBUG) Log.d(TAG, "Unknown session status type: $statusType")
+                        return null
+                    }
                     val status = when (statusType) {
                         "idle" -> SessionStatus.Idle
                         "busy" -> SessionStatus.Busy
-                        "retry" -> SessionStatus.Retry(
-                            attempt = statusObj?.get("attempt")?.jsonPrimitive?.int ?: 0,
-                            message = statusObj?.get("message")?.jsonPrimitive?.content ?: "",
-                            next = statusObj?.get("next")?.jsonPrimitive?.long ?: 0
+                        else -> SessionStatus.Retry(
+                            // intOrNull/longOrNull：字段缺失或类型不符时不抛异常丢整条事件。
+                            attempt = statusObj?.get("attempt")?.jsonPrimitive?.intOrNull ?: 0,
+                            message = statusObj?.get("message")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            next = statusObj?.get("next")?.jsonPrimitive?.longOrNull ?: 0
                         )
-                        else -> SessionStatus.Idle
                     }
 
                     SseEvent.SessionStatus(sessionId = sessionId, status = status)
@@ -623,7 +632,7 @@ internal fun parseSessionError(props: JsonObject, json: Json): SseEvent.SessionE
     return SseEvent.SessionError(sessionId = sessionId, error = error)
 }
 
-/** Thrown when SSE returns 401 */
+/** Thrown when SSE returns 401 or 403 (authentication failure, non-retryable). */
 class SseAuthException(message: String) : Exception(message)
 
 /** Thrown for SSE transport and HTTP failures. */

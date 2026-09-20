@@ -79,9 +79,14 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
-internal fun StarBurstConnectionService.startReconciliation(server: ServerConfig, conn: ServerConnection) {
+internal suspend fun StarBurstConnectionService.startReconciliation(server: ServerConfig, conn: ServerConnection) {
+    // 先取消并等待旧对账 job 退出，再启动新 job：若只 put 新 job 而不取消旧的，
+    // 新旧两轮会并发拉取同一批状态，弱网下互相加重负载；join 保证旧 job 已彻底退出。
+    val old = reconciliationJobs[server.id]
+    old?.cancel()
+    old?.join()
     val job = serviceScope.launch { reconcileServerState(server, conn) }
-    reconciliationJobs.put(server.id, job)?.cancel()
+    reconciliationJobs.put(server.id, job)
     job.invokeOnCompletion { reconciliationJobs.remove(server.id, job) }
 }
 

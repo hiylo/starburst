@@ -71,6 +71,10 @@ internal fun parseSessionStatuses(payload: JsonObject): Map<String, SessionStatu
         }
     }
 
+// 连接是否走 starburst-backend 镜像通道：镜像连接的 baseUrl 以 /api/opencode 结尾。
+private fun ServerConnection.isMirrorChannel(): Boolean =
+    baseUrl.trimEnd('/').endsWith(OpenCodeGateway.BACKEND_API_PREFIX)
+
 // 后端镜像通道的全局状态快照：/session/status 不带 directory 时后端会合并上游快照
 // 与事件聚合返回全部会话状态（HTTP 200，可能为空表）。非 2xx（直连上游不支持
 // 无 directory 查询）返回 null，调用方据此退回按目录拉取。
@@ -92,9 +96,16 @@ suspend fun OpenCodeApi.listSessionStatusesForDirectories(
     directories: Collection<String>,
 ): Map<String, SessionStatus> {
     if (directories.isEmpty()) return emptyMap()
-    // 后端镜像（useBackend）通道：一次无 directory 的请求即可拿到全局聚合快照，
-    // 把 N×RTT 扇出降成单次往返；直连上游（非 2xx）自动退回按目录并发拉取。
-    runCatching { listSessionStatusesAggregatedOrNull(conn) }.getOrNull()?.let { return it }
+    // 仅镜像通道（useBackend）才支持一次无 directory 请求拿全局聚合快照，把 N×RTT
+    // 扇出降成单次往返；直连 opencode 不支持无 directory 查询，不再发聚合探针，
+    // 直接按目录并发拉取。镜像通道返回空表（HTTP 200 空 {}）也不能当作「无活动」——
+    // 可能是快照尚未聚合，仍回退按目录并发拉取。
+    if (conn.isMirrorChannel()) {
+        val aggregated = runCatching { listSessionStatusesAggregatedOrNull(conn) }
+            .getOrNull()
+            ?: emptyMap()
+        if (aggregated.isNotEmpty()) return aggregated
+    }
     return coroutineScope {
         directories.map { dir ->
             async {

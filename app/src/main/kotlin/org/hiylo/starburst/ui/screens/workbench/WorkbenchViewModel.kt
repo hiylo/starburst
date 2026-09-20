@@ -314,6 +314,9 @@ class WorkbenchViewModel @Inject constructor(
                     backendPushListener.eventFlow(backendUrl, backendToken).collect { ev ->
                         handlePushEvent(ev)
                     }
+                    // 正常断开（WS 被服务端按 idle 掐断）不算故障：
+                    // 退避时间回到基础值，避免空闲断流后重连延迟越拖越长。
+                    backoffMs = 2_000L
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Exception) {

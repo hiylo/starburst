@@ -61,7 +61,7 @@ data class ServerConnection(
             val base = url.trimEnd('/')
             val auth = if (password != null) {
                 val credentials = "$username:$password"
-                "Basic ${Base64.getEncoder().encodeToString(credentials.toByteArray())}"
+                "Basic ${Base64.getEncoder().encodeToString(credentials.toByteArray(Charsets.UTF_8))}"
             } else {
                 null
             }

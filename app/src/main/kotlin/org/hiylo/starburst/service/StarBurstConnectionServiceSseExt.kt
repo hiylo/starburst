@@ -121,7 +121,9 @@ internal fun StarBurstConnectionService.startSseConnection(
                         }
                         processEvent(server, event, scoped.directory, scoped.workspaceId)
                         if (event is SseEvent.ServerConnected) {
-                            startReconciliation(server, conn)
+                            // 用循环内最新 currentConn（SSH 重连后已指向新隧道端口），
+                            // 避免对账打到已被 replaceSshSession 关闭的旧 127.0.0.1:localPort。
+                            startReconciliation(server, currentConn)
                         }
                     }
 

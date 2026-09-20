@@ -10,6 +10,7 @@
 package org.hiylo.starburst.di
 
 import android.content.Context
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
@@ -26,12 +27,54 @@ import io.ktor.client.plugins.auth.providers.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.logging.*
 import io.ktor.client.plugins.websocket.*
+import io.ktor.http.HttpHeaders
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import okhttp3.ConnectionPool
 import okhttp3.Dispatcher
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+
+private const val NETWORK_LOG_TAG = "KtorCli"
+private const val REDACTED_PLACEHOLDER = "<redacted>"
+
+/** 命中即打码的敏感 header 名（小写比较，保持名称原样输出）。 */
+private val SENSITIVE_LOG_HEADERS: Set<String> = setOf(
+    HttpHeaders.Authorization.lowercase(),
+    HttpHeaders.ProxyAuthorization.lowercase(),
+    HttpHeaders.Cookie.lowercase(),
+    HttpHeaders.SetCookie.lowercase(),
+    HttpHeaders.ProxyAuthenticate.lowercase(),
+    HttpHeaders.WWWAuthenticate.lowercase(),
+    "x-api-key",
+    "x-auth-token",
+)
+
+/**
+ * 对 Ktor Logging 插件产出的消息逐行脱敏。Ktor 的 header 行格式为
+ * `-> NAME: value`（见 logHeader），故先剥离 `->` 前缀再取 header 名，
+ * 命中 [SENSITIVE_LOG_HEADERS] 时仅把 value 替换为 [REDACTED_PLACEHOLDER]，
+ * 名称照打（含 `->` 前缀）；REQUEST/METHOD/RESPONSE/状态行等非 header 行
+ * 原样透传。请求(Send)与响应(Receive)共用同一 logger，SSH / 镜像两条通道
+ * 均被覆盖。
+ */
+private fun redactSensitiveHeaders(message: String): String = message
+    .lineSequence()
+    .joinToString("\n") { line -> redactSensitiveLogLine(line) }
+
+private fun redactSensitiveLogLine(line: String): String {
+    val trimmed = line.trimStart()
+    val headerName = trimmed
+        .removePrefix("->")
+        .substringBefore(':')
+        .trim()
+    val separator = line.indexOf(':')
+    return if (separator > 0 && headerName.lowercase() in SENSITIVE_LOG_HEADERS) {
+        line.substring(0, separator) + ": " + REDACTED_PLACEHOLDER
+    } else {
+        line
+    }
+}
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "starburst_prefs")
 
@@ -61,10 +104,18 @@ object NetworkModule {
         // 无需另装 Compression 插件；后端代理会把上游 gzip 透传回来。
         
         install(Logging) {
-            logger = Logger.ANDROID
             // HEADERS：记请求行 + 状态行 + 耗时（Ktor 无更轻等级；不打印响应体，量可控），
             // 便于真机定位「哪次请求慢」——弱网归因的关键。
             level = LogLevel.HEADERS
+            // 高危防护：HEADERS 会把 Authorization（Basic 明文 Base64 密码 / Bearer token）、
+            // Cookie、Proxy-Authorization 等凭据原样打进 Logcat。改用自定义 Logger，
+            // 命中敏感 header 时 value 打码为 <redacted>（名称照打）。请求(Send)与响应
+            // (Receive)共用同一 logger，SSH / 镜像两条通道的出入流量均被覆盖。
+            logger = object : Logger {
+                override fun log(message: String) {
+                    Log.d(NETWORK_LOG_TAG, redactSensitiveHeaders(message))
+                }
+            }
         }
         
         install(HttpTimeout) {

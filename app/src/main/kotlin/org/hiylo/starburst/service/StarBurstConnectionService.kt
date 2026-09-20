@@ -256,16 +256,22 @@ class StarBurstConnectionService : Service() {
             lastDefaultNetwork = network
             // Recover on the first available network too, not just on network changes.
             if (previous != network) {
-                recoverConnectionsWithoutWakeLock("default network available")
+                recoverConnectionsAfterNetworkChange("default network available")
             }
         }
 
         override fun onLost(network: Network) {
-            if (lastDefaultNetwork == network) {
+            val wasDefault = lastDefaultNetwork == network
+            if (wasDefault) {
                 lastDefaultNetwork = null
             }
-            // Let the SSE heartbeats/backoff handle reconnection; nothing else to force here,
-            // but clearing lastDefaultNetwork ensures the next onAvailable triggers recovery.
+            // WiFi 断开→流量/VPN 接管属于网络拓扑变化，会物理打断既有 socket。
+            // 不能只在 onLost 里等下一个 onAvailable（VPN 重绑可能不触发可用回调），
+            // 也不能依赖后台保活关闭才有的恢复——网络变更与 Doze 是两码事。
+            // 这里主动触发一次（带 debounce+去重，短暂抖动只会合并成一次重建）。
+            if (wasDefault) {
+                recoverConnectionsAfterNetworkChange("default network lost")
+            }
         }
     }
 
@@ -826,14 +832,35 @@ class StarBurstConnectionService : Service() {
     @Synchronized
     private fun recoverConnectionsWithoutWakeLock(reason: String) {
         if (backgroundWakeLockEnabled || connections.isEmpty()) return
+        scheduleConnectionRecovery(reason)
+    }
+
+    /**
+     * 网络切换（WiFi→流量/VPN、VPN 重绑等）后的连接恢复。
+     *
+     * 与 [recoverConnectionsWithoutWakeLock] 不同：网络拓扑变化会物理打断既有 socket，
+     * 与 Doze 挂起无关，因此**不受后台保活（WakeLock）开关限制**——否则开着保活时
+     * 切网后连接会永久掉线，只能靠用户手动断开重连。由 debounce + recoveryJob 去重，
+     * 短暂抖动只会合并成一次重建。
+     */
+    @Synchronized
+    private fun recoverConnectionsAfterNetworkChange(reason: String) {
+        if (connections.isEmpty()) return
+        scheduleConnectionRecovery(reason)
+    }
+
+    private fun scheduleConnectionRecovery(reason: String) {
         if (recoveryJob?.isActive == true) return
         val now = SystemClock.elapsedRealtime()
         if (now - lastRecoveryAt < RECOVERY_DEBOUNCE_MS) return
         lastRecoveryAt = now
 
+        // 注意：网络切换场景（recoverConnectionsAfterNetworkChange）即使开着后台保活
+        // 也必须重建——拓扑变化会打断 socket，与 Doze 挂起无关。因此这里不再检查
+        // backgroundWakeLockEnabled，由调用方各自决定是否进来。
         recoveryJob = serviceScope.launch {
             val states = connections.values.toList()
-            if (states.isEmpty() || backgroundWakeLockEnabled) return@launch
+            if (states.isEmpty()) return@launch
             Log.i(TAG, "Recovering ${states.size} connection(s) after $reason")
             for (state in states) {
                 // SSH 隧道服务器重建新鲜隧道，避免新 SSE job 用已失效的旧 127.0.0.1:localPort。
@@ -900,7 +927,13 @@ class StarBurstConnectionService : Service() {
         } else {
             state.directConn ?: state.conn
         }
-        val conn = if (resolved != null) buildGatewayConn(config, baseConn, resolved.backendLocalPort) else state.conn
+        // 网络切换后重跑网关探测：旧镜像（backend mirror）端点可能随路由变化失效，
+        // 探测失败会自动回退直连 opencode，避免复用死掉的镜像连接永远连不上。
+        val conn = if (config.useSsh) {
+            if (resolved != null) buildGatewayConn(config, baseConn, resolved.backendLocalPort) else state.conn
+        } else {
+            buildGatewayConn(config, baseConn, resolved?.backendLocalPort)
+        }
 
         synchronized(this) {
             val current = connections[serverId] ?: run {
@@ -909,11 +942,10 @@ class StarBurstConnectionService : Service() {
                 return
             }
             val job = startSseConnection(config, conn, preload = preload)
-            val newPush = if (resolved != null) {
-                startBackendPushJob(config, conn, resolved.backendLocalPort)
-            } else {
-                current.pushJob
-            }
+            // 始终新建 pushJob（不复用 current.pushJob）：旧 sseJob 的 invokeOnCompletion 会取消其
+            // 创建时捕获的 pushJob（connectInternal 里注册），复用旧 job 会被连带 cancel 且不重启。
+            // startBackendPushJob 内部有守卫：非镜像直连时返回 null，无需担心误建僵尸订阅。
+            val newPush = startBackendPushJob(config, conn, resolved?.backendLocalPort)
             val capturedPushJob = newPush
             job.invokeOnCompletion { capturedPushJob?.cancel() }
             val replacement = current.copy(
@@ -983,11 +1015,13 @@ class StarBurstConnectionService : Service() {
             } catch (e: Exception) {
                 continue
             }
-            val currentBusy = statuses.filterValues { it is SessionStatus.Busy }.keys
+            // lastBusySessions 必须存 busy + retry 全集：只存 Busy 时，busy→retry 转场
+            // 会让 retry 会话从「上次集合」消失，被误判成已 idle 完成并重复推送通知。
+            val currentActive = statuses.filterValues { it is SessionStatus.Busy || it is SessionStatus.Retry }.keys
             val previous = lastBusySessions[serverId].orEmpty()
-            lastBusySessions[serverId] = currentBusy
+            lastBusySessions[serverId] = currentActive
             // 仍在活动的会话 = busy + retry（/session/status 只返回这两类）；
-            // 上次 busy 但这次彻底不在 = 已 idle 完成，避免把 busy→retry 误判为完成。
+            // 上次活跃但这次彻底不在 = 已 idle 完成，避免把 busy→retry 误判为完成。
             val completed = previous - statuses.keys
             for (sessionId in completed) {
                 if (isChildSession(sessionId)) continue

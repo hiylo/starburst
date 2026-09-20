@@ -122,8 +122,10 @@ internal fun StarBurstConnectionService.startBackendPushJob(server: ServerConfig
                     handleBackendPushEvent(server, ev)
                 }
                 // 正常断开（收集器结束/WS 被网关按 idle 掐断）不算故障：
-                // 重置失败计数，避免健康后端仅因空闲断流被误判回退直连。
+                // 重置失败计数，避免健康后端仅因空闲断流被误判回退直连；
+                // 同时重置退避间隔，避免多次空闲断开后 WS 重连永久卡在高倍退避。
                 consecutiveFailures = 0
+                backoffMs = 2_000L
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -188,8 +190,10 @@ internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerCon
             if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
             // 状态准确：以推送事件的 status 为准（/session/status 快照可能不全），
             // 立即写入 eventReducer，聊天与会话列表实时反映。
+            // 加单调守卫：聚合快照可能滞后，旧 idle 不得抢跑真实 busy/retry/question，
+            // 避免运行中会话被误标完成并触发 markUnconfirmedCompleted/完成通知。
             val status = ev.status()
-            if (status != null) {
+            if (status != null && shouldApplyPushStatus(eventReducer.sessionStatuses.value[ev.sessionId], status)) {
                 eventReducer.updateSessionStatus(ev.sessionId, status)
             }
             refreshSessionStatusesSoon(server)
@@ -233,6 +237,19 @@ internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerCon
                 ?: getString(R.string.error_unknown))
         }
         else -> {}
+    }
+}
+
+/**
+ * 推送状态单调守卫：Busy / Retry / Question 均视为比 Idle 活跃（更新）。
+ * 仅当推送状态不比当前状态「更旧」时才放行写入——聚合快照滞后的旧 Idle
+ * 不得覆盖真实 Busy/Retry，避免运行中会话被误标完成并触发完成通知。
+ * SSE 直连路径不经过此守卫（SSE 是权威实时源，直接驱动各分支）。
+ */
+private fun shouldApplyPushStatus(current: SessionStatus?, incoming: SessionStatus): Boolean {
+    return when (current) {
+        is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Retry -> incoming !is SessionStatus.Idle
+        else -> true
     }
 }
 

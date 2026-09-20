@@ -78,10 +78,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import javax.inject.Inject
@@ -779,12 +776,12 @@ class SessionListViewModel @Inject constructor(
                 val results = coroutineScope {
                     ids.map { id ->
                         async {
-                            id to api.deleteSession(conn, id)
+                            id to runCatching { api.deleteSession(conn, id) }
                         }
                     }.awaitAll()
                 }
-                val failed = results.filterNot { it.second }
-                results.filter { it.second }.forEach { (id, _) ->
+                val failed = results.filterNot { it.second.getOrDefault(false) }
+                results.filter { it.second.getOrDefault(false) }.forEach { (id, _) ->
                     settingsRepository.setSessionFavorite(serverId, id, false)
                     settingsRepository.setSessionPinned(serverId, id, false)
                     settingsRepository.setSessionCategory(serverId, id, null)
