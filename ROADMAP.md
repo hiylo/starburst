@@ -160,7 +160,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### Engineering quality
 
-- [ ] Unit tests (ServerRepository encryption read/write, EventReducer, SettingsRepository, …)
+- [ ] Unit tests (ServerRepository encryption read/write, SettingsRepository persistence, …) —
+  `EventReducer` is already covered by `EventReducerTest` (33 cases), as is the encrypted backup
+  envelope (`PasswordCrypto` round-trip and wrong-passphrase rejection in `BackupPayloadTest`)
 - [ ] Startup time / memory / jank performance baseline
 
 ### Removed (product decision)

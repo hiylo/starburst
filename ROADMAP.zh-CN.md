@@ -143,7 +143,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### 工程质量
 
-- [ ] 单元测试（ServerRepository 加密读写、EventReducer、SettingsRepository 等纯逻辑）
+- [ ] 单元测试（ServerRepository 加密读写、SettingsRepository 持久化等纯逻辑）——
+  `EventReducer` 已由 `EventReducerTest`（33 例）覆盖，加密备份包也已覆盖
+  （`BackupPayloadTest` 验证 `PasswordCrypto` 往返与错误口令拒绝）
 - [ ] 启动耗时 / 内存 / 卡顿性能基线
 
 ### 移除（产品决策）

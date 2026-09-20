@@ -9,6 +9,19 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- **Single-file size governance** — the largest Kotlin sources were split by responsibility with no
+  behaviour change: chat screen (`ChatScreen*.kt`, `ChatInputBar.kt`), message bubble, chat
+  dialogs and overlay cards, terminal panel, Git screen, settings screen, plus the SSE event
+  reducer, the chat view model and the connection service moved their handler groups into
+  same-package extension files. No source file exceeds the 1500-line hard cap now; the few files
+  still above the 1000-line target are listed with their rationale in `KNOWN_ISSUES.md`.
+- **CI** — JVM unit tests now run on every push and pull request (`./gradlew test` on JDK 17,
+  `.github/workflows/ci.yml`), alongside the existing gitleaks secret scan and a new
+  `scripts/check-file-size.sh` line-count guard wired into the same job.
+
 ## [3.0.0] - 2026-09-17
 
 ### Added

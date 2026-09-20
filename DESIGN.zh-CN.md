@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 version: alpha
 name: StarBurst-design-system
 description: |
-  StarBurst 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。
+  StarBurst 客户端的设计系统，基于 Material 3 + Jetpack Compose 实现。品牌以靛蓝（#6366F1）为核心，搭配紫罗兰与青色构成三档品牌色。界面提供 Light / Dark / AMOLED 三套语义化色板，AMOLED 模式使用纯黑表面（#000000）换取 OLED 省电。全部视觉 token 直接映射到 Compose 的 MaterialTheme.colorScheme / Typography，所有圆角、间距、组件风格集中在 ui/components 与 ui/theme 中，可直接被代码消费。另有一个可选的卡通风格层（CartoonStyle.kt），与配色方案正交：它放大圆角、加 2.5dp 描边、3dp 硬边偏移投影、纸纹点阵底纹与弹性按压/弹出动效——不改动任何颜色 token。
 
 colors:
   primary: "#6366F1"
@@ -125,6 +125,31 @@ rounded:
   picker: 12dp
   search: 14dp
   chip: 9999px
+  # 卡通风格（可选开启，见「卡通风格」）
+  cartoon-dialog: 32dp
+  cartoon-card: 26dp
+  cartoon-picker: 24dp
+  cartoon-search: 30dp
+  cartoon-primary-button: 28dp
+  cartoon-secondary-button: 22dp
+
+cartoon:
+  default-enabled: false
+  ink-stroke-width: 2.5dp
+  ink-color-light: "#241F33 @ 85%"
+  ink-color-dark: "onSurface @ 45%"
+  shadow-offset: 3dp
+  shadow-blur: 0dp
+  shadow-color-light: "#3A2E5C @ 30%"
+  shadow-color-dark: "#000000 @ 65%"
+  backdrop-dot-spacing: 18dp
+  backdrop-dot-radius: 1.3dp
+  backdrop-dot-color-light: "#241F33 @ 7%"
+  backdrop-dot-color-dark: "#FFFFFF @ 5%"
+  button-press-scale: 0.9
+  button-spring: "damping 0.5 / stiffness MediumLow"
+  dialog-pop-from: 0.8
+  dialog-spring: "damping 0.55 / stiffness MediumLow"
 
 spacing:
   xxs: 2dp
@@ -301,6 +326,7 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 | 1 — Container 阶梯 | `surfaceContainer → High → Highest` 逐步提亮 | 卡片、下拉、弹层底部容器 |
 | 2 — 对话框 | `surface` + 6dp tonalElevation（AMOLED 下 0dp + 1dp 描边） | AppDialog |
 | 3 — AMOLED 描边 | 纯黑表面 + `1dp outlineVariant(alpha 0.55)` | AMOLED 模式所有卡片/弹层 |
+| C — 卡通 | 硬边 3dp 右下偏移投影、零模糊、不用 M3 elevation；2.5dp 描边画在最上层 | 开启卡通风格后的所有对话框、按钮、卡片、聊天气泡 |
 
 系统**以容器色阶梯替代投影**：同一表面下用 `surfaceContainer*` 提亮表达「更上层」，而不是靠阴影。唯一常用的视觉动效是 `AppLoadingEdge`——顶部 3dp 高亮条用 primary 渐变横向缩放脉冲（`FastOutSlowInEasing` 700ms 往返）表达加载态。
 
@@ -314,6 +340,10 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 | `{rounded.card}` | 12dp | 卡片、会话卡片、列表项选中态（AppCardShape / AppPickerItemShape） |
 | `{rounded.search}` | 14dp | 搜索框（AppSearchShape） |
 | full | 9999px | 按钮、输入框、发送按钮、chips、开关 |
+| `{rounded.cartoon-dialog}` | 32dp | 开启卡通风格后的 AppDialog |
+| `{rounded.cartoon-card}` | 26dp | 开启卡通风格后的卡片 |
+| `{rounded.cartoon-picker}` | 24dp | 开启卡通风格后的选项项 |
+| `{rounded.cartoon-search}` | 30dp | 开启卡通风格后的搜索框 |
 
 半径词汇：**交互元素尽量圆**（按钮/输入/发送键全圆），**容器 12dp**，**对话框 20dp**。图标不做裁剪圆角（用 Material 图标原形）。
 
@@ -342,6 +372,77 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 - **状态徽章/chips**：连接成功 `{colors.status-connected}`、错误 `{colors.status-error}`、警告 `{colors.status-warning}`。
 - **Section 标题**：`labelMedium` 500，`{colors.primary}`，`padding(start 16dp, top 16dp, bottom 4dp)`。
 
+## 卡通风格
+
+> **来源文件**：`ui/theme/CartoonStyle.kt`（开关、形状、描边/投影 token）、`ui/theme/Theme.kt`
+> （`cartoonStyle` 参数）、`ui/components/AppSurfaces.kt`（自适应形状 + 对话框/按钮外观）。
+> 入口：设置 → 外观 → **卡通风格**。
+
+卡通感**不来自换色**——现有的 `theme_scheme`（candy / ocean / sunset / bubble）只改 `ColorScheme`，
+这正是它们看起来「只是换了个色」的原因。卡通风格是独立于配色的一层视觉语言，五个杠杆：
+
+| 杠杆 | 常规 | 卡通 |
+|---|---|---|
+| 圆角 | 对话框 20 / 卡片 12 / 选项 12 / 搜索 14 / 气泡 12 | 对话框 32 / 卡片 26 / 选项 24 / 搜索 30 / 气泡 26-6-26-22（用户）、24（助手） |
+| 描边 | 无（AMOLED 为 1dp `outlineVariant`） | 2.5dp 描边——浅色表面 `#241F33`@85%，深色表面 `onSurface`@45% |
+| 投影 | 无（用容器色阶梯替代） | 硬边 3dp 右下偏移块，**零模糊**，浅色 `#3A2E5C`@30% / 深色黑@65%；不使用 M3 elevation |
+| 底纹 | 纯色容器 | 纸纹点阵：18dp 间距、1.3dp 点径，浅色 `#241F33`@7% / 深色白@5% |
+| 动效 | M3 默认 | 按钮按下缩到 0.9 并配低阻尼弹簧；对话框从 0.8 弹出 |
+
+### 接入方式
+
+- `LocalCartoonStyle` 是 `staticCompositionLocalOf { false }`，`isCartoonStyle()` 读取它；
+  `StarBurstTheme` 在同一帧内同时提供 local 与全局开关。
+- `AppCardShape` / `AppDialogShape` / `AppPickerItemShape` / `AppSearchShape` 都是
+  `AdaptiveRoundedShape(normal, cartoon)` 实例，`createOutline` 在**绘制期**从
+  `CartoonStyleState.enabled` 解析圆角，因此既有约 60 处 `shape = AppCardShape` 调用点
+  一行不用改即可整体升级。
+- **一个 Modifier 搞定全部外观**：`Modifier.cartoonChrome(shape = AppCardShape)` =
+  `cartoonOffsetShadow(shape).cartoonInkOutline(shape)`。它套在任意 `Card` / `Surface` / `Box`
+  上，不需要动 `border` 和 `elevation` 参数，所以既有调用点保留 AMOLED 描边、只追加卡通外观。
+  关闭卡通风格时原样返回，不产生任何绘制节点。
+- 绘制顺序是 `cartoonChrome` 内部写死的：投影的 `drawWithContent` 在 `drawContent()` **之前**
+  画形状（因此落在容器自身背景之下），描边的 `drawWithContent` **先**画 `drawContent()`
+  （因此 2.5dp 墨线不会被容器背景盖住，始终是完整线宽）。
+- `cartoonOffsetShadow` **不用** `Modifier.shadow`——那个 API 没有 offset 参数，只会模糊。
+  投影是把同一形状路径整体平移画出来，这才是硬边、漫画感的关键。形状转路径走
+  `DrawScope.drawShapePath`：均匀圆角返回 `Outline.Rectangle`（不携带半径），半径要回头从
+  `AdaptiveRoundedShape` 读；不对称气泡返回 `Outline.Generic`，直接复用其路径。
+- 按压回弹在 `cartoonButtonStyle()`：`MutableInteractionSource` + `collectIsPressedAsState()`
+  驱动 `animateFloatAsState(0.9f)`，`spring(dampingRatio = 0.5f, stiffness = MediumLow)`，
+  再 `.scale()` + `.cartoonChrome()`。`AppPrimaryButton` / `AppSecondaryButton` 把同一个
+  `interactionSource` 传给 M3 按钮，波纹与缩放读同一份按压状态。
+- 对话框弹出是 `AppDialog` 上的 `Animatable(0.8f → 1f)`，
+  `spring(dampingRatio = 0.55f, stiffness = MediumLow)`。注意 `Animatable` 要引
+  `androidx.compose.animation.core.Animatable`——`androidx.compose.ui.graphics` 下的那个是
+  `Animatable<Color>`，会静默变成类型不匹配。
+- 纸纹在 `MainActivity` 的根 `Box` 上挂 `Modifier.cartoonBackdrop()`，整 App 一处生效。
+  透明度刻意压得很低：它不能和信息层级抢注意力。
+- 持久化：DataStore 的 `cartoon_style`，并镜像到 `SyncSettings.cartoonStyle`，
+  与其他外观设置一样跨设备同步。
+
+### 覆盖范围
+
+完整外观（圆角 + 描边 + 偏移投影）：全部对话框、全部 App 按钮（`AppPrimaryButton` /
+`AppSecondaryButton`）、首页卡片、全部设置卡片（共用 `SettingsCard`）、聊天消息气泡。
+
+只有圆角、没有外观：`HomeScreen` / `SettingsDisplayNames` 之外约 55 处
+`Surface(shape = AppCardShape, ...)` 只拿到更大的圆角，观感是「更圆」还不是「贴纸」——
+在 `modifier` 上追加 `.cartoonChrome(AppCardShape)` 即可补齐。
+
+### 已知缺口
+
+- **字体未接入。** `res/font/` 目录不存在，全套走 `FontFamily.Default`（`Type.kt`）。圆体/手写体
+  是卡通感剩下最大的一块杠杆，需要一份有授权的 `.ttf`（拉丁文 Baloo 2 / Fredoka，中文
+  Smiley Sans / 站酷快乐体）放进 `app/src/main/res/font/`，再据此构建卡通版 `Typography`。
+  代码里没有为它留死钩子——资源到位时再补。
+- **`cornerRadiusPx` 只认识 `AdaptiveRoundedShape`。** `RoundedCornerShape` 把半径存成
+  `CornerSize`、不暴露 `Dp`，所以把普通 `RoundedCornerShape` 传给 `cartoonChrome` 时描边会按
+  0 圆角画。请传 `AdaptiveRoundedShape`（均匀圆角）或不对称 `RoundedCornerShape`
+  （走 `Outline.Generic` 路径分支）。
+- 顶栏未接入外观：没有共享的 `TopAppBar` 组件，接入要改约 30 处页面。
+- 尚无插画、吉祥物或 emoji 图标体系。
+
 ## Do's and Don'ts
 
 ### Do
@@ -350,14 +451,20 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 - 按钮走 `AppPrimaryButton / AppSecondaryButton` 封装——AMOLED 语义（黑底描边）由封装自动处理，业务代码不感知。
 - 状态语义固定：连接绿 `#4CAF50`、错误红 `#EF4444`、警告琥珀 `#F59E0B`。
 - 代码与终端统一 `FontFamily.Monospace` 13sp；中文与界面文字用系统无衬线。
-- 圆角遵循：按钮/输入全圆、容器 12dp、对话框 20dp、搜索框 14dp。
+- 圆角遵循：按钮/输入全圆、容器 12dp、对话框 20dp、搜索框 14dp；开启卡通风格后同一 token
+  自动解析为对应的 `cartoon-*` 值。
+- 卡通状态只从 `isCartoonStyle()` / `LocalCartoonStyle` 读取；不要靠判断 `themeScheme`
+  去猜 App 是否该是卡通样式。
 
 ### Don't
 - 不要新增第四套主题色板；三档（Light/Dark/AMOLED）之外的颜色必须能映射回现有 token。
 - 不要在业务页面里用 `darkColorScheme/lightColorScheme` 临时造色板，统一走 `StarBurstTheme`。
 - 不要把 AMOLED 当「又一个暗色」——它只换表面为纯黑 + 描边，不改变组件语义与层级。
-- 不要引入营销式视觉（大投影、渐变背景、装饰性插画）；系统是工具型、信息优先的。
-- 不要用非等宽字体渲染代码/终端内容。
+- 不要把卡通色写进 `theme_scheme`。卡通风格改的是圆角、描边与投影，必须保持正交，
+  才能与任意配色方案及 AMOLED 叠加。
+- 默认样式下不要引入营销式视觉（渐变背景、装饰性插画）。卡通风格是投影与描边唯一被授权的
+  可选开关，且默认关闭——系统仍是工具型、信息优先的。
+- 不要用非等宽字体渲染代码/终端内容，卡通风格也不例外。
 
 ## Responsive Behavior
 
@@ -379,12 +486,14 @@ Android 原生响应式，无 Web 断点概念。适配维度是**屏幕宽度�
 
 ## Iteration Guide
 
-1. 逐个组件迭代：改 `ui/components` 或 `ui/theme` 的 token，业务页面立即生效——先验证颜色/字号解析，再验证 AMOLED 与 Light 两档。
+1. 逐个组件迭代：改 `ui/components` 或 `ui/theme` 的 token，业务页面立即生效——先验证颜色/字号解析，再验证 AMOLED 与 Light 两档，最后打开卡通风格确认圆角/描边/投影跟随。
 2. 新增组件优先用现有词汇（`AppDialog` / `AppCard` / `AppPrimaryButton` / `AppPickerItemShape` 12dp + 容器阶梯），不够再引入新 token。
 3. 加颜色时同时补三档：`DarkColorScheme`、`LightColorScheme`、`AmoledDarkColorScheme`，缺一不可。
 4. 文字一律走 `MaterialTheme.typography` 已有档位；确实没有的档位才扩展 `Type.kt` 的 `Typography`。
 5. 每改一个色板，检查 AMOLED 对比度：纯黑表面上正文必须保持 `#E5E1E9`，描边 `outlineVariant(0.55)`。
 6. 破坏性操作统一走 error 色（`{colors.status-error}`），不另造红色。
+7. 新容器要显式接入卡通外观：`shape` 用 `AdaptiveRoundedShape` token（圆角免费升级），描边与投影只需在 `modifier` 上追加一个 `.cartoonChrome(shape)`。不要为卡通层另加 `border =` 或 `elevation =`——外观自己画，而 `border`/`elevation` 保留它们原有的 AMOLED 语义。
+8. 卡通逻辑不要写进色板：`CartoonStyle.kt` 管形状/描边/投影，`Theme.kt` 管颜色。卡通强调色属于 `StarBurstAccents`，不属于卡通层。
 
 ## Known Gaps
 

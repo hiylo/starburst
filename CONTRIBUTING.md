@@ -26,9 +26,15 @@ Clearly mark it as a feature request.
 ## Development Setup
 
 1. Android Studio (latest stable) with the Android SDK.
-2. Clone the repository.
-3. Build and run: `./gradlew assembleDebug`.
-4. The project bundles MNN native libraries and the on-device model; first build takes a few minutes.
+2. **A JDK 17 or 21 on your `PATH` (or set `JAVA_HOME` to one).** The build does not pin a JDK, so
+   Gradle uses whatever Java is ambient; Gradle 8.6 rejects newer majors with a bare version string
+   and no explanation. `release.yml` already pins 17, so CI is unaffected.
+3. Clone the repository.
+4. Build and run: `./gradlew assembleDebug`.
+5. The build bundles the MNN native libraries but **not** the model weights: `.gitignore` excludes
+   `app/src/main/assets/models/*.{mnn,weight}` and `release.yml` publishes the weights only as a
+   separate `starburst-model.zip` release asset. A build from a clean clone therefore downloads the
+   on-device model on first use. First build takes a few minutes.
 
 ## Pull Request Process
 

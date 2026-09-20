@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 version: alpha
 name: StarBurst-design-system
 description: |
-  The design system of the StarBurst client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code.
+  The design system of the StarBurst client, built on Material 3 + Jetpack Compose. The brand centers on indigo (#6366F1), with violet and cyan forming a three-tier brand palette. The UI ships three semantic color schemes — Light / Dark / AMOLED — where AMOLED uses pure-black surfaces (#000000) for OLED power saving. Every visual token maps directly onto Compose's MaterialTheme.colorScheme / Typography; all radii, spacing and component styles live in ui/components and ui/theme, ready to be consumed by code. An opt-in Cartoon Style layer (CartoonStyle.kt) sits orthogonal to the palettes: it widens radii, adds 2.5dp ink outlines, hard 3dp offset shadows, a paper dot-grid backdrop and springy press/pop motion — without touching any color token.
 
 colors:
   primary: "#6366F1"
@@ -125,6 +125,31 @@ rounded:
   picker: 12dp
   search: 14dp
   chip: 9999px
+  # cartoon style (opt-in, see "Cartoon Style")
+  cartoon-dialog: 32dp
+  cartoon-card: 26dp
+  cartoon-picker: 24dp
+  cartoon-search: 30dp
+  cartoon-primary-button: 28dp
+  cartoon-secondary-button: 22dp
+
+cartoon:
+  default-enabled: false
+  ink-stroke-width: 2.5dp
+  ink-color-light: "#241F33 @ 85%"
+  ink-color-dark: "onSurface @ 45%"
+  shadow-offset: 3dp
+  shadow-blur: 0dp
+  shadow-color-light: "#3A2E5C @ 30%"
+  shadow-color-dark: "#000000 @ 65%"
+  backdrop-dot-spacing: 18dp
+  backdrop-dot-radius: 1.3dp
+  backdrop-dot-color-light: "#241F33 @ 7%"
+  backdrop-dot-color-dark: "#FFFFFF @ 5%"
+  button-press-scale: 0.9
+  button-spring: "damping 0.5 / stiffness MediumLow"
+  dialog-pop-from: 0.8
+  dialog-spring: "damping 0.55 / stiffness MediumLow"
 
 spacing:
   xxs: 2dp
@@ -335,6 +360,7 @@ outlines rather than whitespace.
 | 1 — Container ladder | `surfaceContainer → High → Highest` progressively lighter | Cards, dropdowns, overlay bottom containers |
 | 2 — Dialog | `surface` + 6dp tonalElevation (AMOLED: 0dp + 1dp outline) | AppDialog |
 | 3 — AMOLED outline | Pure-black surface + `1dp outlineVariant(alpha 0.55)` | All cards/overlays in AMOLED mode |
+| C — Cartoon | Hard 3dp down-right offset shadow, zero blur, no M3 elevation; 2.5dp ink outline drawn on top | All dialogs, buttons, cards, chat bubbles when Cartoon Style is on |
 
 The system **replaces shadows with the container-color ladder**: a "higher" layer is expressed by
 lightening via `surfaceContainer*`, not by drop shadows. The only common animation is
@@ -351,6 +377,10 @@ lightening via `surfaceContainer*`, not by drop shadows. The only common animati
 | `{rounded.card}` | 12dp | Cards, session cards, list-item selected state (AppCardShape / AppPickerItemShape) |
 | `{rounded.search}` | 14dp | Search fields (AppSearchShape) |
 | full | 9999px | Buttons, inputs, send button, chips, switches |
+| `{rounded.cartoon-dialog}` | 32dp | AppDialog with Cartoon Style on |
+| `{rounded.cartoon-card}` | 26dp | Cards with Cartoon Style on |
+| `{rounded.cartoon-picker}` | 24dp | Picker items with Cartoon Style on |
+| `{rounded.cartoon-search}` | 30dp | Search fields with Cartoon Style on |
 
 Radius vocabulary: **interactive elements as round as possible** (buttons/inputs/send key are fully
 round), **containers 12dp**, **dialogs 20dp**. Icons are not clipped into rounded shapes (Material
@@ -392,6 +422,86 @@ icons keep their original form).
   warning `{colors.status-warning}`.
 - **Section titles**: `labelMedium` 500, `{colors.primary}`, `padding(start 16dp, top 16dp, bottom 4dp)`.
 
+## Cartoon Style
+
+> **Source files**: `ui/theme/CartoonStyle.kt` (state, shapes, ink/shadow tokens),
+> `ui/theme/Theme.kt` (`cartoonStyle` parameter), `ui/components/AppSurfaces.kt`
+> (adaptive shapes + dialog/button chrome). Toggle: Settings → Appearance → **Cartoon style**.
+
+Cartoon feel does **not** come from swapping colors — the existing `theme_scheme` palettes
+(candy / ocean / sunset / bubble) only change `ColorScheme`, which is why they read as "recolors".
+Cartoon Style is a separate visual layer with five levers:
+
+| Lever | Normal | Cartoon |
+|---|---|---|
+| Radius | dialog 20 / card 12 / picker 12 / search 14 / bubble 12 | dialog 32 / card 26 / picker 24 / search 30 / bubble 26-6-26-22 (user), 24 (assistant) |
+| Ink outline | none (AMOLED: 1dp `outlineVariant`) | 2.5dp ink — `#241F33`@85% on light surfaces, `onSurface`@45% on dark |
+| Shadow | none (container-color ladder instead) | hard 3dp down-right block, **zero blur**, `#3A2E5C`@30% light / black@65% dark; no M3 elevation |
+| Backdrop | flat container color | paper dot-grid: 18dp spacing, 1.3dp dots, `#241F33`@7% light / white@5% dark |
+| Motion | M3 defaults | buttons scale to 0.9 on press with a low-damping spring; dialogs pop in from 0.8 |
+
+### How it is wired
+
+- `LocalCartoonStyle` is a `staticCompositionLocalOf { false }`; `isCartoonStyle()` reads it.
+  `StarBurstTheme` supplies both the local and the global switch in the same frame.
+- `AppCardShape` / `AppDialogShape` / `AppPickerItemShape` / `AppSearchShape` are
+  `AdaptiveRoundedShape(normal, cartoon)` instances. `createOutline` resolves the radius at
+  **draw time** from `CartoonStyleState.enabled`, so the ~60 existing `shape = AppCardShape`
+  call sites need no changes and upgrade app-wide.
+- **One modifier does the whole job**: `Modifier.cartoonChrome(shape = AppCardShape)` =
+  `cartoonOffsetShadow(shape).cartoonInkOutline(shape)`. It wraps any `Card` / `Surface` / `Box`
+  without touching `border` or `elevation` parameters, so existing call sites keep their AMOLED
+  borders and only add the chrome. When the style is off it returns the modifier unchanged —
+  no draw nodes at all.
+- Draw order matters and is fixed in `cartoonChrome`: the shadow's `drawWithContent` runs
+  `drawShape` **before** `drawContent()` (so it sits behind the container's own background), while
+  the ink outline's `drawWithContent` runs `drawContent()` **first** (so the 2.5dp line is not
+  covered by the container background and stays a full-width stroke).
+- `cartoonOffsetShadow` does **not** use `Modifier.shadow` — that API has no offset parameter and
+  only blurs. The shadow is a canvas translate of the same shape path, which is what makes the edge
+  hard and comic-book-like. Shape → path goes through `DrawScope.drawShapePath`: uniform radii
+  come back as `Outline.Rectangle` (which does not carry the radius), so the radius is re-read from
+  the `AdaptiveRoundedShape`; asymmetric bubbles come back as `Outline.Generic` and reuse the path.
+- Press bounce lives in `cartoonButtonStyle()`: a `MutableInteractionSource` +
+  `collectIsPressedAsState()` drives `animateFloatAsState(0.9f)` with
+  `spring(dampingRatio = 0.5f, stiffness = MediumLow)`, then `.scale()` + `.cartoonChrome()`.
+  `AppPrimaryButton` / `AppSecondaryButton` pass their `interactionSource` into the M3 button so
+  ripple and scale read the same press state.
+- Dialog pop is an `Animatable(0.8f → 1f)` on `AppDialog` with
+  `spring(dampingRatio = 0.55f, stiffness = MediumLow)`. Note the `Animatable` import is
+  `androidx.compose.animation.core.Animatable` — the `androidx.compose.ui.graphics` one is
+  `Animatable<Color>` and silently type-mismatches.
+- Backdrop is `Modifier.cartoonBackdrop()` on the root `Box` in `MainActivity`, so every screen
+  gets the paper texture from one place. Alpha is deliberately near-invisible: it must not compete
+  with information hierarchy.
+- Persistence: `cartoon_style` in DataStore, mirrored to `SyncSettings.cartoonStyle` so it
+  syncs across devices like every other appearance setting.
+
+### Coverage
+
+Full chrome (radius + ink + offset shadow): all dialogs, all app buttons
+(`AppPrimaryButton` / `AppSecondaryButton`), Home screen cards, all Settings cards (shared
+`SettingsCard`), chat message bubbles.
+
+Radius-only, no chrome: the ~55 remaining `Surface(shape = AppCardShape, ...)` call sites outside
+`HomeScreen` / `SettingsDisplayNames`. They read as "rounder" but not "sticker" — append
+`.cartoonChrome(AppCardShape)` to their `modifier` to bring them up.
+
+### Known gaps
+
+- **Font is not wired.** `res/font/` does not exist and the whole app uses `FontFamily.Default`
+  (`Type.kt`). A rounded/hand-drawn font family is the single biggest remaining lever for cartoon
+  feel; it needs a licensed `.ttf` (e.g. Baloo 2 / Fredoka for Latin, Smiley Sans / 站酷快乐体 for
+  Chinese) dropped into `app/src/main/res/font/` and a cartoon-aware `Typography` built from it.
+  No dead hook is left in code for this — add it when the asset arrives.
+- **`cornerRadiusPx` only understands `AdaptiveRoundedShape`.** `RoundedCornerShape` stores its
+  radii as `CornerSize` and exposes no `Dp`, so a plain `RoundedCornerShape` passed to
+  `cartoonChrome` gets a 0-radius ink outline. Always pass an `AdaptiveRoundedShape` (uniform) or
+  an asymmetric `RoundedCornerShape` (which takes the `Outline.Generic` path branch).
+- Top bars are not chromed: there is no shared `TopAppBar` component, so it would mean ~30 edits
+  across screens.
+- No illustrations, mascot, or emoji-as-icon system yet.
+
 ## Do's and Don'ts
 
 ### Do
@@ -405,6 +515,9 @@ icons keep their original form).
 - Render code and terminal content in `FontFamily.Monospace` 13sp; Chinese and UI text use the
   system sans-serif.
 - Follow the radius system: buttons/inputs fully round, containers 12dp, dialogs 20dp, search 14dp.
+  Under Cartoon Style the same tokens resolve to their `cartoon-*` values automatically.
+- Read cartoon state only through `isCartoonStyle()` / `LocalCartoonStyle`; never branch on
+  `themeScheme` to guess whether the app should look cartoon.
 
 ### Don't
 - Do not add a fourth theme palette; any color outside Light/Dark/AMOLED must map back to an
@@ -413,9 +526,12 @@ icons keep their original form).
   always go through `StarBurstTheme`.
 - Do not treat AMOLED as "just another dark mode" — it only swaps surfaces to pure black + outlines,
   without changing component semantics or hierarchy.
-- Do not introduce marketing-style visuals (big shadows, gradient backgrounds, decorative
-  illustrations); this is a restrained, information-first tool.
-- Do not render code/terminal content with a non-monospace font.
+- Do not encode cartoon colors into `theme_scheme`. Cartoon Style changes radii, outlines and
+  shadows; it must stay orthogonal so it composes with any palette and with AMOLED.
+- Do not introduce marketing-style visuals (gradient backgrounds, decorative illustrations) in the
+  default style. Cartoon Style is the single sanctioned opt-in for shadows and outlines, and it
+  stays off by default — the system remains a restrained, information-first tool.
+- Do not render code/terminal content with a non-monospace font, cartoon style or not.
 
 ## Responsive Behavior
 
@@ -440,7 +556,8 @@ width (phone vs tablet) and density (dp)**:
 ## Iteration Guide
 
 1. Iterate component by component: change tokens in `ui/components` or `ui/theme`, and business
-   pages take effect immediately — verify color/type parsing first, then the AMOLED and Light tiers.
+   pages take effect immediately — verify color/type parsing first, then the AMOLED and Light tiers,
+   then toggle Cartoon Style on to confirm radii/outlines/shadows follow.
 2. Prefer existing vocabulary for new components (`AppDialog` / `AppCard` / `AppPrimaryButton` /
    `AppPickerItemShape` 12dp + container ladder); only introduce new tokens when needed.
 3. When adding a color, fill all three tiers at once: `DarkColorScheme`, `LightColorScheme`,
@@ -450,6 +567,12 @@ width (phone vs tablet) and density (dp)**:
 5. After every palette change, check AMOLED contrast: body text must stay `#E5E1E9` on pure black,
    outlines `outlineVariant(0.55)`.
 6. Destructive actions uniformly use the error color (`{colors.status-error}`), never a new red.
+7. New surfaces must opt into cartoon chrome explicitly: `shape` comes from an `AdaptiveRoundedShape`
+   token (radius upgrades for free), and outline + shadow come from one `.cartoonChrome(shape)`
+   appended to the `modifier`. Do not add `border =` or `elevation =` for the cartoon layer —
+   the chrome draws both, and `border`/`elevation` keep their existing AMOLED meaning.
+8. Keep cartoon logic out of color palettes: `CartoonStyle.kt` owns shape/outline/shadow, `Theme.kt`
+   owns color. A cartoon accent color belongs to `StarBurstAccents`, not to the cartoon layer.
 
 ## Known Gaps
 

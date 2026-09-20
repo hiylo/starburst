@@ -38,7 +38,7 @@ Items are removed from this list once fixed and verified.
   `session.next.tool.called` or `session.next.tool.input.ended` event replaced `metadata.sessionId`
   received from `message.part.updated`. Tool lifecycle updates are now monotonic and preserve title
   and metadata, but parallel custom subagents still need physical-device verification
-  (`EventReducer.kt`).
+  (`EventReducerStreamingExt.kt`, `handleNextToolCalled` / `handleNextToolInputEnded`).
 - A single message containing hundreds of megabytes of tool/file content could exhaust the Android
   heap while Ktor buffered and deserialized a history page. History loading now reduces the page size
   from the response `Content-Length` before reading its body, streams accepted pages from disk, and
@@ -60,11 +60,12 @@ Items are removed from this list once fixed and verified.
 - Opening a long session could block the chat until the complete configured history page had been
   transferred and processed. The newest 10 messages are now displayed first and the remainder is
   appended in background pages, but time-to-first-content and scroll stability still need
-  verification on a slow remote connection (`ChatViewModel.kt`).
+  verification on a slow remote connection (`ChatViewModelHistoryExt.kt`, `loadMessages` /
+  `loadOlderMessages`).
 - A chat opened from a notification or left open during an SSE disconnect did not show that its
   server was offline. The chat now observes the same connection state as Home and displays a
   persistent disconnected banner, but disconnect/reconnect transitions still need physical-device
-  verification (`ChatScreen.kt`).
+  verification (`ChatScreenTopBar.kt`).
 
 ## Terminal
 
@@ -72,3 +73,21 @@ Items are removed from this list once fixed and verified.
   and cursor visibility/blink/style escape sequences were ignored. Borders, DEC cursor behavior, and
   resize dispatch have been corrected, but the complete interaction still needs physical-device
   verification (`TerminalEmulator.kt`).
+
+## 结构与行数拆分（2026-09-19，未做真机复验）
+
+- 为落实单文件 ≤1000 行 / 硬上限 1500 行，以下文件按「整块搬移 + 同包扩展函数 / 区域
+  composable」重构，逐行守恒校验、`compileDebugKotlin`、`./gradlew test`、`assembleDebug` 全绿；
+  但 Compose 区域的参数与 `MutableState` 传递没有 JVM 单测覆盖，下次真机复验需覆盖：
+  聊天页（消息渲染、工具/文件/图片卡片、终端与扩展键盘、上下文用量/差异/模板对话框、
+  输入栏与 @ 文件提及）、Git 页五个对话框与 diff 视图、设置页全部弹窗、
+  后台连接的通知与断线重连（`ChatScreen*.kt`、`ChatInputBar.kt`、`ChatMessageBubble.kt`、
+  `ChatDialogs.kt`、`ChatOverlayCards.kt`、`ChatTerminal.kt`、`GitScreen*.kt`、
+  `SettingsScreen.kt`、`StarBurstConnectionService*.kt`、`EventReducer*.kt`、
+  `ChatViewModel*Ext.kt`）。
+- `TerminalEmulator.kt`（1278 行）、`ChatInputBar.kt`（1070 行）、`SettingsScreen.kt`（1073 行）、
+  `StarBurstConnectionService.kt`（1075 行）仍高于 1000 行目标：继续拆分别需要把 30 余个可变字段
+  （含 `cursorRow`/`cursorCol` 等 9 个 `private set` 属性）放宽为 `internal`/`internal set`、把巨型
+  composable 拆成长参数列表区域函数、再切通知/UI 区块——收益低于回归风险，且这几处真机验证尚未
+  完成，故本轮不做；`scripts/check-file-size.sh` 已把 1500 行硬上限接入 CI 防止继续恶化。
+

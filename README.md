@@ -30,10 +30,11 @@ manage sessions — all from a mobile-first UI.
 - **Native chat** — Material 3 UI with GFM Markdown, code blocks, syntax highlighting and copy actions
 - **Real-time streaming** — messages stream in live with auto-scroll
 - **On-device suggestions** — next-step prompts are generated **fully offline** via an on-device
-  MNN model (Qwen3.5-0.8B). The model is bundled with the APK and auto-extracts on first use; when
-  a build ships without the weights, it is downloaded from **ModelScope** (fast inside mainland
-  China) with per-file SHA-256 verification. With a backend configured, suggestions prefer the
-  **backend LLM first**, then the external provider, then on-device — each showing its source label
+  MNN model (Qwen3.5-0.8B). The weights are fetched from **ModelScope** on first use (fast inside
+  mainland China) with per-file SHA-256 verification; release builds that pre-seed
+  `app/src/main/assets/models/` instead auto-extract them from the APK. With a backend configured,
+  suggestions prefer the **backend LLM first**, then the external provider, then on-device — each
+  showing its source label
 - **On-device voice input** — hold-to-talk speech recognition powered by an on-device **MNN
   sherpa-mnn streaming Zipformer (bilingual zh/en)** model downloaded from ModelScope (per-file
   SHA-256 verified). Hold to talk, release to fill the input, slide up to cancel, with a live
@@ -68,10 +69,11 @@ manage sessions — all from a mobile-first UI.
 - **AI workbench** — a live dashboard of agent activity across sessions: real-time event stream,
   per-session latest status, and a decision panel with the latest AI reply, pending questions
   (one-tap answers), quick-reply composer with voice input, and jump-into-session
-- **Backend mirror & live push (starburst-backend)** — routes through the backend `/api/opencode/*`
-  mirror when reachable (direct fallback otherwise); records session events and pushes completion /
-  question / permission / error notifications with sound, vibration and heads-up banners, even while
-  the session is open
+- **Backend mirror & live push (starburst-backend)** — the live event/notification channel and the
+  AI workbench route through the backend `/api/opencode/*` mirror when reachable (direct fallback
+  otherwise), while chat and session-list REST calls still connect to OpenCode directly (Basic
+  auth); records session events and pushes completion / question / permission / error notifications
+  with sound, vibration and heads-up banners, even while the session is open
 - **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links, plus
   long-press shortcuts (new session / global search / task center)
 - **SSH tunnel** — optionally connect and restart the OpenCode service over an SSH tunnel, with
@@ -177,10 +179,10 @@ adb install -r app/build/outputs/apk/release/app-release.apk
 ./gradlew testDebugUnitTest
 ```
 
-> The release build includes the on-device model (~520 MB) and the MNN native libraries, so the
-> first build takes a few minutes. The model weights in `app/src/main/assets/models/` are
-> gitignored: builds made without them work normally and download the model from **ModelScope**
-> on first use instead.
+> The release build links the MNN native libraries, so the first build takes a few minutes. The
+> model weights under `app/src/main/assets/models/` are gitignored and never committed, so a build
+> from a clean clone works normally and downloads the model (~520 MB) from **ModelScope** on first
+> use. Pre-seeding that directory before building instead bundles the weights into the APK.
 
 ## 🏗️ Architecture
 
