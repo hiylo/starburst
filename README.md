@@ -64,6 +64,7 @@ manage sessions — all from a mobile-first UI.
   pin sessions with new activity; global search across servers/projects; pinned-session
   drag-to-reorder; search time filter
 - **Model & agent control** — search providers/models, cycle agents, view token usage and context
+  （上下文占用统一按「当前上下文估算 / 模型窗口」口径展示于顶栏、圆环、详情弹窗与输入框预算条，不再用会造成误读的累计 token）
 - **Multi-server** — connect to several OpenCode servers at once, with stable reconnection and
   one-tap switching from the session list
 - **AI workbench** — a live dashboard of agent activity across sessions: real-time event stream,

@@ -41,6 +41,15 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 - [x] 中文长会话下对照服务端真实 token 数，预算指示器占比合理。
 - [x] 长模型名已在底部选择栏截断（`MODEL_LABEL_MAX_CHARS=24` + 省略号），预算圆环与预算文字不再被挤出屏幕。（模拟器 Compose instrumentation 实测：`ChatInputBarModelLabelTest` 2 例通过）
 
+### 4.1 上下文占用口径统一 ⏳ 修复已出包（12:14），待真机复验
+> 修复前：顶栏副标题用「每轮 tokens.input 累加」（各轮都含历史上下文，相加虚高到兆级，如 13.1M）、
+> 圆环用最近一轮、弹窗/输入框各用其它口径，同一会话出现多个互不一致的 token 数，无法判断真实占用。
+> 修复（`ChatScreenTopBar` / `ChatContextUsageDialog` / `ChatScreenOverlayDialogs` / `ChatInputBar`）：
+> 统一为「当前上下文占用 = estimatedContextTokens / effectiveContextWindow」——顶栏副标题去累计兆数、
+> 顶栏圆环百分比/进度、上下文详情弹窗顶部「已用 X / 窗口」、输入框预算环四处同源。
+- [ ] 真机装 12:14 包：打开多轮会话，确认顶栏显示「已用 X（估算）/ 窗口」，圆环、上下文档弹窗、输入框预算环三/四处数字一致，不再出现 13.1M 级累计数。
+- [ ] 未读红点改推送（9b95e2c）：弱网下会话有新活动/读后清除的未读刷新及时性（不再 10s 轮询）。
+
 ### 5. 加密备份全链路
 - [ ] 导出 → 换设备导入，服务器/模板/收藏恢复正确；错误口令被拒。
 
