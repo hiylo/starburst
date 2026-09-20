@@ -48,6 +48,7 @@ fun BackupDialog(
     val outcome by viewModel.outcome.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
     val sftpSettings by viewModel.sftpSettings.collectAsState()
+    val sftpSavedPassword by viewModel.sftpPassword.collectAsState()
 
     var passphrase by remember { mutableStateOf("") }
 
@@ -66,6 +67,12 @@ fun BackupDialog(
         sftpPort = sftpSettings.port.toString()
         sftpUsername = sftpSettings.username
         sftpDir = sftpSettings.remoteDir
+    }
+    // 记住密码：载入已保存口令预填（仅当输入框仍为空时，避免覆盖用户手动输入）。
+    LaunchedEffect(sftpSavedPassword) {
+        if (sftpSavedPassword.isNotEmpty() && sftpPassword.isEmpty()) {
+            sftpPassword = sftpSavedPassword
+        }
     }
 
     val canProceed = !busy && passphrase.isNotBlank()

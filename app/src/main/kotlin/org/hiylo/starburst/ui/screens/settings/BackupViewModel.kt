@@ -48,15 +48,22 @@ class BackupViewModel @Inject constructor(
     private val _sftpSettings = MutableStateFlow(SftpBackupSettings())
     val sftpSettings = _sftpSettings.asStateFlow()
 
+    /** 已保存的 SFTP 口令（Keystore 解密），用于预填口令输入框（记住密码）。 */
+    private val _sftpPassword = MutableStateFlow("")
+    val sftpPassword = _sftpPassword.asStateFlow()
+
     /** 清空上次操作结果，供对话框打开时调用。 */
     fun reset() {
         _outcome.value = null
         _errorMessage.value = null
     }
 
-    /** 载入已保存的 SFTP 目标配置（host/port/username/remoteDir）。 */
+    /** 载入已保存的 SFTP 目标配置与口令（host/port/username/remoteDir + password）。 */
     fun loadSftpSettings() {
-        viewModelScope.launch { _sftpSettings.value = repository.savedSftpSettings() }
+        viewModelScope.launch {
+            _sftpSettings.value = repository.savedSftpSettings()
+            _sftpPassword.value = repository.savedSftpPassword().orEmpty()
+        }
     }
 
     /** 保存 SFTP 目标配置与口令（口令走 Keystore 加密）。 */
