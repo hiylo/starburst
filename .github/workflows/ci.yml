@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: JVM unit tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8ade135a41bc03ea155e62e844d188df1ea18608 # v4.1.0
+
+      # Gradle 8.6 cannot run on a Java 25 toolchain (it fails with a bare version
+      # string and no hint), and app/build.gradle.kts pins jvmTarget/sourceCompatibility
+      # to 17, so the CI toolchain must be JDK 17 explicitly.
+      - name: Set up JDK 17
+        uses: actions/setup-java@0ab4596768b603586c0de567f2430c30f5b0d2b0 # v3.13.0
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          cache: 'gradle'
+
+      - name: Grant execute permissions for gradlew
+        run: chmod +x ./gradlew
+
+      # 单文件行数治理（目标 1000 / 硬上限 1500），只有超过硬上限才失败。
+      - name: Check file size limits
+        run: scripts/check-file-size.sh
+
+      # Android SDK comes from the ubuntu-latest runner image (ANDROID_HOME), same as
+      # release.yml; local.properties is gitignored so it never overrides it on CI.
+      - name: Run unit tests
+        run: ./gradlew test --no-daemon --stacktrace
+
+      - name: Upload test reports
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-reports
+          path: |
+            app/build/reports/tests/
+            app/build/test-results/
+          retention-days: 7
