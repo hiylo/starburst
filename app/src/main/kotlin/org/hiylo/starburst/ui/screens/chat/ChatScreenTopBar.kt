@@ -106,24 +106,20 @@ internal fun ChatScreenTopBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Subtitle: project path, current context estimate and cost for the session.
-                // 用「当前上下文估算 / 有效窗口」而非累计 token：opencode 每轮 tokens.input
-                // 都含历史上下文，把所有轮次相加会虚高到兆级（用户困惑的 13.1M），既不是
-                // 当前占用、也会随会话变长无限膨胀。统一与输入框预算环/圆环同口径。
-                val ctxTokens = uiState.estimatedContextTokens
-                val ctxWindow = uiState.effectiveContextWindow
-                val hasCtx = ctxTokens > 0 && ctxWindow > 0
-                val hasCost = uiState.totalCost > 0
+                // Subtitle: project path, session total token usage and cost.
+                // 顶栏显示「会话累计 token 用量」（总消费量），与输入框预算环（当前上下文占用/窗口）区分口径。
+                val totalTokens = uiState.totalInputTokens + uiState.totalOutputTokens
+                val hasTokenOrCost = totalTokens > 0 || uiState.totalCost > 0
                 val hasDirectory = uiState.sessionDirectory.isNotBlank()
-                if (hasDirectory || hasCtx || hasCost) {
+                if (hasDirectory || hasTokenOrCost) {
                     val parts = mutableListOf<String>()
                     if (hasDirectory) {
                         parts.add(uiState.sessionDirectory)
                     }
-                    if (hasCtx) {
-                        parts.add(stringResource(R.string.chat_context_used, formatTokenCount(ctxTokens), formatTokenCount(ctxWindow)))
+                    if (totalTokens > 0) {
+                        parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
                     }
-                    if (hasCost) {
+                    if (uiState.totalCost > 0) {
                         parts.add(stringResource(R.string.chat_cost_format, String.format(Locale.ROOT, "%.4f", uiState.totalCost)))
                     }
                     if (parts.isNotEmpty()) {
