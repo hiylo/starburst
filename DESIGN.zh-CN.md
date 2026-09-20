@@ -378,7 +378,7 @@ StarBurst 是一个以「终端即服务」为核心的移动客户端：用户�
 > （`cartoonStyle` 参数）、`ui/components/AppSurfaces.kt`（自适应形状 + 对话框/按钮外观）。
 > 入口：设置 → 外观 → **卡通风格**。
 
-卡通感**不来自换色**——现有的 `theme_scheme`（candy / ocean / sunset / bubble）只改 `ColorScheme`，
+卡通感**不来自换色**——现有的 `theme_scheme`（candy / ocean / sunset / flame / bubble）只改 `ColorScheme`，
 这正是它们看起来「只是换了个色」的原因。卡通风格是独立于配色的一层视觉语言，五个杠杆：
 
 | 杠杆 | 常规 | 卡通 |

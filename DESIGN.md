@@ -429,7 +429,7 @@ icons keep their original form).
 > (adaptive shapes + dialog/button chrome). Toggle: Settings → Appearance → **Cartoon style**.
 
 Cartoon feel does **not** come from swapping colors — the existing `theme_scheme` palettes
-(candy / ocean / sunset / bubble) only change `ColorScheme`, which is why they read as "recolors".
+(candy / ocean / sunset / flame / bubble) only change `ColorScheme`, which is why they read as "recolors".
 Cartoon Style is a separate visual layer with five levers:
 
 | Lever | Normal | Cartoon |
