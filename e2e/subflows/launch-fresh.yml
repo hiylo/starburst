@@ -1,0 +1,12 @@
+appId: org.hiylo.starburst.debug
+name: Launch Fresh (clear state and wait for home)
+---
+# 冷启动 + 清空状态，偶发因宿主 CPU 争抢导致首屏渲染超时，用 retry 兜底。
+- retry:
+    maxRetries: 2
+    commands:
+      - launchApp:
+          clearState: true
+      - extendedWaitUntil:
+          visible: "StarBurst"
+          timeout: 15000

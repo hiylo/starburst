@@ -4,14 +4,11 @@ properties:
   priority: P0
   suite: e2e
 ---
-# 1. 启动 app（清空状态）
-- launchApp:
-    clearState: true
+# 1. 启动 app（清空状态，含重试兜底）
+- runFlow:
+    file: subflows/launch-fresh.yml
 
-# 2. 等待冷启动渲染完成，再验证空状态
-- extendedWaitUntil:
-    visible: "StarBurst"
-    timeout: 30000
+# 2. 验证空状态
 - assertVisible:
     text: "No servers configured"
 - waitForAnimationToEnd

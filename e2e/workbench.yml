@@ -5,8 +5,8 @@ properties:
   suite: e2e
 ---
 # 1. 启动并连接
-- launchApp:
-    clearState: true
+- runFlow:
+    file: subflows/launch-fresh.yml
 - runFlow:
     file: subflows/setup-connected.yml
 

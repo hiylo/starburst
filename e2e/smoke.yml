@@ -4,20 +4,25 @@ properties:
   priority: P0
   suite: smoke
 ---
-- launchApp:
-    clearState: true
-- assertVisible:
-    text: "StarBurst"
+# 启动 app（清空状态，含重试兜底）
+- runFlow:
+    file: subflows/launch-fresh.yml
+
+# 验证空状态
 - assertVisible:
     text: "No servers configured"
 - waitForAnimationToEnd
 - takeScreenshot:
     path: main-empty-state
+
+# 进入添加服务器页
 - tapOn:
     text: "Add Server"
 - waitForAnimationToEnd
 - takeScreenshot:
     path: add-server-screen
+
+# 返回主页
 - back
 - waitForAnimationToEnd
 - assertVisible:

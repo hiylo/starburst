@@ -4,14 +4,11 @@ properties:
   priority: P1
   suite: e2e
 ---
-# 1. 启动 app（清空状态）
-- launchApp:
-    clearState: true
+# 1. 启动 app（清空状态，含重试兜底）
+- runFlow:
+    file: subflows/launch-fresh.yml
 
 # 2. 验证空状态主页（顶部设置入口可见）
-- extendedWaitUntil:
-    visible: "StarBurst"
-    timeout: 30000
 - assertVisible:
     text: "No servers configured"
 - assertVisible:
