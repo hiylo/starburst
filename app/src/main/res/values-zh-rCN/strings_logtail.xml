@@ -10,7 +10,6 @@
     <string name="log_tail_keyword_hint">过滤日志行…</string>
     <string name="log_tail_start">开始</string>
     <string name="log_tail_stop">停止</string>
-    <string name="log_tail_loading">读取日志中…</string>
     <string name="log_tail_empty">暂无日志内容</string>
     <string name="log_tail_path_blank">请输入日志文件路径</string>
 </resources>

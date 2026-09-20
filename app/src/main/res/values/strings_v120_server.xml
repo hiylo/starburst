@@ -14,13 +14,7 @@
     <string name="server_health_heartbeat_never">Never</string>
 
     <!-- SSH tunnel -->
-    <string name="server_ssh_title">SSH tunnel</string>
-    <string name="server_ssh_enabled">Enable SSH tunnel</string>
-    <string name="server_ssh_enabled_desc">Forward the server port over SSH to a local port.</string>
-    <string name="server_ssh_host">SSH host</string>
     <string name="server_ssh_port">SSH port</string>
     <string name="server_ssh_username">SSH username</string>
     <string name="server_ssh_password">SSH password (optional)</string>
-    <string name="server_ssh_local_port">Local forwarded port</string>
-    <string name="server_ssh_not_supported">SSH tunnel config is stored but not yet active: no SSH library is bundled.</string>
-</resources>
+    </resources>

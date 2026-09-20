@@ -10,7 +10,6 @@
     <string name="log_tail_keyword_hint">Filter lines…</string>
     <string name="log_tail_start">Start</string>
     <string name="log_tail_stop">Stop</string>
-    <string name="log_tail_loading">Reading log…</string>
     <string name="log_tail_empty">No log content</string>
     <string name="log_tail_path_blank">Please enter a log file path</string>
 </resources>

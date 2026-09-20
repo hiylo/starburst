@@ -14,13 +14,7 @@
     <string name="server_health_heartbeat_never">从未</string>
 
     <!-- SSH tunnel -->
-    <string name="server_ssh_title">SSH 隧道</string>
-    <string name="server_ssh_enabled">启用 SSH 隧道</string>
-    <string name="server_ssh_enabled_desc">通过 SSH 将服务器端口转发到本地端口。</string>
-    <string name="server_ssh_host">SSH 主机</string>
     <string name="server_ssh_port">SSH 端口</string>
     <string name="server_ssh_username">SSH 用户名</string>
     <string name="server_ssh_password">SSH 密码（可选）</string>
-    <string name="server_ssh_local_port">本地转发端口</string>
-    <string name="server_ssh_not_supported">SSH 隧道配置已保存但尚未生效：未内置 SSH 库。</string>
-</resources>
+    </resources>

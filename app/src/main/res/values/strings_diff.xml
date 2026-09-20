@@ -6,5 +6,4 @@
     <string name="diff_no_changes">No changes</string>
     <string name="diff_failed">Failed to compute diff</string>
     <string name="diff_truncated">Diff is too large, showing the first %1$d lines</string>
-    <string name="diff_close">Close diff</string>
-</resources>
+    </resources>

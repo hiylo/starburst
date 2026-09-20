@@ -3,9 +3,7 @@
     <string name="chat_voice_input">Voice input</string>
     <string name="chat_voice_input_stop">Stop voice input</string>
     <string name="chat_voice_input_permission_denied">Microphone permission is required for voice input</string>
-    <string name="chat_voice_input_unavailable">Voice input is not available on this device</string>
     <string name="chat_voice_input_error">Voice input failed, please try again</string>
-    <string name="chat_voice_input_service_unavailable">Speech recognition service is unavailable. Please enable its microphone permission in system settings (e.g. Google / Xiaomi voice assistant), or enable the Google app</string>
     <string name="chat_voice_input_listening">Listening… release to fill, slide up to cancel</string>
     <string name="chat_model_vision_unsupported">The current model does not support image understanding</string>
 </resources>

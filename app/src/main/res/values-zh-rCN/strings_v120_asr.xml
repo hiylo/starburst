@@ -3,9 +3,7 @@
     <string name="chat_voice_input">语音输入</string>
     <string name="chat_voice_input_stop">停止语音输入</string>
     <string name="chat_voice_input_permission_denied">语音输入需要麦克风权限</string>
-    <string name="chat_voice_input_unavailable">当前设备不支持语音输入</string>
     <string name="chat_voice_input_error">语音识别失败，请重试</string>
-    <string name="chat_voice_input_service_unavailable">语音识别服务不可用，请在系统设置中为语音服务（如小爱同学 / Google 语音）开启麦克风权限，或启用 Google 应用</string>
     <string name="chat_voice_input_listening">正在聆听… 松手上屏，上滑取消</string>
     <string name="chat_model_vision_unsupported">当前模型不支持图片理解</string>
 </resources>

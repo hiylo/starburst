@@ -6,5 +6,4 @@
     <string name="diff_no_changes">无变更</string>
     <string name="diff_failed">计算差异失败</string>
     <string name="diff_truncated">差异过大，仅显示前 %1$d 行</string>
-    <string name="diff_close">关闭差异</string>
-</resources>
+    </resources>
