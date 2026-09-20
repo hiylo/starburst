@@ -38,6 +38,7 @@ import android.graphics.BitmapFactory
 import android.provider.OpenableColumns
 import android.os.Build
 import android.util.Base64
+import java.util.Locale
 import org.hiylo.starburst.logging.AppLogger as Log
 import org.hiylo.starburst.R
 
@@ -401,8 +402,8 @@ internal fun estimateVisionTokens(width: Int, height: Int): Int {
 internal fun formatFileSize(bytes: Int): String {
     val value = bytes.toDouble()
     return when {
-        value >= 1024.0 * 1024.0 -> String.format("%.2f MB", value / (1024.0 * 1024.0))
-        value >= 1024.0 -> String.format("%.1f KB", value / 1024.0)
+        value >= 1024.0 * 1024.0 -> String.format(Locale.ROOT, "%.2f MB", value / (1024.0 * 1024.0))
+        value >= 1024.0 -> String.format(Locale.ROOT, "%.1f KB", value / 1024.0)
         else -> "$bytes B"
     }
 }

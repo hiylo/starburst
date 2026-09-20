@@ -40,6 +40,7 @@ import org.hiylo.starburst.ui.components.isAmoledTheme
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.ui.platform.ClipboardManager
 import android.content.Context
+import java.util.Locale
 import kotlinx.coroutines.CoroutineScope
 import org.hiylo.starburst.domain.model.FileDiff
 
@@ -116,7 +117,7 @@ internal fun ChatScreenTopBar(
                         parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
                     }
                     if (uiState.totalCost > 0) {
-                        parts.add(stringResource(R.string.chat_cost_format, String.format("%.4f", uiState.totalCost)))
+                        parts.add(stringResource(R.string.chat_cost_format, String.format(Locale.ROOT, "%.4f", uiState.totalCost)))
                     }
                     if (parts.isNotEmpty()) {
                         Text(

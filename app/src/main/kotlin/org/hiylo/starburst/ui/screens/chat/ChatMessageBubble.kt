@@ -79,8 +79,8 @@ internal fun Modifier.codeHorizontalScroll(): Modifier {
 /** Format a token count to a human-readable string (e.g., 1.2k, 45.3k, 1.2M). */
 internal fun formatTokenCount(count: Int): String {
     return when {
-        count >= 1_000_000 -> String.format("%.1fM", count / 1_000_000.0)
-        count >= 1_000 -> String.format("%.1fk", count / 1_000.0)
+        count >= 1_000_000 -> String.format(Locale.ROOT, "%.1fM", count / 1_000_000.0)
+        count >= 1_000 -> String.format(Locale.ROOT, "%.1fk", count / 1_000.0)
         else -> count.toString()
     }
 }

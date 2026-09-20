@@ -46,6 +46,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import java.util.Locale
 
 @Composable
 internal fun TodoListCard(tool: Part.Tool) {
@@ -234,7 +235,7 @@ private fun StepFinishInfo(step: Part.StepFinish) {
             }
             step.cost?.let { cost ->
                 Text(
-                    text = stringResource(R.string.chat_cost_format, String.format("%.4f", cost)),
+                    text = stringResource(R.string.chat_cost_format, String.format(Locale.ROOT, "%.4f", cost)),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
                 )

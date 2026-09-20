@@ -92,6 +92,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.Json
+import java.util.Locale
 import javax.inject.Inject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
@@ -627,7 +628,7 @@ internal fun ChatViewModel.exportSession(context: android.content.Context, uri: 
                     val now = System.currentTimeMillis()
                     if (now - lastNotifyTime > 500) { // throttle to 2 updates/sec
                         lastNotifyTime = now
-                        val mb = String.format("%.1f MB", bytesWritten / 1_000_000.0)
+                        val mb = String.format(Locale.ROOT, "%.1f MB", bytesWritten / 1_000_000.0)
                         builder.setContentText(mb)
                         notificationManager.notify(notificationId, builder.build())
                     }
