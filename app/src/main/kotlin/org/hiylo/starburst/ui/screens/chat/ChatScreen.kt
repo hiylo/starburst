@@ -9,261 +9,56 @@
  */
 package org.hiylo.starburst.ui.screens.chat
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.awaitEachGesture
-import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.ime
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.automirrored.filled.Undo
-import androidx.compose.material.icons.automirrored.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.input.key.key
-import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.role
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.text
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.TextRange
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.graphics.drawscope.Stroke
 import org.hiylo.starburst.service.SessionNotificationCoordinator
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.BackHandler
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import coil.compose.AsyncImage
 import org.hiylo.starburst.domain.model.*
-import org.hiylo.starburst.data.api.AgentInfo
-import org.hiylo.starburst.data.api.CommandInfo
-import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.MainActivity
-import org.hiylo.starburst.ui.screens.settings.SessionExport
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
-import kotlin.math.abs
 import android.net.Uri
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.graphics.BitmapFactory
 import android.media.AudioManager
-import android.os.Build
 import androidx.core.content.ContextCompat
 import org.hiylo.starburst.logging.AppLogger as Log
-import android.webkit.WebView
 import org.hiylo.starburst.BuildConfig
-import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
-import org.hiylo.starburst.ui.components.ProviderIcon
-import org.hiylo.starburst.ui.components.AppHaptics
 import org.hiylo.starburst.ui.components.AppHapticConfig
-import org.hiylo.starburst.ui.components.AppLoadingEdge
-import org.hiylo.starburst.ui.components.AppPrimaryButton
-import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ml.MnnAsr
-import org.hiylo.starburst.ui.components.appAmoledBorder
-import org.hiylo.starburst.ui.components.appPopupBorder
-import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
-
-
-/**
- * Chat Screen - conversation view with native markdown rendering.
- * Shows messages with streaming text rendered via mikepenz markdown renderer.
- */
-
-// ============ Chat Settings via CompositionLocal ============
-
-/** Chat font size setting: "small", "medium", "large". */
-val LocalChatFontSize = compositionLocalOf { "medium" }
-
-/** Chat line spacing multiplier (1.0–2.0). */
-val LocalChatLineHeight = compositionLocalOf { 1f }
-
-/** Whether code blocks use word wrap instead of horizontal scroll. */
-val LocalCodeWordWrap = compositionLocalOf { false }
-
-/** Whether compact message spacing is enabled. */
-val LocalCompactMessages = compositionLocalOf { false }
-
-/** Whether tool cards are collapsed by default. */
-val LocalCollapseTools = compositionLocalOf { false }
-
-val LocalExpandReasoning = compositionLocalOf { false }
-
-val LocalShowTurnDividers = compositionLocalOf { true }
-
-/** Whether haptic feedback is enabled. */
-val LocalHapticFeedbackEnabled = compositionLocalOf { AppHapticConfig() }
-
-/** Image save request callback available to image preview composables. */
-val LocalImageSaveRequest = compositionLocalOf<(ByteArray, String, String?) -> Unit> { { _, _, _ -> } }
-
-/**
- * Chat link handling config, provided around message content.
- * Same-origin links (relative to [serverBaseUrl]) are opened in-app via [openInApp];
- * any other link falls back to the system browser.
- */
-internal data class ChatLinkHandler(
-    val serverBaseUrl: String = "",
-    val openInApp: (String) -> Unit = {},
-)
-
-internal val LocalChatLinkHandler = compositionLocalOf { ChatLinkHandler() }
-
-/**
- * Returns true when [link] belongs to the same origin as [serverBaseUrl]
- * (scheme + host + port prefix match). Used to decide whether a conversation
- * link should open inside the built-in WebView instead of the system browser.
- */
-internal fun isSameServerUrl(link: String, serverBaseUrl: String): Boolean {
-    if (serverBaseUrl.isBlank() || link.isBlank()) return false
-    val base = serverBaseUrl.trimEnd('/').lowercase()
-    val target = link.trim().lowercase()
-    return target == base || target.startsWith("$base/")
-}
-
-
-/**
- * Perform a light haptic tick if haptic feedback is enabled.
- * Call from composable context or from a click lambda that has access to a View.
- */
-internal fun performHaptic(view: android.view.View, config: AppHapticConfig) {
-    AppHaptics.perform(view, config)
-}
-
-/**
- * Agent color matching the TUI's opencode theme.
- * Color cycle: secondary, accent, success, warning, primary, error, info
- * (same order as TUI's local.tsx color array).
- * Fixed palette — tool-specific color, not themed.
- */
-private val agentColorCycle = listOf(
-    Color(0xFF5C9CF5), // secondary — build (blue)
-    Color(0xFF9D7CD8), // accent — plan (purple)
-    Color(0xFF7FD88F), // success (green)
-    Color(0xFFF5A742), // warning (orange)
-    Color(0xFFFAB283), // primary (peach)
-    Color(0xFFE06C75), // error (red)
-    Color(0xFF56B6C2)  // info (cyan)
-)
-
-internal fun agentColor(agentName: String, agents: List<AgentInfo> = emptyList()): Color {
-    val index = agents.indexOfFirst { it.name == agentName }
-    return if (index >= 0) {
-        agentColorCycle[index % agentColorCycle.size]
-    } else {
-        agentColorCycle[0]
-    }
-}
-
-/**
- * Conditionally applies horizontalScroll for code blocks.
- * When word wrap is enabled, no horizontal scroll is applied.
- */
-
-/**
- * Slash command definition for the suggestion popup.
- * @param name Command name without the "/" prefix
- * @param description Human-readable description
- * @param type "server" commands are sent via API, "client" commands trigger local actions
- */
-internal data class SlashCommand(
-    val name: String,
-    val description: String?,
-    val type: String, // "server", "client", or "custom"
-    val prompt: String? = null, // for "custom" commands: text inserted into the input
-)
-
-internal enum class ChatInputMode {
-    NORMAL,
-    SHELL
-}
-
-/** Client-side slash commands that mirror the original opencode TUI. */
-@Composable
-internal fun clientCommands(): List<SlashCommand> {
-    return listOf(
-        SlashCommand("new", stringResource(R.string.cmd_new), "client"),
-        SlashCommand("compact", stringResource(R.string.cmd_compact), "client"),
-        SlashCommand("fork", stringResource(R.string.cmd_fork), "client"),
-        SlashCommand("share", stringResource(R.string.cmd_share), "client"),
-        SlashCommand("unshare", stringResource(R.string.cmd_unshare), "client"),
-        SlashCommand("undo", stringResource(R.string.cmd_undo), "client"),
-        SlashCommand("redo", stringResource(R.string.cmd_redo), "client"),
-        SlashCommand("rename", stringResource(R.string.cmd_rename), "client"),
-        SlashCommand("shell", stringResource(R.string.cmd_shell_mode), "client"),
-    )
-}
 
 
 
@@ -274,6 +69,11 @@ private fun ImeVisibilityTracker(onChanged: (Boolean) -> Unit) {
     LaunchedEffect(visible) { onChanged(visible) }
 }
 
+
+/**
+ * Chat Screen - conversation view with native markdown rendering.
+ * Shows messages with streaming text rendered via mikepenz markdown renderer.
+ */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun ChatScreen(
@@ -301,7 +101,8 @@ fun ChatScreen(
     val summaryText by viewModel.summaryText.collectAsState()
     val summaryError by viewModel.summaryError.collectAsState()
     val summaryVisible by viewModel.summaryVisible.collectAsState()
-    var inputText by remember { mutableStateOf(TextFieldValue("")) }
+    val inputTextState = remember { mutableStateOf(TextFieldValue("")) }
+    var inputText by inputTextState
     // Sync inputText once from draft on first composition
     var draftTextInitialized by remember { mutableStateOf(false) }
     if (!draftTextInitialized && draftText.isNotEmpty()) {
@@ -317,21 +118,34 @@ fun ChatScreen(
         }
     }
     val listState = rememberLazyListState()
-    var showModelPicker by remember { mutableStateOf(false) }
-    var showRenameDialog by remember { mutableStateOf(false) }
-    var showCustomCommandsDialog by remember { mutableStateOf(false) }
-    var showMenu by remember { mutableStateOf(false) }
-    var showSessionDiffDialog by remember { mutableStateOf(false) }
-    var showTimelineDialog by remember { mutableStateOf(false) }
-    var showAttachmentOptions by remember { mutableStateOf(false) }
-    var showTemplatePicker by remember { mutableStateOf(false) }
-    var showSubagentContextDetails by remember { mutableStateOf(false) }
-    var isTerminalMode by rememberSaveable { mutableStateOf(startInTerminalMode) }
-    var terminalCtrlLatched by rememberSaveable { mutableStateOf(false) }
-    var terminalAltLatched by rememberSaveable { mutableStateOf(false) }
+    val showModelPickerState = remember { mutableStateOf(false) }
+    var showModelPicker by showModelPickerState
+    val showRenameDialogState = remember { mutableStateOf(false) }
+    var showRenameDialog by showRenameDialogState
+    val showCustomCommandsDialogState = remember { mutableStateOf(false) }
+    var showCustomCommandsDialog by showCustomCommandsDialogState
+    val showMenuState = remember { mutableStateOf(false) }
+    var showMenu by showMenuState
+    val showSessionDiffDialogState = remember { mutableStateOf(false) }
+    var showSessionDiffDialog by showSessionDiffDialogState
+    val showTimelineDialogState = remember { mutableStateOf(false) }
+    var showTimelineDialog by showTimelineDialogState
+    val showAttachmentOptionsState = remember { mutableStateOf(false) }
+    var showAttachmentOptions by showAttachmentOptionsState
+    val showTemplatePickerState = remember { mutableStateOf(false) }
+    var showTemplatePicker by showTemplatePickerState
+    val showSubagentContextDetailsState = remember { mutableStateOf(false) }
+    var showSubagentContextDetails by showSubagentContextDetailsState
+    val isTerminalModeState = rememberSaveable { mutableStateOf(startInTerminalMode) }
+    var isTerminalMode by isTerminalModeState
+    val terminalCtrlLatchedState = rememberSaveable { mutableStateOf(false) }
+    var terminalCtrlLatched by terminalCtrlLatchedState
+    val terminalAltLatchedState = rememberSaveable { mutableStateOf(false) }
+    var terminalAltLatched by terminalAltLatchedState
     var terminalVirtualCtrlDown by remember { mutableStateOf(false) }
     var terminalVirtualFnDown by remember { mutableStateOf(false) }
-    var showTerminalPanelHintOverlay by remember { mutableStateOf(false) }
+    val showTerminalPanelHintOverlayState = remember { mutableStateOf(false) }
+    var showTerminalPanelHintOverlay by showTerminalPanelHintOverlayState
     val terminalFocusRequester = remember { FocusRequester() }
     val snackbarHostState = remember { SnackbarHostState() }
     val coroutineScope = rememberCoroutineScope()
@@ -354,7 +168,8 @@ fun ChatScreen(
     // 发送后置 true：识别完成（含后台 refine 迟到回调）不得再写回输入框，
     // 否则用户刚发送、输入框已清空，校对结果又把它塞回来，表现为"发了还在还变多"。
     // 下一次按下麦克风时重置为 false。
-    var asrSuppressed by remember { mutableStateOf(false) }
+    val asrSuppressedState = remember { mutableStateOf(false) }
+    var asrSuppressed by asrSuppressedState
 
     // Fill recognized ASR text back into the input field and persist to the draft.
     LaunchedEffect(Unit) {
@@ -408,7 +223,8 @@ fun ChatScreen(
     var imeVisible by remember { mutableStateOf(false) }
     ImeVisibilityTracker { imeVisible = it }
     val usesGestureNavigation = WindowInsets.systemGestures.getLeft(density, LayoutDirection.Ltr) > 0
-    var terminalOverlayHeightPx by remember { mutableStateOf(0) }
+    val terminalOverlayHeightPxState = remember { mutableStateOf(0) }
+    var terminalOverlayHeightPx by terminalOverlayHeightPxState
 
     // @ file mention state
     val fileSearchResults by viewModel.fileSearchResults.collectAsState()
@@ -440,12 +256,16 @@ fun ChatScreen(
     val terminalFontSizeSp by viewModel.terminalFontSizeSp.collectAsState()
     val terminalDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
-    var showSendConfirmDialog by remember { mutableStateOf(false) }
+    val showSendConfirmDialogState = remember { mutableStateOf(false) }
+    var showSendConfirmDialog by showSendConfirmDialogState
     // Pending send action: stored so the confirm dialog can trigger it
-    var pendingSendAction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    val pendingSendActionState = remember { mutableStateOf<(() -> Unit)?>(null) }
+    var pendingSendAction by pendingSendActionState
     // Pending template prompt: stored so the confirm dialog can send it
-    var pendingTemplatePrompt by remember { mutableStateOf<String?>(null) }
-    var inputMode by rememberSaveable { mutableStateOf(ChatInputMode.NORMAL.name) }
+    val pendingTemplatePromptState = remember { mutableStateOf<String?>(null) }
+    var pendingTemplatePrompt by pendingTemplatePromptState
+    val inputModeState = rememberSaveable { mutableStateOf(ChatInputMode.NORMAL.name) }
+    var inputMode by inputModeState
     val isShellMode = inputMode == ChatInputMode.SHELL.name
 
     BackHandler(enabled = isTerminalMode) {
@@ -901,11 +721,13 @@ fun ChatScreen(
 
     // Whether auto-scroll should follow new content.
     // Disabled when user manually scrolls up; re-enabled when user scrolls back to bottom.
-    var autoScrollEnabled by remember { mutableStateOf(true) }
+    val autoScrollEnabledState = remember { mutableStateOf(true) }
+    var autoScrollEnabled by autoScrollEnabledState
 
     // 未读新消息：用户上滑离开底部后又有新消息（messageCount 增加）时为 true，
     // 点击回底部或滚动到底后清除，用于回底部按钮的小红点。
-    var hasUnreadMessages by remember { mutableStateOf(false) }
+    val hasUnreadMessagesState = remember { mutableStateOf(false) }
+    var hasUnreadMessages by hasUnreadMessagesState
     var lastSeenMessageCount by remember { mutableStateOf(0) }
 
     // True when the very bottom of the list is visible (accounting for offset within tall items)
@@ -1015,1856 +837,150 @@ fun ChatScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
-            if (!isTerminalMode && uiState.sessionLoaded) {
-            Column {
-            Box {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = uiState.sessionTitle,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        // Subtitle: project path, total tokens and cost for the session
-                        val totalTokens = uiState.totalInputTokens + uiState.totalOutputTokens
-                        val hasTokenOrCost = totalTokens > 0 || uiState.totalCost > 0
-                        val hasDirectory = uiState.sessionDirectory.isNotBlank()
-                        if (hasDirectory || hasTokenOrCost) {
-                            val parts = mutableListOf<String>()
-                            if (hasDirectory) {
-                                parts.add(uiState.sessionDirectory)
-                            }
-                            if (totalTokens > 0) {
-                                parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
-                            }
-                            if (uiState.totalCost > 0) {
-                                parts.add(stringResource(R.string.chat_cost_format, String.format("%.4f", uiState.totalCost)))
-                            }
-                            if (parts.isNotEmpty()) {
-                                Text(
-                                    text = parts.joinToString(" · "),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                            }
-                        }
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
-                    }
-                },
-                actions = {
-                    if (
-                        uiState.parentSessionId != null &&
-                        uiState.contextWindow > 0 &&
-                        uiState.lastContextTokens > 0
-                    ) {
-                        val percentage = Math.round(
-                            uiState.lastContextTokens.toDouble() / uiState.contextWindow * 100,
-                        ).toInt()
-                        val indicatorColor = when {
-                            percentage >= 90 -> MaterialTheme.colorScheme.error
-                            percentage >= 70 -> MaterialTheme.colorScheme.tertiary
-                            else -> MaterialTheme.colorScheme.primary
-                        }
-                        IconButton(onClick = { showSubagentContextDetails = true }) {
-                            Box(contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(
-                                    progress = {
-                                        (uiState.lastContextTokens.toFloat() / uiState.contextWindow)
-                                            .coerceIn(0f, 1f)
-                                    },
-                                    modifier = Modifier.size(30.dp),
-                                    color = indicatorColor,
-                                    trackColor = indicatorColor.copy(alpha = 0.16f),
-                                    strokeWidth = 2.dp,
-                                )
-                                Text(
-                                    text = "$percentage%",
-                                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp),
-                                    color = indicatorColor,
-                                )
-                            }
-                        }
-                    }
-                    if (uiState.parentSessionId == null) Box {
-                        val isAmoled = isAmoledTheme()
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = stringResource(R.string.more_options))
-                        }
-                        if (inputText.text.isNotEmpty()) {
-                            Surface(
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(start = 3.dp, top = 3.dp)
-                                    .size(15.dp),
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                            ) {
-                                Box(contentAlignment = Alignment.Center) {
-                                    Icon(
-                                        Icons.Default.AttachFile,
-                                        contentDescription = null,
-                                        modifier = Modifier.size(10.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            }
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false },
-                            modifier = Modifier.appPopupBorder(),
-                            containerColor = appPopupContainerColor(),
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.chat_attach)) },
-                                leadingIcon = { Icon(Icons.Default.AttachFile, contentDescription = null) },
-                                onClick = {
-                                    showMenu = false
-                                    inputMode = ChatInputMode.NORMAL.name
-                                    showAttachmentOptions = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.tool_terminal)) },
-                                leadingIcon = { Icon(Icons.Default.Terminal, contentDescription = null) },
-                                onClick = {
-                                    showMenu = false
-                                    isTerminalMode = true
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_workspace_files)) },
-                                onClick = {
-                                    showMenu = false
-                                    onOpenWorkspace(viewModel.getSessionDirectory().orEmpty())
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.FolderOpen, contentDescription = null)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_agents_md)) },
-                                onClick = {
-                                    showMenu = false
-                                    onOpenAgentsMd(viewModel.getSessionDirectory().orEmpty())
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_open_in_web)) },
-                                onClick = {
-                                    showMenu = false
-                                    onOpenInWebView()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Language, contentDescription = null)
-                                },
-                            )
-                            if (isGitRepository) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.menu_git)) },
-                                    onClick = {
-                                        showMenu = false
-                                        onOpenGit()
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.AccountTree, contentDescription = null)
-                                    },
-                                )
-                            }
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_reload_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.reloadSession()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Refresh, contentDescription = null)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_rename_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    showRenameDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Edit, contentDescription = null)
-                                }
-                            )
-                            if (sessionDiffs.isNotEmpty()) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.menu_view_changes, sessionDiffs.size)) },
-                                    onClick = {
-                                        showMenu = false
-                                        showSessionDiffDialog = true
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Difference, contentDescription = null)
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_session_timeline)) },
-                                onClick = {
-                                    showMenu = false
-                                    showTimelineDialog = true
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Timeline, contentDescription = null)
-                                },
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_new_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.createNewSession { session ->
-                                        if (session != null) {
-                                            onNavigateToSession(session.id)
-                                        } else {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(context.getString(R.string.chat_session_create_failed))
-                                            }
-                                        }
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Add, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_fork_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.forkSession { session ->
-                                        if (session != null) {
-                                            onNavigateToSession(session.id)
-                                        } else {
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(context.getString(R.string.chat_fork_failed))
-                                            }
-                                        }
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.CopyAll, contentDescription = null)
-                                }
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(vertical = 4.dp),
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_compact_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.compactSession { ok ->
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                if (ok) context.getString(R.string.chat_session_compacted) else context.getString(R.string.chat_session_compact_failed)
-                                            )
-                                        }
-                                    }
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Compress, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.chat_summarize_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.summarizeSession()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                                },
-                            )
-                            // Show Share or Unshare depending on current share status
-                            if (uiState.shareUrl != null) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.cmd_unshare)) },
-                                    onClick = {
-                                        showMenu = false
-                                        viewModel.unshareSession { ok ->
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    if (ok) context.getString(R.string.chat_session_unshared) else context.getString(R.string.chat_session_unshare_failed)
-                                                )
-                                            }
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.LinkOff, contentDescription = null)
-                                    }
-                                )
-                            } else {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.menu_share_session)) },
-                                    onClick = {
-                                        showMenu = false
-                                        viewModel.shareSession { url ->
-                                            coroutineScope.launch {
-                                                if (url != null) {
-                                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(url))
-                                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_share_url_copied))
-                                                } else {
-                                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_share_failed))
-                                                }
-                                            }
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Share, contentDescription = null)
-                                    }
-                                )
-                            }
-                            if (uiState.shareUrl != null) {
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.menu_view_share)) },
-                                    onClick = {
-                                        showMenu = false
-                                        val shareId = uiState.shareUrl.orEmpty().trimEnd('/').substringAfterLast('/')
-                                        if (shareId.isNotBlank()) onOpenSharedSession(shareId)
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Visibility, contentDescription = null)
-                                    },
-                                )
-                                DropdownMenuItem(
-                                    text = { Text(stringResource(R.string.menu_copy_share_link)) },
-                                    onClick = {
-                                        showMenu = false
-                                        uiState.shareUrl?.let { url ->
-                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(url))
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(context.getString(R.string.chat_share_url_copied))
-                                            }
-                                        }
-                                    },
-                                    leadingIcon = {
-                                        Icon(Icons.Default.Link, contentDescription = null)
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_export_session)) },
-                                onClick = {
-                                    showMenu = false
-                                    val slug = uiState.sessionTitle
-                                        .take(30)
-                                        .replace(Regex("[^a-zA-Z0-9_-]"), "_")
-                                        .ifBlank { "session" }
-                                    exportLauncher.launch("$slug.json")
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.FileDownload, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_export_markdown)) },
-                                onClick = {
-                                    showMenu = false
-                                    val content = SessionExport.toMarkdown(uiState.sessionTitle, uiState.messages)
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "text/markdown"
-                                        putExtra(Intent.EXTRA_SUBJECT, uiState.sessionTitle)
-                                        putExtra(Intent.EXTRA_TEXT, content)
-                                    }
-                                    context.startActivity(
-                                        Intent.createChooser(shareIntent, context.getString(R.string.menu_export_markdown))
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Description, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text(stringResource(R.string.menu_export_json)) },
-                                onClick = {
-                                    showMenu = false
-                                    val content = SessionExport.toJson(uiState.sessionTitle, uiState.messages)
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/json"
-                                        putExtra(Intent.EXTRA_SUBJECT, uiState.sessionTitle)
-                                        putExtra(Intent.EXTRA_TEXT, content)
-                                    }
-                                    context.startActivity(
-                                        Intent.createChooser(shareIntent, context.getString(R.string.menu_export_json))
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.DataObject, contentDescription = null)
-                                }
-                            )
-                            }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
-                )
+            ChatScreenTopBar(
+                viewModel = viewModel,
+                uiState = uiState,
+                isServerConnected = isServerConnected,
+                isAmoled = isAmoled,
+                isGitRepository = isGitRepository,
+                sessionDiffs = sessionDiffs,
+                snackbarHostState = snackbarHostState,
+                coroutineScope = coroutineScope,
+                context = context,
+                clipboardManager = clipboardManager,
+                exportLauncher = exportLauncher,
+                inputTextState = inputTextState,
+                isTerminalModeState = isTerminalModeState,
+                inputModeState = inputModeState,
+                showMenuState = showMenuState,
+                showRenameDialogState = showRenameDialogState,
+                showSessionDiffDialogState = showSessionDiffDialogState,
+                showTimelineDialogState = showTimelineDialogState,
+                showAttachmentOptionsState = showAttachmentOptionsState,
+                showSubagentContextDetailsState = showSubagentContextDetailsState,
+                onNavigateBack = onNavigateBack,
+                onNavigateToSession = onNavigateToSession,
+                onOpenInWebView = onOpenInWebView,
+                onOpenWorkspace = onOpenWorkspace,
+                onOpenAgentsMd = onOpenAgentsMd,
+                onOpenGit = onOpenGit,
+                onOpenSharedSession = onOpenSharedSession,
             )
-                AppLoadingEdge(
-                    active = uiState.isLoading && uiState.messages.isEmpty(),
-                    modifier = Modifier.align(Alignment.BottomCenter),
-                )
-            }
-                if (!isServerConnected) {
-                    DisconnectedServerBanner()
-                }
-            }
-            }
         },
         bottomBar = {
-            val modelLabel = if (uiState.selectedModelId != null && uiState.providers.isNotEmpty()) {
-                val provider = uiState.providers.find { it.id == uiState.selectedProviderId }
-                val model = provider?.models?.get(uiState.selectedModelId)
-                model?.name ?: uiState.selectedModelId ?: ""
-            } else ""
-            val hasRunningTool = uiState.messages.any { message ->
-                message.parts.any { part -> part is Part.Tool && part.state is ToolState.Running }
-            }
-
-            if (!isTerminalMode && uiState.sessionLoaded && uiState.parentSessionId == null) {
-            ChatInputBar(
-                textFieldValue = inputText,
-                onTextFieldValueChange = { newValue ->
-                    val shouldAutoShell = !isShellMode && newValue.text.startsWith("!")
-                    val normalizedValue = if (shouldAutoShell) {
-                        val stripped = newValue.text.drop(1).trimStart()
-                        val newCursor = (newValue.selection.start - 1).coerceAtLeast(0)
-                        TextFieldValue(
-                            text = stripped,
-                            selection = TextRange(newCursor.coerceAtMost(stripped.length))
-                        )
-                    } else {
-                        newValue
-                    }
-
-                    if (shouldAutoShell) {
-                        inputMode = ChatInputMode.SHELL.name
-                        viewModel.clearSuggestions()
-                    }
-
-                    inputText = normalizedValue
-                    viewModel.updateDraftText(normalizedValue.text)
-                    if (isShellMode || shouldAutoShell) {
-                        viewModel.clearFileSearch()
-                        return@ChatInputBar
-                    }
-                    // Detect @query before cursor for file mention
-                    val cursorPos = normalizedValue.selection.start
-                    val textBefore = normalizedValue.text.substring(0, cursorPos)
-                    val atMatch = Regex("@(\\S*)$").find(textBefore)
-                    if (atMatch != null) {
-                        val query = atMatch.groupValues[1]
-                        viewModel.searchFilesForMention(query)
-                    } else {
-                        viewModel.clearFileSearch()
-                    }
-                },
-                onSend = {
-                    val doSend = doSend@{
-                        AppHaptics.perform(
-                            view,
-                            AppHapticConfig(hapticEnabled, hapticDurationMillis, hapticAmplitude),
-                        )
-                        val rawText = inputText.text
-                        val shellCommand = when {
-                            isShellMode -> rawText.trim()
-                            rawText.startsWith("!") -> rawText.drop(1).trimStart()
-                            else -> null
-                        }
-                        if (shellCommand != null) {
-                            if (shellCommand.isBlank()) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_shell_empty))
-                                }
-                                return@doSend
-                            }
-                            if (attachments.isNotEmpty()) {
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_shell_attachments_unsupported))
-                                }
-                                return@doSend
-                            }
-                            viewModel.runShellCommand(shellCommand) { ok ->
-                                if (!ok) {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_shell_failed))
-                                    }
-                                }
-                            }
-                            inputText = TextFieldValue("")
-                            asrSuppressed = true
-                            if (isShellMode) {
-                                inputMode = ChatInputMode.NORMAL.name
-                            }
-                            viewModel.clearConfirmedPaths()
-                            viewModel.clearFileSearch()
-                            viewModel.clearDraft()
-                            return@doSend
-                        }
-                        // Build prompt parts: split text around confirmed @file mentions
-                        val allParts = buildPromptParts(rawText, confirmedFilePaths, viewModel.getSessionDirectory())
-                        // Image attachments require vision support from the selected model.
-                        val hasImageAttachments = attachments.any { it.isImage }
-                        if (hasImageAttachments && !uiState.modelSupportsVision) {
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(context.getString(R.string.chat_model_vision_unsupported))
-                            }
-                            return@doSend
-                        }
-                        // Add attachments: images become image parts, everything else stays a file part.
-                        val attachmentParts = attachments.map { att ->
-                            PromptPart(
-                                type = if (att.isImage) "image" else "file",
-                                mime = att.mime,
-                                url = att.dataUrl,
-                                filename = att.filename
-                            )
-                        }
-                        if (viewModel.sendMessage(allParts, attachmentParts)) {
-                            inputText = TextFieldValue("")
-                            asrSuppressed = true
-                            attachments.clear()
-                            viewModel.clearConfirmedPaths()
-                            viewModel.clearFileSearch()
-                            viewModel.clearDraft()
-                        }
-                    }
-                    if (confirmBeforeSend) {
-                        pendingSendAction = doSend
-                        showSendConfirmDialog = true
-                    } else {
-                        doSend()
-                    }
-                },
-                inputMode = if (isShellMode) ChatInputMode.SHELL else ChatInputMode.NORMAL,
-                onInputModeChange = {
-                    inputMode = it.name
-                    if (it == ChatInputMode.SHELL) {
-                        viewModel.clearFileSearch()
-                        // Invalidate any in-flight suggestions; the shell has no suggestion UI.
-                        viewModel.clearSuggestions()
-                    }
-                },
-                onStop = viewModel::abortSession,
-                isSending = uiState.isSending,
-                isBusy = isWorkingSessionStatus(uiState.sessionStatus) || hasRunningTool,
-                sessionStatus = uiState.sessionStatus,
-                messages = uiState.messages,
-                attachments = attachments,
-                onAttach = { showAttachmentOptions = true },
-                onTemplateClick = { showTemplatePicker = true },
+            ChatScreenBottomBar(
+                viewModel = viewModel,
+                uiState = uiState,
+                onNavigateToSession = onNavigateToSession,
+                snackbarHostState = snackbarHostState,
+                coroutineScope = coroutineScope,
+                context = context,
+                clipboardManager = clipboardManager,
+                view = view,
                 isListening = isListening,
                 voiceLevel = voiceLevel,
-                onMicPress = { startVoiceInput() },
-                onMicRelease = { viewModel.stopListening() },
-                onMicCancel = { viewModel.cancelListening() },
                 voiceEnabled = voiceEnabled,
-                onRemoveAttachment = { index ->
-                    if (index in attachments.indices) {
-                        attachments.removeAt(index)
-                        viewModel.removeDraftAttachment(index)
-                    }
-                },
-                onSaveAttachment = { bytes, mime, filename ->
-                    requestSaveImage(bytes, mime, filename)
-                },
-                modelLabel = modelLabel,
-                selectedProviderId = uiState.selectedProviderId,
-                onModelClick = { showModelPicker = true },
-                agents = uiState.agents,
-                selectedAgent = uiState.selectedAgent,
-                onAgentSelect = { viewModel.selectAgent(it) },
-                variantNames = uiState.variantNames,
-                selectedVariant = uiState.selectedVariant,
-                onVariantSelect = { viewModel.selectVariant(it) },
-                commands = uiState.commands,
-                customCommands = customCommands,
-                onManageCustomCommands = { showCustomCommandsDialog = true },
+                asrSuppressedState = asrSuppressedState,
+                startVoiceInput = startVoiceInput,
                 fileSearchResults = fileSearchResults,
                 confirmedFilePaths = confirmedFilePaths,
-                onFileSelected = { path ->
-                    // Replace @query with @path in text
-                    val cursorPos = inputText.selection.start
-                    val textBefore = inputText.text.substring(0, cursorPos)
-                    val atMatch = Regex("@(\\S*)$").find(textBefore)
-                    if (atMatch != null) {
-                        val matchStart = atMatch.range.first
-                        val replacement = "@$path "
-                        val newText = inputText.text.substring(0, matchStart) + replacement +
-                                inputText.text.substring(cursorPos)
-                        val newCursor = matchStart + replacement.length
-                        inputText = TextFieldValue(
-                            text = newText,
-                            selection = TextRange(newCursor)
-                        )
-                    }
-                    viewModel.confirmFilePath(path)
-                    viewModel.clearFileSearch()
-                },
-                onSlashCommand = { cmd ->
-                    when (cmd.name) {
-                        "new" -> {
-                            // Create a new session and navigate to it
-                            viewModel.createNewSession { session ->
-                                if (session != null) {
-                                    onNavigateToSession(session.id)
-                                } else {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_session_create_failed))
-                                    }
-                                }
-                            }
-                        }
-                        "compact" -> {
-                            viewModel.compactSession { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_session_compacted) else context.getString(R.string.chat_session_compact_failed)
-                                    )
-                                }
-                            }
-                        }
-                        "fork" -> {
-                            viewModel.forkSession { session ->
-                                if (session != null) {
-                                    onNavigateToSession(session.id)
-                                } else {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_fork_failed))
-                                    }
-                                }
-                            }
-                        }
-                        "share" -> {
-                            viewModel.shareSession { url ->
-                                coroutineScope.launch {
-                                    if (url != null) {
-                                        clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(url))
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_share_url_copied))
-                                    } else {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_share_failed))
-                                    }
-                                }
-                            }
-                        }
-                        "unshare" -> {
-                            viewModel.unshareSession { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_session_unshared) else context.getString(R.string.chat_session_unshare_failed)
-                                    )
-                                }
-                            }
-                        }
-                        "undo" -> {
-                            viewModel.undoMessage { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_message_undone) else context.getString(R.string.chat_message_undo_failed)
-                                    )
-                                }
-                            }
-                        }
-                        "redo" -> {
-                            viewModel.redoMessage { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_message_redone) else context.getString(R.string.chat_message_redo_failed)
-                                    )
-                                }
-                            }
-                        }
-                        "rename" -> {
-                            showRenameDialog = true
-                        }
-                        "shell" -> {
-                            inputMode = ChatInputMode.SHELL.name
-                        }
-                        "review" -> {
-                            viewModel.executeCommand("review") { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_command_executed, "review") else context.getString(R.string.chat_command_failed, "review")
-                                    )
-                                }
-                            }
-                        }
-                        else -> {
-                            if (cmd.type == "custom" && !cmd.prompt.isNullOrBlank()) {
-                                inputText = TextFieldValue(cmd.prompt, TextRange(cmd.prompt.length))
-                                viewModel.updateDraftText(cmd.prompt)
-                            } else {
-                                // Server command — execute via API
-                                viewModel.executeCommand(cmd.name) { ok ->
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            if (ok) context.getString(R.string.chat_command_executed, cmd.name) else context.getString(R.string.chat_command_failed, cmd.name)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                },
-                contextWindow = uiState.contextWindow,
-                lastContextTokens = uiState.lastContextTokens,
-                estimatedContextTokens = uiState.estimatedContextTokens,
-                effectiveContextWindow = uiState.effectiveContextWindow,
-                contextUsage = uiState.contextUsage,
-                contextMessages = uiState.messages,
-                suggestions = uiState.suggestions,
-                suggestionsSource = uiState.suggestionsSource,
-                isGeneratingSuggestions = uiState.isGeneratingSuggestions,
-                suggestionsError = uiState.suggestionsError,
-                suggestionsStreamText = uiState.suggestionsStreamText,
-                modelNeedsDownload = uiState.modelNeedsDownload,
-                modelDownloading = uiState.modelDownloading,
-                modelDownloadProgress = uiState.modelDownloadProgress,
-                onDownloadModel = { viewModel.downloadModel() },
-                onSuggestionClick = { suggestion ->
-                    viewModel.sendMessage(suggestion)
-                    viewModel.clearSuggestions()
-                },
-                onGenerateSuggestions = { viewModel.generateSuggestions() },
-                onDismissSuggestions = { viewModel.clearSuggestions() },
+                customCommands = customCommands,
+                confirmBeforeSend = confirmBeforeSend,
+                hapticEnabled = hapticEnabled,
+                hapticDurationMillis = hapticDurationMillis,
+                hapticAmplitude = hapticAmplitude,
+                isShellMode = isShellMode,
+                attachments = attachments,
+                requestSaveImage = requestSaveImage,
+                isBusy = isBusy,
+                inputTextState = inputTextState,
+                inputModeState = inputModeState,
+                isTerminalModeState = isTerminalModeState,
+                showModelPickerState = showModelPickerState,
+                showRenameDialogState = showRenameDialogState,
+                showCustomCommandsDialogState = showCustomCommandsDialogState,
+                showAttachmentOptionsState = showAttachmentOptionsState,
+                showTemplatePickerState = showTemplatePickerState,
+                showSendConfirmDialogState = showSendConfirmDialogState,
+                pendingSendActionState = pendingSendActionState,
             )
-            }
         }
     ) { padding ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(if (isTerminalMode) PaddingValues(0.dp) else padding)
-        ) {
-            when {
-                isTerminalMode -> {
-                    val overlayHeightDp = with(density) { terminalOverlayHeightPx.toDp() }
-
-                    ModalNavigationDrawer(
-                        drawerState = terminalDrawerState,
-                        gesturesEnabled = true,
-                        drawerContent = {
-                            ModalDrawerSheet(
-                                drawerContainerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface,
-                                drawerContentColor = MaterialTheme.colorScheme.onSurface,
-                                drawerTonalElevation = 0.dp,
-                                drawerShape = RoundedCornerShape(0.dp),
-                                windowInsets = WindowInsets(0, 0, 0, 0),
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .widthIn(min = 240.dp, max = 320.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxHeight()
-                                            .windowInsetsPadding(
-                                                WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical),
-                                            )
-                                            .padding(vertical = 8.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                    LazyColumn(
-                                        modifier = Modifier.weight(1f),
-                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
-                                    ) {
-                                        items(terminalTabs, key = { it.id }) { tab ->
-                                            val selected = tab.id == activeTerminalTabId
-                                            val drawerItemShape = RoundedCornerShape(12.dp)
-                                            Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clip(drawerItemShape)
-                                                    .then(
-                                                        if (isAmoled && selected) {
-                                                            Modifier.border(
-                                                                BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)),
-                                                                drawerItemShape
-                                                            )
-                                                        } else Modifier
-                                                    )
-                                            ) {
-                                                NavigationDrawerItem(
-                                                    label = {
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                                        ) {
-                                                            Column(
-                                                                modifier = Modifier.weight(1f),
-                                                                verticalArrangement = Arrangement.spacedBy(3.dp)
-                                                            ) {
-                                                                Text(
-                                                                    text = tab.title,
-                                                                    maxLines = 1,
-                                                                    overflow = TextOverflow.Ellipsis,
-                                                                    style = MaterialTheme.typography.titleMedium,
-                                                                    fontWeight = FontWeight.SemiBold
-                                                                )
-                                                                if (!tab.connected) {
-                                                                    val statusText = stringResource(terminalTabStateLabel(tab.state))
-                                                                    Surface(
-                                                                        shape = RoundedCornerShape(999.dp),
-                                                                        color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                                                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
-                                                                    ) {
-                                                                        Row(
-                                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                                                            verticalAlignment = Alignment.CenterVertically,
-                                                                            horizontalArrangement = Arrangement.spacedBy(5.dp)
-                                                                        ) {
-                                                                            if (tab.state == TerminalTabState.Starting ||
-                                                                                tab.state == TerminalTabState.Reconnecting
-                                                                            ) {
-                                                                                CircularProgressIndicator(
-                                                                                    modifier = Modifier.size(8.dp),
-                                                                                    strokeWidth = 1.5.dp,
-                                                                                )
-                                                                            } else {
-                                                                                Box(
-                                                                                    modifier = Modifier
-                                                                                        .size(6.dp)
-                                                                                        .background(
-                                                                                            MaterialTheme.colorScheme.error,
-                                                                                            CircleShape,
-                                                                                        )
-                                                                                )
-                                                                            }
-                                                                            Text(
-                                                                                text = statusText,
-                                                                                style = MaterialTheme.typography.labelSmall,
-                                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                                            )
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }
-                                                            if (tab.recoveryAction != TerminalRecoveryAction.None) {
-                                                                val recoveryDescription = stringResource(
-                                                                    terminalRecoveryLabel(tab.recoveryAction),
-                                                                )
-                                                                IconButton(
-                                                                    onClick = {
-                                                                        viewModel.recoverTerminalTab(tab.id) { ok ->
-                                                                            if (!ok) {
-                                                                                coroutineScope.launch {
-                                                                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_terminal_connect_failed))
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    },
-                                                                    modifier = Modifier
-                                                                        .size(48.dp)
-                                                                        .then(
-                                                                            if (isAmoled) {
-                                                                                Modifier.border(
-                                                                                    1.dp,
-                                                                                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-                                                                                    CircleShape,
-                                                                                )
-                                                                            } else Modifier
-                                                                        ),
-                                                                    colors = IconButtonDefaults.iconButtonColors(
-                                                                        containerColor = if (isAmoled) {
-                                                                            Color.Black
-                                                                        } else {
-                                                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
-                                                                        }
-                                                                    )
-                                                                ) {
-                                                                    Icon(
-                                                                        Icons.Default.Refresh,
-                                                                        contentDescription = recoveryDescription,
-                                                                    )
-                                                                }
-                                                            }
-                                                            IconButton(
-                                                                onClick = { viewModel.closeTerminalTab(tab.id) },
-                                                                modifier = Modifier
-                                                                    .size(48.dp)
-                                                                    .then(
-                                                                        if (isAmoled) {
-                                                                            Modifier.border(
-                                                                                1.dp,
-                                                                                MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f),
-                                                                                CircleShape,
-                                                                            )
-                                                                        } else Modifier
-                                                                    ),
-                                                                colors = IconButtonDefaults.iconButtonColors(
-                                                                    containerColor = if (isAmoled) {
-                                                                        Color.Black
-                                                                    } else {
-                                                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-                                                                    }
-                                                                )
-                                                            ) {
-                                                                Icon(
-                                                                    Icons.Default.Close,
-                                                                    contentDescription = stringResource(R.string.chat_terminal_close_tab),
-                                                                )
-                                                            }
-                                                        }
-                                                    },
-                                                    selected = selected,
-                                                    shape = drawerItemShape,
-                                                    colors = NavigationDrawerItemDefaults.colors(
-                                                        selectedContainerColor = if (isAmoled) {
-                                                            Color.Black
-                                                        } else {
-                                                            MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
-                                                        },
-                                                        unselectedContainerColor = if (isAmoled) Color.Black else Color.Transparent,
-                                                        selectedTextColor = MaterialTheme.colorScheme.onSurface,
-                                                        unselectedTextColor = MaterialTheme.colorScheme.onSurface
-                                                    ),
-                                                    onClick = {
-                                                        viewModel.switchTerminalTab(tab.id)
-                                                        coroutineScope.launch { terminalDrawerState.close() }
-                                                    },
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    HorizontalDivider()
-
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(horizontal = 12.dp, vertical = 4.dp),
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        AppSecondaryButton(
-                                            onClick = {
-                                                viewModel.createTerminalTab { ok ->
-                                                    if (!ok) {
-                                                        coroutineScope.launch {
-                                                            snackbarHostState.showSnackbar(context.getString(R.string.chat_terminal_connect_failed))
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .heightIn(min = 48.dp),
-                                        ) {
-                                            Icon(Icons.Default.Add, contentDescription = null)
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(stringResource(R.string.chat_terminal_new_tab))
-                                        }
-                                        AppSecondaryButton(
-                                            onClick = {
-                                                keyboardController?.show()
-                                                coroutineScope.launch { terminalDrawerState.close() }
-                                            },
-                                            modifier = Modifier
-                                                .weight(1f)
-                                                .heightIn(min = 48.dp),
-                                        ) {
-                                            Icon(Icons.Default.Keyboard, contentDescription = null)
-                                            Spacer(Modifier.width(6.dp))
-                                            Text(stringResource(R.string.chat_terminal_keyboard))
-                                        }
-                                    }
-
-                                    }
-
-                                    if (isAmoled) {
-                                        Box(
-                                            modifier = Modifier
-                                                .align(Alignment.CenterEnd)
-                                                .fillMaxHeight()
-                                                .width(1.dp)
-                                                .background(MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .windowInsetsPadding(
-                                    WindowInsets.safeDrawing.only(WindowInsetsSides.Vertical),
-                                ),
-                        ) {
-                            SessionTerminalInline(
-                                emulator = viewModel.terminalEmulator,
-                                terminalVersion = terminalVersion,
-                                connected = terminalConnected,
-                                focusRequester = terminalFocusRequester,
-                                onSendInput = ::sendTerminalChunk,
-                                onPaste = ::pasteClipboardToTerminal,
-                                onResize = { cols, rows ->
-                                    viewModel.resizeTerminal(cols, rows)
-                                },
-                                fontSizeSp = terminalFontSizeSp,
-                                onFontSizeChange = viewModel::setTerminalFontSize,
-                                contentBottomPadding = overlayHeightDp,
-                                modifier = Modifier.fillMaxSize()
-                            )
-
-                            if (activeTerminalTab != null && !activeTerminalTab.connected) {
-                                Surface(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .padding(12.dp)
-                                        .zIndex(2f),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = if (isAmoled) {
-                                        Color.Black
-                                    } else {
-                                        MaterialTheme.colorScheme.surfaceContainerHigh
-                                    },
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.72f),
-                                    ),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(start = 12.dp, end = 6.dp, top = 5.dp, bottom = 5.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    ) {
-                                        if (activeTerminalTab.state == TerminalTabState.Starting ||
-                                            activeTerminalTab.state == TerminalTabState.Reconnecting
-                                        ) {
-                                            CircularProgressIndicator(
-                                                modifier = Modifier.size(14.dp),
-                                                strokeWidth = 2.dp,
-                                            )
-                                        } else {
-                                            Box(
-                                                modifier = Modifier
-                                                    .size(7.dp)
-                                                    .background(MaterialTheme.colorScheme.error, CircleShape),
-                                            )
-                                        }
-                                        Text(
-                                            text = stringResource(terminalTabStateLabel(activeTerminalTab.state)),
-                                            style = MaterialTheme.typography.labelLarge,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis,
-                                        )
-                                        if (activeTerminalTab.recoveryAction != TerminalRecoveryAction.None) {
-                                            val recoveryDescription = stringResource(
-                                                terminalRecoveryLabel(activeTerminalTab.recoveryAction),
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    viewModel.recoverTerminalTab(activeTerminalTab.id) { ok ->
-                                                        if (!ok) {
-                                                            coroutineScope.launch {
-                                                                snackbarHostState.showSnackbar(
-                                                                    context.getString(R.string.chat_terminal_connect_failed),
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-                                                },
-                                                modifier = Modifier.size(40.dp),
-                                                colors = IconButtonDefaults.iconButtonColors(
-                                                    containerColor = if (isAmoled) {
-                                                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f)
-                                                    } else {
-                                                        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.65f)
-                                                    },
-                                                ),
-                                            ) {
-                                                Icon(
-                                                    Icons.Default.Refresh,
-                                                    contentDescription = recoveryDescription,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (showTerminalPanelHintOverlay && !terminalDrawerState.isOpen) {
-                                TerminalPanelCoachmark(
-                                    usesGestureNavigation = usesGestureNavigation,
-                                    modifier = Modifier
-                                        .align(Alignment.CenterStart)
-                                        .zIndex(3f),
-                                )
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .fillMaxHeight()
-                                    .padding(bottom = overlayHeightDp)
-                                    .width(18.dp)
-                                    .zIndex(0f)
-                                    .pointerInput(terminalDrawerState) {
-                                        detectTapGestures(
-                                            onLongPress = {
-                                                if (!terminalDrawerState.isOpen) {
-                                                    showTerminalPanelHintOverlay = false
-                                                    coroutineScope.launch { terminalDrawerState.open() }
-                                                }
-                                            }
-                                        )
-                                    }
-                                    .pointerInput(terminalDrawerState) {
-                                        var dragged = 0f
-                                        val openThreshold = 32.dp.toPx()
-                                        detectHorizontalDragGestures(
-                                            onHorizontalDrag = { _, dragAmount ->
-                                                if (terminalDrawerState.isOpen) return@detectHorizontalDragGestures
-                                                dragged += dragAmount
-                                                if (dragged > openThreshold) {
-                                                    showTerminalPanelHintOverlay = false
-                                                    coroutineScope.launch { terminalDrawerState.open() }
-                                                    dragged = 0f
-                                                }
-                                            },
-                                            onDragEnd = { dragged = 0f },
-                                            onDragCancel = { dragged = 0f }
-                                        )
-                                    }
-                            ) {
-                                if (showTerminalPanelHintOverlay && !terminalDrawerState.isOpen) {
-                                    TerminalPanelEdgeHighlight(modifier = Modifier.fillMaxSize())
-                                }
-                            }
-
-                        TerminalKeyboardOverlay(
-                            connected = terminalConnected,
-                            ctrlLatched = terminalCtrlLatched,
-                            altLatched = terminalAltLatched,
-                            cursorApp = viewModel.terminalEmulator.cursorKeysApplicationMode,
-                            onToggleDrawer = { coroutineScope.launch { terminalDrawerState.apply { if (isOpen) close() else open() } } },
-                            onToggleCtrl = { terminalCtrlLatched = !terminalCtrlLatched },
-                            onToggleAlt = { terminalAltLatched = !terminalAltLatched },
-                            onSendInput = ::sendTerminalChunk,
-                            onCtrlC = { viewModel.sendTerminalInput("\u0003") },
-                            onClear = { viewModel.clearTerminalBuffer() },
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .zIndex(1f)
-                                    .fillMaxWidth()
-                                    .onSizeChanged { terminalOverlayHeightPx = it.height }
-                            )
-
-                        }
-                    }
-                }
-                uiState.isLoading && uiState.messages.isEmpty() -> {
-                    // Loading is shown consistently on the lower edge of the top app bar.
-                }
-                uiState.error != null && uiState.messages.isEmpty() -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Warning,
-                            contentDescription = null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.error
-                        )
-                        ErrorPayloadContent(
-                            text = uiState.error ?: stringResource(R.string.session_unknown_error),
-                            textStyle = MaterialTheme.typography.bodyLarge,
-                            textColor = MaterialTheme.colorScheme.error,
-                        )
-                        AppPrimaryButton(onClick = { viewModel.loadMessages() }) {
-                            Text(stringResource(R.string.retry))
-                        }
-                    }
-                }
-                uiState.messages.isEmpty() && !uiState.isLoading -> {
-                    Column(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .padding(32.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.chat_empty),
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                        Text(
-                            text = stringResource(R.string.chat_type_message),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = stringResource(R.string.chat_empty_quick_start),
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                        )
-                        val quickPrompts = listOf(
-                            stringResource(R.string.chat_empty_prompt_1),
-                            stringResource(R.string.chat_empty_prompt_2),
-                            stringResource(R.string.chat_empty_prompt_3),
-                        )
-                        quickPrompts.forEach { prompt ->
-                            SuggestionChip(
-                                onClick = {
-                                    inputText = TextFieldValue(prompt, TextRange(prompt.length))
-                                    viewModel.updateDraftText(prompt)
-                                },
-                                label = { Text(prompt) },
-                            )
-                        }
-                        if (uiState.hasOlderMessages) {
-                            AppPrimaryButton(
-                                onClick = { viewModel.loadOlderMessages() },
-                                enabled = !uiState.isLoadingOlder,
-                            ) {
-                                Text(stringResource(R.string.chat_load_earlier))
-                            }
-                        }
-                    }
-                }
-                else -> {
-                    val messageSpacing = if (LocalCompactMessages.current) 4.dp else 12.dp
-                    val timeline = remember(uiState.messages) { buildChatTimeline(uiState.messages) }
-
-                    LazyColumn(
-                        reverseLayout = true,
-                        state = listState,
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                        verticalArrangement = Arrangement.spacedBy(messageSpacing)
-                    ) {
-                        // A stable final item lets scrollToItem clamp to the true content bottom,
-                        // including spacing and padding below a tall or streaming message.
-                        item(key = "conversation_bottom") {
-                            Spacer(Modifier.height(4.dp))
-                        }
-
-                        // Blinking typing cursor while the assistant is generating a reply.
-                        if (isBusy && uiState.messages.isNotEmpty()) {
-                            item(key = "typing_cursor") {
-                                TypingCursorIndicator(
-                                    modifier = Modifier.padding(start = 16.dp, top = 2.dp, bottom = 2.dp),
-                                    size = 8.dp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                )
-                            }
-                        }
-
-                        pendingInteractions.forEachIndexed { index, interaction ->
-                            item(key = "pending_${interaction::class.simpleName}_${interaction.sessionId}_${interaction.id}") {
-                                val position = stringResource(R.string.pending_request_position, index + 1, pendingInteractions.size)
-                                when (interaction) {
-                                    is PendingInteraction.Permission -> PermissionCard(
-                                        permission = interaction.request,
-                                        position = position,
-                                        onReply = { reply, onResult ->
-                                            viewModel.replyToPermission(
-                                                interaction.sessionId,
-                                                interaction.id,
-                                                reply,
-                                            ) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    )
-                                    is PendingInteraction.Question -> QuestionCard(
-                                        question = interaction.request,
-                                        position = position,
-                                        onSubmit = { answers, onResult ->
-                                            viewModel.replyToQuestion(
-                                                interaction.sessionId,
-                                                interaction.id,
-                                                answers,
-                                            ) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                        onReject = { onResult ->
-                                            viewModel.rejectQuestion(interaction.sessionId, interaction.id) { success ->
-                                                onResult(success)
-                                                if (!success) coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        context.getString(R.string.pending_request_reply_failed),
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    )
-                                }
-                            }
-                        }
-
-                        // Revert banner
-                        if (uiState.revert != null) {
-                            item(key = "revert_banner") {
-                                RevertBanner(onRedo = {
-                                    viewModel.redoMessage { ok ->
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(
-                                                if (ok) context.getString(R.string.chat_messages_restored) else context.getString(R.string.chat_message_redo_failed)
-                                            )
-                                        }
-                                    }
-                                })
-                            }
-                        }
-
-                        items(
-                            timeline.asReversed(),
-                            key = { it.key },
-                        ) { entry ->
-                            when (entry) {
-                                is ChatTimelineEntry.DateDivider -> DateDividerRow(entry.dayStartMillis)
-                                is ChatTimelineEntry.Turn -> {
-                            val chatTurn = entry.turn
-                            val chatMessage = chatTurn.messages.firstOrNull() ?: return@items
-                            // Detect compaction trigger messages (user messages with Part.Compaction)
-                            val isCompactionTrigger = chatMessage.isUser &&
-                                chatMessage.parts.any { it is Part.Compaction }
-
-                            // Show compact system-style divider for compaction triggers.
-                            if (isCompactionTrigger) {
-                                var showRevertDialog by remember { mutableStateOf(false) }
-
-                                if (showRevertDialog) {
-                                    RevertConfirmationDialog(
-                                        onDismiss = { showRevertDialog = false },
-                                        onConfirm = {
-                                            showRevertDialog = false
-                                            viewModel.revertMessage(chatMessage.message.id) { ok ->
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(
-                                                        if (ok) context.getString(R.string.chat_message_reverted) else context.getString(R.string.chat_message_revert_failed)
-                                                    )
-                                                }
-                                            }
-                                        },
-                                    )
-                                }
-
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp, horizontal = 32.dp),
-                                    horizontalArrangement = Arrangement.Center,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    HorizontalDivider(
-                                        modifier = Modifier.weight(1f),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                    )
-                                    Text(
-                                        text = stringResource(R.string.chat_summarized),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                        modifier = Modifier.padding(horizontal = 12.dp)
-                                    )
-                                    Box(
-                                        modifier = Modifier
-                                            .size(48.dp)
-                                            .clickable { showRevertDialog = true },
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            Icons.AutoMirrored.Filled.Undo,
-                                            contentDescription = stringResource(R.string.chat_revert),
-                                            modifier = Modifier.size(18.dp),
-                                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.65f),
-                                        )
-                                    }
-                                    HorizontalDivider(
-                                        modifier = Modifier.weight(1f),
-                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                                    )
-                                }
-                                return@items
-                            }
-
-                            ChatLinkHandlerProvider(serverBaseUrl, onOpenChatLink) {
-                            ChatMessageBubble(
-                                chatMessages = chatTurn.messages,
-                                onNavigateToChildSession = onNavigateToChildSession,
-                                onRevert = if (chatMessage.isUser) {
-                                    {
-                                        val revertText = chatMessage.parts
-                                            .filterIsInstance<Part.Text>()
-                                            .joinToString("\n") { it.text }
-                                        viewModel.revertMessage(chatMessage.message.id, revertText) { ok ->
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    if (ok) context.getString(R.string.chat_message_reverted) else context.getString(R.string.chat_message_revert_failed)
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else null,
-                                onCopyText = {
-                                    val text = chatTurn.messages.flatMap { it.parts }
-                                        .filterIsInstance<Part.Text>()
-                                        .joinToString("\n") { it.text }
-                                    if (text.isNotBlank()) {
-                                        clipboardManager.setText(
-                                            androidx.compose.ui.text.AnnotatedString(text)
-                                        )
-                                        coroutineScope.launch {
-                                            snackbarHostState.showSnackbar(context.getString(R.string.chat_copied_clipboard))
-                                        }
-                                    }
-                                },
-                                onRegenerate = if (chatMessage.isAssistant) {
-                                    {
-                                        viewModel.regenerateMessage(chatMessage.message.id) { ok ->
-                                            coroutineScope.launch {
-                                                snackbarHostState.showSnackbar(
-                                                    if (ok) context.getString(R.string.chat_message_regenerated) else context.getString(R.string.chat_message_regenerate_failed)
-                                                )
-                                            }
-                                        }
-                                    }
-                                } else null,
-                                onEdit = if (chatMessage.isUser) {
-                                    { viewModel.editUserMessage(chatMessage.message.id) }
-                                } else null,
-                                onSummarize = if (chatMessage.isAssistant) {
-                                    { viewModel.summarizeMessage(chatMessage.message.id) }
-                                } else null,
-                                onQuoteReply = {
-                                    viewModel.quoteMessage(chatMessage.message.id)
-                                },
-                                onBookmark = {
-                                    viewModel.addBookmark(chatMessage.message.id)
-                                },
-                                onContinue = if (chatMessage.isAssistant) {
-                                    {
-                                        viewModel.continueSession { ok ->
-                                            if (!ok) {
-                                                coroutineScope.launch {
-                                                    snackbarHostState.showSnackbar(context.getString(R.string.chat_continue_failed))
-                                                }
-                                            }
-                                        }
-                                    }
-                                } else null,
-                            )
-                            }
-                                }
-                            }
-                        }
-
-                        // "Load earlier messages" button at the top
-                        if (uiState.hasOlderMessages) {
-                            item(key = "load_older") {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 4.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    if (uiState.isLoadingOlder) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            PulsingDotsIndicator(
-                                                dotSize = 6.dp,
-                                                dotSpacing = 4.dp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                            Text(
-                                                text = stringResource(R.string.chat_loading_earlier),
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                    } else {
-                                        TextButton(onClick = {
-                                            viewModel.loadOlderMessages()
-                                        }) {
-                                            Text(stringResource(R.string.chat_load_earlier))
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Scroll-to-bottom FAB
-                    if (!isAtBottom && !autoScrollEnabled) {
-                        SmallFloatingActionButton(
-                            onClick = {
-                                coroutineScope.launch {
-                                    listState.scrollToItem(0)
-                                    autoScrollEnabled = true
-                                    hasUnreadMessages = false
-                                }
-                            },
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .padding(bottom = 8.dp),
-                            containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
-                            contentColor = MaterialTheme.colorScheme.onSurface
-                        ) {
-                            Box {
-                                Icon(
-                                    Icons.Default.KeyboardArrowDown,
-                                    contentDescription = stringResource(
-                                        if (hasUnreadMessages) R.string.chat_unread_messages
-                                        else R.string.chat_scroll_bottom
-                                    ),
-                                    modifier = Modifier.size(20.dp)
-                                )
-                                if (hasUnreadMessages) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.TopEnd)
-                                            .size(8.dp)
-                                            .clip(CircleShape)
-                                            .background(MaterialTheme.colorScheme.error)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Model picker dialog
-    if (showModelPicker) {
-        ModelPickerDialog(
-            providers = uiState.providers,
-            selectedProviderId = uiState.selectedProviderId,
-            selectedModelId = uiState.selectedModelId,
-            onSelect = { providerId, modelId ->
-                viewModel.selectModel(providerId, modelId)
-                showModelPicker = false
-            },
-            onManageModels = {
-                showModelPicker = false
-                onManageModels()
-            },
-            onDismiss = { showModelPicker = false }
+        ChatScreenMessageBody(
+            viewModel = viewModel,
+            padding = padding,
+            uiState = uiState,
+            inputTextState = inputTextState,
+            listState = listState,
+            isTerminalModeState = isTerminalModeState,
+            terminalCtrlLatchedState = terminalCtrlLatchedState,
+            terminalAltLatchedState = terminalAltLatchedState,
+            showTerminalPanelHintOverlayState = showTerminalPanelHintOverlayState,
+            terminalOverlayHeightPxState = terminalOverlayHeightPxState,
+            terminalFocusRequester = terminalFocusRequester,
+            snackbarHostState = snackbarHostState,
+            coroutineScope = coroutineScope,
+            context = context,
+            isAmoled = isAmoled,
+            keyboardController = keyboardController,
+            clipboardManager = clipboardManager,
+            density = density,
+            usesGestureNavigation = usesGestureNavigation,
+            terminalVersion = terminalVersion,
+            terminalConnected = terminalConnected,
+            terminalTabs = terminalTabs,
+            activeTerminalTabId = activeTerminalTabId,
+            activeTerminalTab = activeTerminalTab,
+            terminalFontSizeSp = terminalFontSizeSp,
+            terminalDrawerState = terminalDrawerState,
+            pasteClipboardToTerminal = ::pasteClipboardToTerminal,
+            sendTerminalChunk = ::sendTerminalChunk,
+            autoScrollEnabledState = autoScrollEnabledState,
+            hasUnreadMessagesState = hasUnreadMessagesState,
+            isAtBottom = isAtBottom,
+            pendingInteractions = pendingInteractions,
+            isBusy = isBusy,
+            onNavigateToChildSession = onNavigateToChildSession,
+            serverBaseUrl = serverBaseUrl,
+            onOpenChatLink = onOpenChatLink,
         )
     }
 
-    // Summary dialog
-    if (summaryVisible) {
-        SummaryDialog(
-            isGenerating = isSummarizing,
-            summary = summaryText,
-            error = summaryError,
-            onDismiss = { viewModel.dismissSummary() },
-        )
-    }
-
-    // Rename dialog
-    if (showAttachmentOptions) {
-        val sheetColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface
-        val sheetShape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
-        val sheetBorderColor = MaterialTheme.colorScheme.outlineVariant
-        ModalBottomSheet(
-            onDismissRequest = { showAttachmentOptions = false },
-            dragHandle = null,
-            shape = sheetShape,
-            containerColor = sheetColor,
-            tonalElevation = 0.dp,
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(
-                        if (isAmoled) {
-                            Modifier.drawBehind {
-                                val strokeWidth = 1.dp.toPx()
-                                val edge = strokeWidth / 2
-                                val radius = 28.dp.toPx()
-                                val outline = Path().apply {
-                                    moveTo(edge, size.height)
-                                    lineTo(edge, radius)
-                                    arcTo(
-                                        rect = Rect(edge, edge, radius * 2 - edge, radius * 2 - edge),
-                                        startAngleDegrees = 180f,
-                                        sweepAngleDegrees = 90f,
-                                        forceMoveTo = false,
-                                    )
-                                    lineTo(size.width - radius, edge)
-                                    arcTo(
-                                        rect = Rect(
-                                            size.width - radius * 2 + edge,
-                                            edge,
-                                            size.width - edge,
-                                            radius * 2 - edge,
-                                        ),
-                                        startAngleDegrees = 270f,
-                                        sweepAngleDegrees = 90f,
-                                        forceMoveTo = false,
-                                    )
-                                    lineTo(size.width - edge, size.height)
-                                }
-                                drawPath(
-                                    path = outline,
-                                    color = sheetBorderColor,
-                                    style = Stroke(strokeWidth),
-                                )
-                            }
-                        } else {
-                            Modifier
-                        },
-                    ),
-            ) {
-                Column(modifier = Modifier.fillMaxWidth()) {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().height(32.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        BottomSheetDefaults.DragHandle()
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.chat_attach_title),
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.SemiBold),
-                            modifier = Modifier.padding(start = 4.dp, bottom = 8.dp),
-                        )
-                        AttachmentSourceCard(
-                            icon = Icons.Default.Image,
-                            title = stringResource(R.string.chat_attach_photo),
-                            description = stringResource(R.string.chat_attach_photo_hint),
-                            onClick = {
-                                showAttachmentOptions = false
-                                imagePickerLauncher.launch("image/*")
-                            },
-                        )
-                        AttachmentSourceCard(
-                            icon = Icons.AutoMirrored.Filled.InsertDriveFile,
-                            title = stringResource(R.string.chat_attach_device_file),
-                            description = stringResource(R.string.chat_attach_device_file_hint),
-                            onClick = {
-                                showAttachmentOptions = false
-                                documentPickerLauncher.launch(arrayOf("*/*"))
-                            },
-                        )
-                        AttachmentSourceCard(
-                            icon = Icons.Default.FolderOpen,
-                            title = stringResource(R.string.chat_attach_project_file),
-                            description = stringResource(R.string.chat_attach_project_file_hint),
-                            onClick = {
-                                showAttachmentOptions = false
-                                inputMode = ChatInputMode.NORMAL.name
-                                val updated = if (inputText.text.isBlank()) "@" else inputText.text + " @"
-                                inputText = TextFieldValue(updated, TextRange(updated.length))
-                                viewModel.updateDraftText(updated)
-                                viewModel.searchFilesForMention("")
-                            },
-                        )
-                    }
-                    Spacer(Modifier.navigationBarsPadding().height(8.dp))
-                }
-            }
-        }
-    }
-
-    if (showTemplatePicker) {
-        TemplatePickerDialog(
-            userTemplates = promptTemplates,
-            onSelect = { template ->
-                showTemplatePicker = false
-                if (confirmBeforeSend) {
-                    pendingTemplatePrompt = template
-                } else {
-                    viewModel.sendMessage(template)
-                    inputText = TextFieldValue("")
-                    attachments.clear()
-                    viewModel.clearConfirmedPaths()
-                    viewModel.clearFileSearch()
-                    viewModel.clearDraft()
-                }
-            },
-            onAdd = viewModel::addPromptTemplate,
-            onEdit = viewModel::updatePromptTemplate,
-            onDelete = viewModel::deletePromptTemplate,
-            onMove = viewModel::movePromptTemplate,
-            onDismiss = { showTemplatePicker = false },
-        )
-    }
-
-    if (showSubagentContextDetails) {
-        ContextUsageDialog(
-            usage = uiState.contextUsage,
-            contextWindow = uiState.contextWindow,
-            messages = uiState.messages,
-            onDismiss = { showSubagentContextDetails = false },
-        )
-    }
-
-    if (showCustomCommandsDialog) {
-        CustomCommandsDialog(
-            commands = customCommands,
-            onAdd = { name, prompt -> viewModel.addCustomCommand(name, prompt) },
-            onRemove = { name -> viewModel.removeCustomCommand(name) },
-            onDismiss = { showCustomCommandsDialog = false },
-        )
-    }
-
-    if (showRenameDialog) {
-        var renameText by remember { mutableStateOf(uiState.sessionTitle) }
-        ChatDialog(onDismiss = { showRenameDialog = false }) {
-            Text(stringResource(R.string.session_rename), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = renameText,
-                onValueChange = { renameText = it },
-                label = { Text(stringResource(R.string.session_rename_title)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(20.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                AppSecondaryButton(onClick = { showRenameDialog = false }) {
-                    Text(stringResource(R.string.cancel))
-                }
-                AppPrimaryButton(
-                    onClick = {
-                        viewModel.renameSession(renameText) { ok ->
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    if (ok) context.getString(R.string.chat_session_renamed) else context.getString(R.string.chat_session_rename_failed)
-                                )
-                            }
-                        }
-                        showRenameDialog = false
-                    },
-                    enabled = renameText.isNotBlank()
-                ) {
-                    Text(stringResource(R.string.session_rename_button))
-                }
-            }
-        }
-    }
-
-    // Session changes (file diff) dialog
-    if (showSessionDiffDialog) {
-        SessionDiffDialog(
-            diffs = sessionDiffs,
-            onDismiss = { showSessionDiffDialog = false },
-        )
-    }
-
-    if (showTimelineDialog) {
-        SessionTimelineDialog(
-            entries = remember(uiState.messages, uiState.pendingInteractions, uiState.childSessions, sessionTodos) {
-                buildSessionTimeline(
-                    messages = uiState.messages,
-                    pendingInteractions = uiState.pendingInteractions,
-                    childSessions = uiState.childSessions,
-                    todos = sessionTodos,
-                )
-            },
-            onDismiss = { showTimelineDialog = false },
-        )
-    }
-
-    // Send confirmation dialog
-    if (showSendConfirmDialog) {
-        ChatDialog(onDismiss = {
-                showSendConfirmDialog = false
-                pendingSendAction = null
-            }) {
-            Text(stringResource(R.string.settings_confirm_send_title), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            Text(stringResource(R.string.settings_confirm_send_body))
-            Spacer(Modifier.height(20.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                AppSecondaryButton(onClick = {
-                    showSendConfirmDialog = false
-                    pendingSendAction = null
-                }) {
-                    Text(stringResource(R.string.cancel))
-                }
-                AppPrimaryButton(onClick = {
-                    showSendConfirmDialog = false
-                    pendingSendAction?.invoke()
-                    pendingSendAction = null
-                }) {
-                    Text(stringResource(R.string.settings_send))
-                }
-            }
-        }
-    }
-
-    // Template send confirmation dialog
-    pendingTemplatePrompt?.let { prompt ->
-        ChatDialog(onDismiss = {
-            pendingTemplatePrompt = null
-        }) {
-            Text(stringResource(R.string.settings_confirm_send_title), style = MaterialTheme.typography.titleLarge)
-            Spacer(Modifier.height(16.dp))
-            Text(prompt, style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(20.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                AppSecondaryButton(onClick = {
-                    pendingTemplatePrompt = null
-                }) {
-                    Text(stringResource(R.string.cancel))
-                }
-                AppPrimaryButton(onClick = {
-                    viewModel.sendMessage(prompt)
-                    inputText = TextFieldValue("")
-                    attachments.clear()
-                    viewModel.clearConfirmedPaths()
-                    viewModel.clearFileSearch()
-                    viewModel.clearDraft()
-                    pendingTemplatePrompt = null
-                }) {
-                    Text(stringResource(R.string.settings_send))
-                }
-            }
-        }
-    }
+    ChatScreenOverlayDialogs(
+        viewModel = viewModel,
+        uiState = uiState,
+        onManageModels = onManageModels,
+        isSummarizing = isSummarizing,
+        summaryText = summaryText,
+        summaryError = summaryError,
+        summaryVisible = summaryVisible,
+        sessionDiffs = sessionDiffs,
+        sessionTodos = sessionTodos,
+        customCommands = customCommands,
+        promptTemplates = promptTemplates,
+        confirmBeforeSend = confirmBeforeSend,
+        isAmoled = isAmoled,
+        snackbarHostState = snackbarHostState,
+        coroutineScope = coroutineScope,
+        context = context,
+        pendingInteractions = pendingInteractions,
+        attachments = attachments,
+        imagePickerLauncher = imagePickerLauncher,
+        documentPickerLauncher = documentPickerLauncher,
+        inputTextState = inputTextState,
+        inputModeState = inputModeState,
+        showModelPickerState = showModelPickerState,
+        showRenameDialogState = showRenameDialogState,
+        showCustomCommandsDialogState = showCustomCommandsDialogState,
+        showSessionDiffDialogState = showSessionDiffDialogState,
+        showTimelineDialogState = showTimelineDialogState,
+        showAttachmentOptionsState = showAttachmentOptionsState,
+        showTemplatePickerState = showTemplatePickerState,
+        showSubagentContextDetailsState = showSubagentContextDetailsState,
+        showSendConfirmDialogState = showSendConfirmDialogState,
+        pendingSendActionState = pendingSendActionState,
+        pendingTemplatePromptState = pendingTemplatePromptState,
+    )
     } // CompositionLocalProvider
 }
 

@@ -10,58 +10,20 @@
 package org.hiylo.starburst.ui.screens.chat
 
 import org.hiylo.starburst.logging.AppLogger as Log
-import org.hiylo.starburst.BuildConfig
-import org.hiylo.starburst.R
 import org.hiylo.starburst.ml.AsrSession
-import org.hiylo.starburst.ml.MnnLlm
-import org.hiylo.starburst.ml.MnnAsr
-import org.hiylo.starburst.ml.MnnAsrRecorder
 import org.hiylo.starburst.ml.ServerAsrApi
-import org.hiylo.starburst.ml.ServerAsrRecorder
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.CommandInfo
-import org.hiylo.starburst.data.api.ModelSelection
-import org.hiylo.starburst.data.api.MessageIdGenerator
 import org.hiylo.starburst.data.api.OpenCodeApi
-import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SuggestionProvider
-import org.hiylo.starburst.data.api.SUGGESTION_API_SYSTEM
-import org.hiylo.starburst.data.api.abortSession
-import org.hiylo.starburst.data.api.createSession
-import org.hiylo.starburst.data.api.executeCommand
-import org.hiylo.starburst.data.api.exportSessionToStream
 import org.hiylo.starburst.data.api.findFiles
-import org.hiylo.starburst.data.api.forkSession
-import org.hiylo.starburst.data.api.getCurrentProject
-import org.hiylo.starburst.data.api.getProviders
-import org.hiylo.starburst.data.api.getSession
-import org.hiylo.starburst.data.api.listAgents
-import org.hiylo.starburst.data.api.listChildSessions
-import org.hiylo.starburst.data.api.listCommands
-import org.hiylo.starburst.data.api.listMessages
-import org.hiylo.starburst.data.api.listMessagesPage
-import org.hiylo.starburst.data.api.listPendingPermissions
-import org.hiylo.starburst.data.api.listPendingQuestions
-import org.hiylo.starburst.data.api.listProjects
-import org.hiylo.starburst.data.api.listSessionStatuses
-import org.hiylo.starburst.data.api.promptAsync
-import org.hiylo.starburst.data.api.rejectQuestion
-import org.hiylo.starburst.data.api.replyToPermission
-import org.hiylo.starburst.data.api.replyToQuestion
-import org.hiylo.starburst.data.api.revertSession
 import org.hiylo.starburst.data.api.runShellCommand
-import org.hiylo.starburst.data.api.shareSession
-import org.hiylo.starburst.data.api.summarizeSession
-import org.hiylo.starburst.data.api.unrevertSession
-import org.hiylo.starburst.data.api.unshareSession
-import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.sync.LocalSyncSecretStore
 import org.hiylo.starburst.data.repository.DraftRepository
 import org.hiylo.starburst.data.repository.Draft
@@ -85,13 +47,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
 import javax.inject.Inject
 import dagger.hilt.android.qualifiers.ApplicationContext
 import android.content.Context
@@ -126,7 +86,7 @@ class ChatViewModel @Inject constructor(
 
     internal val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
-    private val _isLoading = MutableStateFlow(true)
+    internal val _isLoading = MutableStateFlow(true)
     internal val _error = MutableStateFlow<String?>(null)
     internal val _isSending = MutableStateFlow(false)
     internal val _pendingPrompts = MutableStateFlow<List<PendingPromptRecord>>(emptyList())
@@ -159,14 +119,14 @@ class ChatViewModel @Inject constructor(
     val summaryVisible: StateFlow<Boolean> = _summaryVisible
     /** Monotonic token invalidating in-flight suggestion generations when the conversation changes. */
     internal var suggestionsGeneration = 0L
-    private val _allProviders = MutableStateFlow<List<ProviderInfo>>(emptyList())
-    private val _providers = MutableStateFlow<List<ProviderInfo>>(emptyList())
-    private val _hiddenModels = MutableStateFlow<Set<String>>(emptySet())
-    private val _defaultModels = MutableStateFlow<Map<String, String>>(emptyMap())
+    internal val _allProviders = MutableStateFlow<List<ProviderInfo>>(emptyList())
+    internal val _providers = MutableStateFlow<List<ProviderInfo>>(emptyList())
+    internal val _hiddenModels = MutableStateFlow<Set<String>>(emptySet())
+    internal val _defaultModels = MutableStateFlow<Map<String, String>>(emptyMap())
     internal val _selectedProviderId = MutableStateFlow<String?>(null)
     internal val _selectedModelId = MutableStateFlow<String?>(null)
     // Track if the model was explicitly selected by the user to avoid overwriting it with defaults/history
-    private var isModelExplicitlySelected = false
+    internal var isModelExplicitlySelected = false
     /** The directory of this session's project — sent as x-starburst-directory so the server resolves the correct project context. */
     internal var sessionDirectory: String? = eventReducer.sessions.value
         .firstOrNull { it.id == sessionId }
@@ -175,11 +135,11 @@ class ChatViewModel @Inject constructor(
     /** Signals when [loadSession] has finished (successfully or with error), so that terminal
      *  creation can wait for [sessionDirectory] to be populated. */
     internal val sessionLoaded = CompletableDeferred<Unit>()
-    private val _agents = MutableStateFlow<List<AgentInfo>>(emptyList())
+    internal val _agents = MutableStateFlow<List<AgentInfo>>(emptyList())
     /** Pair(agentName, explicitlySelected) — using a single flow avoids race between flag and value */
     internal val _selectedAgent = MutableStateFlow("build" to false)
     internal val _selectedVariant = MutableStateFlow<String?>(null)
-    private val _commands = MutableStateFlow<List<CommandInfo>>(emptyList())
+    internal val _commands = MutableStateFlow<List<CommandInfo>>(emptyList())
     internal val terminalWorkspace = ServerTerminalRegistry.workspaceFor(serverId, api, conn)
     val terminalTabs: StateFlow<List<TerminalTabUi>> = terminalWorkspace.tabList
     val activeTerminalTabId: StateFlow<String?> = terminalWorkspace.activeTabId
@@ -335,12 +295,12 @@ class ChatViewModel @Inject constructor(
     suspend fun shouldShowTerminalPanelHint(): Boolean = settingsRepository.showTerminalPanelHint.first()
     // ============ Pagination ============
     /** Current message limit (doubles each time user loads older messages). */
-    private var currentMessageLimit = 50
-    private var olderMessagesCursor: String? = null
+    internal var currentMessageLimit = 50
+    internal var olderMessagesCursor: String? = null
     /** Whether there are more messages on the server beyond the current limit. */
-    private val _hasOlderMessages = MutableStateFlow(false)
+    internal val _hasOlderMessages = MutableStateFlow(false)
     /** Whether a "load older" request is in flight. */
-    private val _isLoadingOlder = MutableStateFlow(false)
+    internal val _isLoadingOlder = MutableStateFlow(false)
 
     // 高频状态节流采样：SSE 流式输出时每个 delta 都会更新 parts/messages，
     // 直接喂给 28 路 combine 会让每个 delta 都触发一次 O(N) 全量重算 + 全量 recompose，
@@ -352,7 +312,7 @@ class ChatViewModel @Inject constructor(
     private val throttledParts = MutableStateFlow<Map<String, List<Part>>>(emptyMap())
 
     /** 立即把节流状态同步到最新值（加载完成、会话切换等关键时点调用，避免空状态闪现）。 */
-    private fun flushThrottledState() {
+    internal fun flushThrottledState() {
         throttledMessages.value = eventReducer.messages.value
         throttledParts.value = eventReducer.parts.value
     }
@@ -366,6 +326,7 @@ class ChatViewModel @Inject constructor(
         _isLoading,
         _error,
         _isSending,
+        eventReducer.sessionErrors,
         _selectedProviderId,
         _selectedModelId,
         _allProviders,
@@ -398,31 +359,32 @@ class ChatViewModel @Inject constructor(
         val loading = args[5] as Boolean
         val error = args[6] as String?
         val sending = args[7] as Boolean
-        val selProviderId = args[8] as String?
-        val selModelId = args[9] as String?
-        val allProviders = args[10] as List<ProviderInfo>
-        val providers = args[11] as List<ProviderInfo>
-        val defaultModels = args[12] as Map<String, String>
-        val agents = args[13] as List<AgentInfo>
+        val sessionErrors = args[8] as Map<String, Message.Assistant.ErrorInfo>
+        val selProviderId = args[9] as String?
+        val selModelId = args[10] as String?
+        val allProviders = args[11] as List<ProviderInfo>
+        val providers = args[12] as List<ProviderInfo>
+        val defaultModels = args[13] as Map<String, String>
+        val agents = args[14] as List<AgentInfo>
         @Suppress("UNCHECKED_CAST")
-        val agentSelection = args[14] as Pair<String, Boolean>
+        val agentSelection = args[15] as Pair<String, Boolean>
         val selectedAgent = agentSelection.first
         val isAgentExplicitlySelected = agentSelection.second
-        val selectedVariant = args[15] as String?
-        val commands = args[16] as List<CommandInfo>
-        val hasOlderMessages = args[17] as Boolean
-        val isLoadingOlder = args[18] as Boolean
-        val pendingPrompts = args[19] as List<PendingPromptRecord>
-        val promptDeliveries = args[20] as Map<String, PromptDeliveryInfo>
-        val suggestions = args[21] as List<String>
-        val suggestionsSource = args[22] as SuggestionSource?
-        val isGeneratingSuggestions = args[23] as Boolean
-        val suggestionsError = args[24] as String?
-        val suggestionsStreamText = args[25] as String
-        val modelNeedsDownload = args[26] as Boolean
-        val modelDownloading = args[27] as Boolean
-        val modelDownloadProgress = args[28] as Int
-        val serverContextLimitOverride = args[29] as Int
+        val selectedVariant = args[16] as String?
+        val commands = args[17] as List<CommandInfo>
+        val hasOlderMessages = args[18] as Boolean
+        val isLoadingOlder = args[19] as Boolean
+        val pendingPrompts = args[20] as List<PendingPromptRecord>
+        val promptDeliveries = args[21] as Map<String, PromptDeliveryInfo>
+        val suggestions = args[22] as List<String>
+        val suggestionsSource = args[23] as SuggestionSource?
+        val isGeneratingSuggestions = args[24] as Boolean
+        val suggestionsError = args[25] as String?
+        val suggestionsStreamText = args[26] as String
+        val modelNeedsDownload = args[27] as Boolean
+        val modelDownloading = args[28] as Boolean
+        val modelDownloadProgress = args[29] as Int
+        val serverContextLimitOverride = args[30] as Int
         fun deliveryFor(messageId: String) = when (promptDeliveries[messageId]?.state) {
             PromptDeliveryState.PROMOTED -> MessageDelivery.PROMOTED
             else -> MessageDelivery.QUEUED
@@ -583,6 +545,7 @@ class ChatViewModel @Inject constructor(
             messages = chatMessages,
             revert = revertState,
             sessionStatus = statuses[sessionId] ?: SessionStatus.Idle,
+            sessionError = sessionErrors[sessionId]?.message,
             pendingInteractions = pendingInteractions.filter { it.sessionId in interactionSessionIds },
             isLoading = loading,
             error = error,
@@ -705,11 +668,14 @@ class ChatViewModel @Inject constructor(
             }
         }
 
-        // Load initial message count from settings, then load data
+        // Load initial message count from settings, then load data.
+        // 首屏消息（loadMessages 内部自己起协程）先于 loadSession 启动：getSession→子会话
+        // BFS→diff→git 是串行重活，会让首屏等很久；sessionDirectory 在创建时已从会话列表
+        // 就绪，消息拉取不依赖 loadSession 的结果，可并行让首屏先出内容。
         viewModelScope.launch {
             currentMessageLimit = settingsRepository.initialMessageCount.first()
-            loadSession()
             loadMessages()
+            loadSession()
             loadPendingRequests()
         }
         viewModelScope.launch {
@@ -734,411 +700,11 @@ class ChatViewModel @Inject constructor(
 
     }
 
-    /** 读取（或探测并缓存）后端 ASR 引擎是否可用。 */
-    private suspend fun cachedBackendAsrAvailable(): Boolean {
-        val now = System.currentTimeMillis()
-        backendAsrAvailableCache[serverId]?.let { (available, ts) ->
-            if (now - ts < BACKEND_ASR_CACHE_TTL_MS) return available
-        }
-        val available = backendAsrEndpoint()?.let { endpoint ->
-            serverAsrApi.isAvailable(endpoint.first, endpoint.second)
-        } ?: false
-        backendAsrAvailableCache[serverId] = available to now
-        return available
-    }
-
+    // 会话加载、历史分页与状态对账见 ChatViewModelHistoryExt.kt。
     /** 上次通过 REST 拉取最新消息兜底的时间戳（节流，避免 SSE 假死时过于频繁地拉取）。 */
-    private var lastMessagePollAt = 0L
+    internal var lastMessagePollAt = 0L
 
-    private suspend fun reconcileActiveStatus() {
-        val localStatus = eventReducer.sessionStatuses.value[sessionId]
-        val hasRunningTool = eventReducer.messages.value[sessionId].orEmpty().any { message ->
-            eventReducer.parts.value[message.id].orEmpty().any { part ->
-                part is Part.Tool && part.state is ToolState.Running
-            }
-        }
-        val wasBusy = localStatus is SessionStatus.Busy || hasRunningTool
-
-        try {
-            // 即使 localStatus 是 Idle 也探测远程状态：SSE 假死时会收不到 session.status 事件，
-            // localStatus 停留在假死前的 Idle；若不探测将永远无法发现「会话已经变 busy」。
-            val remoteStatus = api.listSessionStatuses(conn, sessionDirectory)[sessionId] ?: SessionStatus.Idle
-            val now = System.currentTimeMillis()
-            // busy 期间每 BUSY_MESSAGE_POLL_MS 拉一次最新消息兜底；busy→idle 转场时再拉一次，
-            // 捕获「服务端已输出完、但 App 因 SSE 假死没收到」的最终结果。
-            val shouldPollMessages =
-                (remoteStatus is SessionStatus.Busy && now - lastMessagePollAt >= BUSY_MESSAGE_POLL_MS) ||
-                    (remoteStatus is SessionStatus.Idle && wasBusy)
-            if (shouldPollMessages) {
-                val messages = api.listMessages(conn, sessionId, limit = 50, directory = sessionDirectory)
-                eventReducer.mergeMessages(sessionId, messages, serverId)
-                lastMessagePollAt = now
-            }
-            eventReducer.updateSessionStatus(sessionId, remoteStatus)
-        } catch (e: Exception) {
-            e.rethrowCancellation()
-            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to reconcile active status for $sessionId: ${e.message}")
-        }
-    }
-
-    /** Load the session info to get its directory for correct project context. */
-    internal suspend fun loadSession() {
-        try {
-            val session = api.getSession(conn, sessionId, directory = sessionDirectory)
-            sessionPromptable = sessionAcceptsPrompts(session)
-            if (session.directory.isNotBlank()) {
-                sessionDirectory = session.directory
-                if (BuildConfig.DEBUG) Log.d(TAG, "Session directory resolved")
-            }
-            val sessions = mutableListOf(session)
-            val queue = ArrayDeque<String>().apply { add(session.id) }
-            val visited = mutableSetOf(session.id)
-            while (queue.isNotEmpty() && visited.size < MAX_CHILD_SESSIONS) {
-                val parentId = queue.removeFirst()
-                val children = try {
-                    api.listChildSessions(conn, parentId, directory = sessionDirectory)
-                        .filter { visited.add(it.id) }
-                } catch (e: Exception) {
-                    e.rethrowCancellation()
-                    Log.e(TAG, "Failed to load children for session $parentId", e)
-                    emptyList()
-                }
-                sessions += children
-                children.forEach { queue.addLast(it.id) }
-            }
-            // 用 upsert 逐个合并当前会话及其子会话，避免用 setSessions（权威替换）
-            // 传入局部列表会把列表里其它项目的根会话全部清掉，导致返回会话列表时被清空。
-            sessions.forEach { eventReducer.upsertSession(serverId, it) }
-            refreshGitRepositoryState()
-        } catch (e: Exception) {
-            e.rethrowCancellation()
-            Log.e(TAG, "Failed to load session info", e)
-        } finally {
-            sessionLoaded.complete(Unit)
-        }
-    }
-
-    fun loadMessages() {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            try {
-                val initialLimit = fastInitialMessageLimit(currentMessageLimit)
-                val firstPage = api.listMessagesPage(
-                    conn,
-                    sessionId,
-                    limit = initialLimit,
-                    directory = sessionDirectory,
-                )
-                val messages = firstPage.messages.toMutableList()
-                val revertMessageId = eventReducer.sessions.value.find { it.id == sessionId }?.revert?.messageId
-                var nextCursor = firstPage.nextCursor
-                val knownIds = messages.mapTo(mutableSetOf()) { it.info.id }
-                var recoveryPages = 0
-
-                olderMessagesCursor = nextCursor
-                eventReducer.mergeMessages(sessionId, messages, serverId)
-                reconcilePendingPrompts(
-                    authoritative = messages,
-                    minimumAgeMs = 10_000L,
-                )
-                _hasOlderMessages.value = nextCursor != null
-                // 先同步节流状态再结束 loading，避免 combine 在「messages 已就绪但节流态未采样」
-                // 的窗口内重算出 messages 空 + isLoading=false 的空会话界面。
-                flushThrottledState()
-                _isLoading.value = false
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        TAG,
-                        "Displayed initial ${messages.size} messages for session $sessionId " +
-                            "(requested=$initialLimit, hasOlder=${_hasOlderMessages.value})",
-                    )
-                }
-
-                while (nextCursor != null) {
-                    val needsConfiguredHistory = messages.size < currentMessageLimit
-                    val needsRevertHistory = !needsConfiguredHistory &&
-                        recoveryPages < MAX_REVERT_RECOVERY_PAGES &&
-                        needsOlderHistoryForRevert(knownIds, revertMessageId)
-                    if (!needsConfiguredHistory && !needsRevertHistory) break
-
-                    val requestedCursor = nextCursor
-                    val pageLimit = if (needsConfiguredHistory) {
-                        backgroundMessageLimit(messages.size, currentMessageLimit)
-                    } else {
-                        currentMessageLimit
-                    }
-                    _isLoadingOlder.value = true
-                    val olderPage = try {
-                        api.listMessagesPage(
-                            conn,
-                            sessionId,
-                            limit = pageLimit,
-                            before = requestedCursor,
-                            directory = sessionDirectory,
-                        )
-                    } catch (e: Exception) {
-                        e.rethrowCancellation()
-                        Log.e(TAG, "Failed to preload older messages", e)
-                        break
-                    }
-                    messages += olderPage.messages
-                    knownIds += olderPage.messages.map { it.info.id }
-                    eventReducer.mergeMessages(sessionId, olderPage.messages, serverId)
-                    if (needsRevertHistory) recoveryPages++
-                    nextCursor = olderPage.nextCursor?.takeUnless { it == requestedCursor }
-                    olderMessagesCursor = nextCursor
-                    _hasOlderMessages.value = nextCursor != null
-                    if (olderPage.messages.isEmpty()) break
-                }
-                olderMessagesCursor = nextCursor
-                _hasOlderMessages.value = nextCursor != null
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        TAG,
-                        "Finished background history load: ${messages.size} messages for session $sessionId " +
-                            "(limit=$currentMessageLimit, revertRecoveryPages=$recoveryPages, hasOlder=${_hasOlderMessages.value})",
-                    )
-                }
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load messages", e)
-                // On OOM or other memory errors, retry with a smaller limit
-                if (e is OutOfMemoryError || (e.cause is OutOfMemoryError)) {
-                    Log.w(TAG, "OOM loading messages, retrying with smaller limit")
-                    currentMessageLimit = (currentMessageLimit / 2).coerceAtLeast(10)
-                    try {
-                        val page = api.listMessagesPage(
-                            conn,
-                            sessionId,
-                            limit = currentMessageLimit,
-                            directory = sessionDirectory,
-                        )
-                        val messages = page.messages
-                        olderMessagesCursor = page.nextCursor
-                        eventReducer.mergeMessages(sessionId, messages, serverId)
-                        _hasOlderMessages.value = page.nextCursor != null
-                        if (BuildConfig.DEBUG) Log.d(TAG, "Retry succeeded: loaded ${messages.size} messages (limit=$currentMessageLimit)")
-                    } catch (retryEx: Exception) {
-                        retryEx.rethrowCancellation()
-                        Log.e(TAG, "Retry also failed", retryEx)
-                        _error.value = retryEx.friendlyErrorMessage(context).ifBlank { "Failed to load messages" }
-                    }
-                } else {
-                    _error.value = e.friendlyErrorMessage(context).ifBlank { "Failed to load messages" }
-                }
-            } finally {
-                flushThrottledState()
-                _isLoading.value = false
-                _isLoadingOlder.value = false
-            }
-        }
-    }
-
-    fun reloadSession() {
-        _isLoading.value = true
-        _error.value = null
-        olderMessagesCursor = null
-        _hasOlderMessages.value = false
-        eventReducer.clearSessionHistory(sessionId)
-
-        viewModelScope.launch {
-            currentMessageLimit = settingsRepository.initialMessageCount.first()
-            loadSession()
-            loadPendingRequests()
-            loadMessages()
-        }
-    }
-
-    /**
-     * Load older messages by doubling the limit and reloading.
-     * The server returns the N most recent messages, so we simply request more.
-     */
-    fun loadOlderMessages() {
-        viewModelScope.launch {
-            var nextCursor: String? = olderMessagesCursor ?: return@launch
-            _isLoadingOlder.value = true
-            try {
-                val messages = mutableListOf<MessageWithParts>()
-                val knownIds = eventReducer.messages.value[sessionId].orEmpty().mapTo(mutableSetOf()) { it.id }
-                val revertMessageId = eventReducer.sessions.value.find { it.id == sessionId }?.revert?.messageId
-                var recoveryPages = 0
-                do {
-                    val requestedCursor = nextCursor
-                    val page = api.listMessagesPage(
-                        conn,
-                        sessionId,
-                        limit = currentMessageLimit,
-                        before = requestedCursor,
-                        directory = sessionDirectory,
-                    )
-                    messages += page.messages
-                    knownIds += page.messages.map { it.info.id }
-                    recoveryPages++
-                    nextCursor = page.nextCursor?.takeUnless { it == requestedCursor }
-                    if (page.messages.isEmpty()) break
-                } while (
-                    nextCursor != null &&
-                    recoveryPages < MAX_REVERT_RECOVERY_PAGES &&
-                    needsOlderHistoryForRevert(knownIds, revertMessageId)
-                )
-                eventReducer.mergeMessages(sessionId, messages, serverId)
-                olderMessagesCursor = nextCursor
-                _hasOlderMessages.value = nextCursor != null
-                if (BuildConfig.DEBUG) {
-                    Log.d(
-                        TAG,
-                        "Loaded older: ${messages.size} messages " +
-                            "(revertRecoveryPages=$recoveryPages, hasOlder=${_hasOlderMessages.value})",
-                    )
-                }
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load older messages", e)
-            } finally {
-                flushThrottledState()
-                _isLoadingOlder.value = false
-            }
-        }
-    }
-
-    /**
-     * Load pending questions from the server REST API.
-     * Converts QuestionRequest DTOs to SseEvent.QuestionAsked domain objects.
-     * Must be called after loadSession() so sessionDirectory is set.
-     */
-    private suspend fun loadPendingRequests() {
-        try {
-            val revision = eventReducer.pendingSnapshotRevision()
-            val allPermissions = api.listPendingPermissions(conn, directory = sessionDirectory)
-            val allQuestions = api.listPendingQuestions(conn, directory = sessionDirectory)
-            val interactionSessionIds = descendantSessionIds(eventReducer.sessions.value, sessionId)
-            val sessionPermissions = allPermissions
-                .filter { it.sessionId in interactionSessionIds }
-                .map { req ->
-                    SseEvent.PermissionAsked(
-                        id = req.id,
-                        sessionId = req.sessionId,
-                        permission = req.permission,
-                        patterns = req.patterns,
-                        always = req.always,
-                        metadata = req.metadata,
-                        tool = req.tool,
-                    )
-                }
-            val sessionQuestions = allQuestions
-                .filter { it.sessionId in interactionSessionIds }
-                .map { req ->
-                    SseEvent.QuestionAsked(
-                        id = req.id,
-                        sessionId = req.sessionId,
-                        questions = req.questions.map { q ->
-                            SseEvent.QuestionAsked.Question(
-                                header = q.header,
-                                question = q.question,
-                                multiple = q.multiple,
-                                custom = q.custom,
-                                options = q.options.map { o ->
-                                    SseEvent.QuestionAsked.Option(
-                                        label = o.label,
-                                        description = o.description
-                                    )
-                                }
-                            )
-                        },
-                        tool = req.tool
-                    )
-                }
-            val applied = eventReducer.replacePendingRequestsForSessions(
-                sessionIds = interactionSessionIds,
-                permissions = sessionPermissions,
-                questions = sessionQuestions,
-                expectedRevision = revision,
-            )
-            Log.i(
-                TAG,
-                "Pending requests loaded: session=$sessionId descendants=${interactionSessionIds.size} " +
-                    "permissions=${sessionPermissions.size}/${allPermissions.size} " +
-                    "questions=${sessionQuestions.size}/${allQuestions.size} applied=$applied",
-            )
-        } catch (e: Exception) {
-            e.rethrowCancellation()
-            Log.e(TAG, "Failed to load pending requests: ${e.javaClass.simpleName}: ${e.message}", e)
-        }
-    }
-
-    // Removed initModelFromMessages as it's handled reactively
-
-    private fun loadProviders() {
-        viewModelScope.launch {
-            try {
-                val response = api.getProviders(conn)
-                _allProviders.value = response.providers
-                applyProviderFilter()
-                _defaultModels.value = response.default
-                if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${response.providers.size} providers, defaults: ${response.default}")
-                // No need to set default here, combine block handles fallback
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load providers", e)
-            }
-        }
-    }
-
-    private fun applyProviderFilter() {
-        val hidden = _hiddenModels.value
-        val filtered = _allProviders.value
-            .map { provider ->
-                provider.copy(
-                    models = provider.models.filterKeys { modelId ->
-                        "${provider.id}:$modelId" !in hidden
-                    }
-                )
-            }
-            .filter { it.models.isNotEmpty() }
-        _providers.value = filtered
-    }
-
-    private fun loadAgents() {
-        viewModelScope.launch {
-            try {
-                val agents = api.listAgents(conn)
-                _agents.value = agents
-                if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${agents.size} agents: ${agents.map { it.name }}")
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load agents", e)
-            }
-        }
-    }
-
-    fun selectAgent(name: String) {
-        _selectedAgent.value = name to true
-    }
-
-    private fun loadCommands() {
-        viewModelScope.launch {
-            try {
-                val commands = api.listCommands(conn)
-                _commands.value = commands
-                if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${commands.size} commands: ${commands.map { it.name }}")
-            } catch (e: Exception) {
-                e.rethrowCancellation()
-                Log.e(TAG, "Failed to load commands", e)
-            }
-        }
-    }
-
-    fun selectVariant(name: String?) {
-        _selectedVariant.value = name?.takeIf { it in uiState.value.variantNames }
-    }
-
-    fun selectModel(providerId: String, modelId: String) {
-        _selectedProviderId.value = providerId
-        _selectedModelId.value = modelId
-        _selectedVariant.value = null
-        isModelExplicitlySelected = true
-    }
+    // pending 快照与 provider/agent/command 加载器见 ChatViewModelLoaderExt.kt。
 
     // ============ @ File Mention Search ============
 

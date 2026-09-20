@@ -54,6 +54,7 @@ import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.data.update.UpdateState
 import org.hiylo.starburst.data.update.UpdatePolicy
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSecondaryButton
@@ -361,7 +362,8 @@ private fun FavoritesCard(onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick),
+            .clickable(onClick = onClick)
+            .cartoonChrome(AppCardShape),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
@@ -407,7 +409,7 @@ private fun UpdateAvailableCard(
     }
     val isAmoled = isAmoledTheme()
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.primaryContainer,
@@ -562,7 +564,7 @@ private fun ServerCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = cardContainerColor
@@ -823,7 +825,7 @@ private fun BatteryOptimizationBanner(
             BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
         } else null,
         shape = AppCardShape,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
     ) {
         Row(
             modifier = Modifier

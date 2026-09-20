@@ -75,6 +75,7 @@ fun SessionCardContent(
     isPinned: Boolean = false,
     isOffline: Boolean = false,
     compact: Boolean = false,
+    sessionError: String? = null,
     leadingContent: @Composable () -> Unit = {},
     trailingContent: @Composable () -> Unit,
 ) {
@@ -228,6 +229,11 @@ fun SessionCardContent(
                         label = statusBadge.first,
                         color = statusBadge.second,
                         icon = statusBadge.third,
+                    )
+                } else if (sessionError != null) {
+                    SessionStatusBadge(
+                        label = sessionError.take(28),
+                        color = StatusError,
                     )
                 }
             }

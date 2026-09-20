@@ -180,6 +180,8 @@ data class ChatUiState(
     val messages: List<ChatMessage> = emptyList(),
     val revert: Session.Revert? = null,
     val sessionStatus: SessionStatus = SessionStatus.Idle,
+    /** 会话级错误（session.error 事件），非空表示会话异常结束而非正常完成。 */
+    val sessionError: String? = null,
     val pendingInteractions: List<PendingInteraction> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,

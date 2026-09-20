@@ -23,6 +23,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -43,6 +44,7 @@ import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.service.StarBurstConnectionService
 import org.hiylo.starburst.ui.navigation.NavGraph
 import org.hiylo.starburst.ui.theme.StarBurstTheme
+import org.hiylo.starburst.ui.theme.cartoonBackdrop
 import org.hiylo.starburst.widget.StarBurstWidgetProvider
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -240,6 +242,9 @@ class MainActivity : ComponentActivity() {
             val themeScheme by settingsRepository.themeScheme.collectAsState(
                 initial = SettingsRepository.DEFAULT_THEME_SCHEME,
             )
+            val cartoonStyle by settingsRepository.cartoonStyle.collectAsState(
+                initial = SettingsRepository.DEFAULT_CARTOON_STYLE,
+            )
             val connectedServerIds by serverConnectionStateRepository.connectedServerIds.collectAsState()
             
             // Determine if dark theme should be used
@@ -258,6 +263,7 @@ class MainActivity : ComponentActivity() {
                 dimTheme = dimTheme,
                 accentColor = accentColor,
                 themeScheme = themeScheme,
+                cartoonStyle = cartoonStyle,
             ) {
                 
                 // Set status bar color based on theme
@@ -276,15 +282,18 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    NavGraph(
-                        deepLinkFlow = _deepLinkFlow,
-                        navActionFlow = _navActionFlow,
-                        sharedAttachmentsFlow = sharedAttachmentsFlow,
-                        settingsRepository = settingsRepository,
-                        serverRepository = serverRepository,
-                        eventReducer = eventReducer,
-                        connectedServerIds = connectedServerIds,
-                    )
+                    // 卡通风格：整屏铺一层极淡的点阵底纹，提供"贴纸纸"质感。
+                    Box(modifier = Modifier.fillMaxSize().cartoonBackdrop()) {
+                        NavGraph(
+                            deepLinkFlow = _deepLinkFlow,
+                            navActionFlow = _navActionFlow,
+                            sharedAttachmentsFlow = sharedAttachmentsFlow,
+                            settingsRepository = settingsRepository,
+                            serverRepository = serverRepository,
+                            eventReducer = eventReducer,
+                            connectedServerIds = connectedServerIds,
+                        )
+                    }
                 }
             }
         }
