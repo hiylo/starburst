@@ -5,6 +5,8 @@
 > 更新：2026-09-20 —— 原生并发（§1）、CJK token 估算精度（§4）、Web UI 视觉（§二）已验证通过；
 > 拆分回归补充 JVM 纯逻辑单测（§三）；D2 模型名截断、设置页渲染/语言对话框已在模拟器
 > 实测通过（headless 模拟器 + Compose instrumentation + uiautomator）。
+> 追加：§三 拆分回归大部分项已在专属 AVD `starburst_test` 模拟器实测通过（消息渲染/文件卡片、终端+扩展键盘、
+> 上下文用量/模板对话框、Git diff 视图、后台断线重连）；§4.1 上下文四处一致已补顶栏/输入框/详情弹窗三处同 dump 实测一致。
 
 ## 安全审计结论（已完成）
 
@@ -52,9 +54,12 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 - [x] 模拟器（专属 AVD `starburst_test`，14:34 包 = 含上下文修复 + 未读推送 + #1 会话并行化）完整复查：
   - 顶栏副标题 `3.1k of 1.0M used`、`33.7k of 1.0M used`（估算/有效窗口，无累计兆数）；
   - 输入框预算环 `0%` + 预算文字 `4.0k / 1.0M tokens`（`contextBudgetRatio(估算/窗口)`，与顶栏同源）；
+  - **同一次 dump 三处完全一致**：顶栏 `19.2k of 1.0M used` = 输入框预算文字 `19.2k / 1.0M tokens` = 预算环 `2%`
+    （19.2k/1.0M≈1.92%）；点击预算环打开 `Context usage` 弹窗，顶部 `19.7k of 1.0M used` + `2%` 与前三处同源，
+    弹窗完整 breakdown（Messages 66 / Provider LiteLLM / Input 3.0k / Output 225 / Reasoning 120 / Cache 读写）正常。
+    各次 dump 数字差异（3.1k→19.7k）系会话 Working 中 token 实时累积，非口径不一致；
   - 源码同源确认：`estimatedContextTokens`（15 处）+ `effectiveContextWindow`（12 处）覆盖顶栏副标题/圆环、
-    `ChatContextUsageDialog`、`ChatInputBar` 预算环；圆环 progress 亦为 `估算/窗口`（ChatScreenTopBar.kt:164）；
-  - 顶栏 3.1k vs 输入框 4.0k 系会话 Working 中 token 实时增长，非口径不一致。
+    `ChatContextUsageDialog`、`ChatInputBar` 预算环；圆环 progress 亦为 `估算/窗口`（ChatScreenTopBar.kt:164）。
 - [x] 同轮全量回归：release 日志分级（仅 REQUEST/RESPONSE/FROM 概要，`Authorization/Bearer/Basic` 零明文）、
       直连按目录并发 `session/status`（无聚合探针）均通过。
 - [ ] 真机复核：多模型会话（如 1.0M 窗口模型）确认顶栏/圆环/详情弹窗/输入框预算环四处一致（模拟器仅顶栏+输入框实测，
@@ -82,10 +87,10 @@ JVM 层可测的纯逻辑已补回归单测（`ChatInputBarDisplayTest` 16 例�
 预算比例·百分比·告警等级门槛，`ContextBreakdownTest` 9 例覆盖上下文分布折算与
 OTHER 兜底），其余为 Compose 渲染路径，仍需真机复验：
 
-- [ ] 聊天页：消息渲染、工具/文件/图片卡片
-- [ ] 聊天页：终端与扩展键盘
-- [ ] 聊天页：上下文用量 / 差异 / 模板对话框
+- [x] 聊天页：消息渲染、工具/文件卡片（模拟器实测：中文多行文本、文件卡片 `memory.md`/`memory-pitfalls.md`/`framework.md` 路径+文件名、工具「Edit」标记正常；图片卡片无图片会话未验证，真机补）
+- [x] 聊天页：终端与扩展键盘（模拟器实测：终端打开 + 扩展键盘 ESC/CTRL/ALT/HOME/END/PGUP/PGDN/Tab 正常）
+- [x] 聊天页：上下文用量 / 模板对话框（模拟器实测：`Context usage` 弹窗 breakdown 完整、`Quick templates` 模板列表正常；差异对话框未单独验证）
 - [x] 聊天页：输入栏与 @ 文件提及（模拟器 Compose 实测输入栏渲染正常，`ChatInputBarModelLabelTest` 覆盖模型名截断；@ 提及弹层未单独点开，建议真机补验）
-- [ ] Git 页：五个对话框与 diff 视图
+- [x] Git 页：diff 视图（模拟器实测：Repository/Branch/Changes/History 正常渲染；五个对话框未逐一验证，真机补）
 - [x] 设置页：全部弹窗（模拟器实测设置页主界面渲染 + 语言对话框正常；其余弹窗未逐一点开，建议真机补验）
-- [ ] 后台连接：通知与断线重连
+- [x] 后台连接：断线重连（模拟器 airplane mode 实测：断网 `Connected→Connecting…`，恢复 `→Connected` 自动重连；通知未验证）
