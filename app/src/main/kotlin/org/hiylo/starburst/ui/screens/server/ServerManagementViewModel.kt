@@ -10,6 +10,7 @@
 package org.hiylo.starburst.ui.screens.server
 
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ui.util.launchWhileStarted
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -18,6 +19,7 @@ import android.os.IBinder
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.data.api.OpenCodeApi
@@ -40,7 +42,6 @@ import org.hiylo.starburst.ui.gate.BackendGate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -144,9 +145,16 @@ class ServerManagementViewModel @Inject constructor(
     init {
         refresh()
         bindToService()
-        // 定时刷新系统资源信息（内存/磁盘/负载/opencode 进程占用），便于观察卡死时的瞬时占用。
-        viewModelScope.launch {
-            while (isActive) {
+    }
+
+    /** 界面可见性驱动的轮询任务；退后台时由 [launchWhileStarted] 自动挂起（耗电优化）。 */
+    private var pollJob: Job? = null
+
+    /** 由 ServerManagementScreen 传入 lifecycle；仅在界面 STARTED 期间刷新系统资源信息。 */
+    fun attachLifecycle(lifecycle: Lifecycle) {
+        if (pollJob?.isActive == true) return
+        pollJob = viewModelScope.launchWhileStarted(lifecycle) {
+            while (true) {
                 delay(SYSTEM_INFO_REFRESH_INTERVAL_MS)
                 loadSystemInfo()
             }

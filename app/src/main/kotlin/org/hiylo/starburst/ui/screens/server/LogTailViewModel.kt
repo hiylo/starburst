@@ -10,10 +10,12 @@
 package org.hiylo.starburst.ui.screens.server
 
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ui.util.launchWhileStarted
 import android.content.Context
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
@@ -23,7 +25,7 @@ import org.hiylo.starburst.data.shell.ServerShellRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.isActive
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -92,6 +94,14 @@ class LogTailViewModel @Inject constructor(
 
     private var streamJob: Job? = null
 
+    /** 界面生命周期，用于退后台时挂起日志轮询（耗电优化）。 */
+    private var lifecycle: Lifecycle? = null
+
+    /** 由 LogTailDialog 传入 lifecycle；App 退后台时挂起日志轮询，回前台恢复。 */
+    fun attachLifecycle(lifecycle: Lifecycle) {
+        this.lifecycle = lifecycle
+    }
+
     /** 已读取的日志文件字节数，用于增量读取新字节（相对文件原始字节，非清洗后文本长度）。 */
     private var bytesRead = 0L
 
@@ -123,19 +133,29 @@ class LogTailViewModel @Inject constructor(
         bytesRead = 0L
         initialized = false
         _uiState.update { it.copy(isStreaming = true, isLoading = true, error = null, content = "") }
-        streamJob = viewModelScope.launch(Dispatchers.IO) {
-            while (isActive) {
-                try {
-                    pollOnce(path)
-                } catch (e: Exception) {
-                    Log.w(TAG, "log tail failed for $path", e)
-                    _uiState.update {
-                        it.copy(isStreaming = false, isLoading = false, error = e.message ?: e.javaClass.simpleName)
-                    }
-                    break
+        val lf = lifecycle
+        streamJob = if (lf != null) {
+            viewModelScope.launchWhileStarted(lf) { tailLoop(path) }
+        } else {
+            viewModelScope.launch(Dispatchers.IO) { tailLoop(path) }
+        }
+    }
+
+    /** 轮询体：持续增量读取远端日志，直到取消或出错（取消向上抛，配合 lifecycle 挂起/恢复）。 */
+    private suspend fun tailLoop(path: String) {
+        while (true) {
+            try {
+                pollOnce(path)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "log tail failed for $path", e)
+                _uiState.update {
+                    it.copy(isStreaming = false, isLoading = false, error = e.message ?: e.javaClass.simpleName)
                 }
-                delay(POLL_INTERVAL_MS)
+                break
             }
+            delay(POLL_INTERVAL_MS)
         }
     }
 

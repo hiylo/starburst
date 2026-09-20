@@ -92,6 +92,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -147,6 +148,9 @@ fun WorkbenchScreen(
     val voiceActive by viewModel.voiceActive.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState(null)
     val context = LocalContext.current
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) { viewModel.attachLifecycle(lifecycleOwner.lifecycle) }
 
     val sendQuickReply: (String, String) -> Unit = { sessionId, text ->
         viewModel.sendQuickReply(sessionId, text) { ok ->

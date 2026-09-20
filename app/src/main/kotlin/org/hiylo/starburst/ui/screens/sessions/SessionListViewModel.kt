@@ -10,10 +10,12 @@
 package org.hiylo.starburst.ui.screens.sessions
 
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ui.util.launchWhileStarted
 import androidx.lifecycle.SavedStateHandle
 import org.hiylo.starburst.BuildConfig
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.FileNode
 import org.hiylo.starburst.data.api.OpenCodeApi
@@ -81,6 +83,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import javax.inject.Inject
 
 private const val TAG = "SessionListViewModel"
@@ -479,9 +482,15 @@ class SessionListViewModel @Inject constructor(
         if (autoNewSession) {
             createNewSession()
         }
-        viewModelScope.launch {
-            // Poll statuses periodically. When the SSE stream is connected the server pushes
-            // status changes in real-time, so polling is only a fallback and runs infrequently.
+    }
+
+    /** 界面可见性驱动的轮询任务；退后台时由 [launchWhileStarted] 自动挂起（耗电优化）。 */
+    private var pollJob: Job? = null
+
+    /** 由 SessionListScreen 传入 lifecycle；仅在界面 STARTED 期间轮询会话状态兜底。 */
+    fun attachLifecycle(lifecycle: Lifecycle) {
+        if (pollJob?.isActive == true) return
+        pollJob = viewModelScope.launchWhileStarted(lifecycle) {
             while (true) {
                 val connected = connectionStateRepository.connectedServerIds.value.contains(serverId)
                 delay(if (connected) STATUS_POLL_INTERVAL_CONNECTED_MS else STATUS_POLL_INTERVAL_DISCONNECTED_MS)

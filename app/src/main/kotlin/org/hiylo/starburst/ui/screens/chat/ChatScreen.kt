@@ -258,6 +258,7 @@ fun ChatScreen(
     val terminalFontSizeSp by viewModel.terminalFontSizeSp.collectAsState()
     val terminalDrawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) { viewModel.attachLifecycle(lifecycleOwner.lifecycle) }
     val showSendConfirmDialogState = remember { mutableStateOf(false) }
     var showSendConfirmDialog by showSendConfirmDialogState
     // Pending send action: stored so the confirm dialog can trigger it

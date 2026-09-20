@@ -9,6 +9,7 @@
  */
 package org.hiylo.starburst.ui.screens.workbench
 
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -34,6 +35,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
@@ -64,6 +66,7 @@ import org.hiylo.starburst.domain.model.Part
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ui.util.launchWhileStarted
 import org.hiylo.starburst.ml.AsrSession
 import org.hiylo.starburst.ml.MnnAsr
 import org.hiylo.starburst.ml.MnnAsrRecorder
@@ -295,19 +298,26 @@ class WorkbenchViewModel @Inject constructor(
 
             refreshSessions()
             startPushStream()
-            // 推送断线时的轮询兜底：推送在线时不轮询，断开才周期刷新。
-            viewModelScope.launch {
-                while (isActive) {
-                    delay(SESSION_POLL_INTERVAL_MS)
-                    if (!pushActive) refreshSessions()
-                }
-            }
         }
     }
 
     /** 推送流是否在线：在线时不轮询，断线期间由周期刷新兜底。 */
     @Volatile
     private var pushActive = false
+
+    /** 界面可见性驱动的轮询任务；退后台时由 [launchWhileStarted] 自动挂起（耗电优化）。 */
+    private var pollJob: Job? = null
+
+    /** 由 WorkbenchScreen 传入 lifecycle；仅在界面 STARTED 期间轮询会话列表兜底。 */
+    fun attachLifecycle(lifecycle: Lifecycle) {
+        if (pollJob?.isActive == true) return
+        pollJob = viewModelScope.launchWhileStarted(lifecycle) {
+            while (true) {
+                delay(SESSION_POLL_INTERVAL_MS)
+                if (!pushActive) refreshSessions()
+            }
+        }
+    }
 
     /** 订阅后端 `/api/ws` 推送：事件流实时聚合；状态类事件立即全量刷新会话状态。 */
     private fun startPushStream() {

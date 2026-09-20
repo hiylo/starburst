@@ -10,11 +10,13 @@
 package org.hiylo.starburst.ui.screens.chat
 
 import org.hiylo.starburst.logging.AppLogger as Log
+import org.hiylo.starburst.ui.util.launchWhileStarted
 import org.hiylo.starburst.ml.AsrSession
 import org.hiylo.starburst.ml.ServerAsrApi
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.CommandInfo
@@ -692,11 +694,20 @@ class ChatViewModel @Inject constructor(
             loadSession()
             loadPendingRequests()
         }
-        viewModelScope.launch {
+        loadProviders()
+        loadAgents()
+        loadCommands()
+
+    }
+
+    /** 界面可见性驱动的轮询任务；退后台时由 [launchWhileStarted] 自动挂起（耗电优化）。 */
+    private var pollJob: Job? = null
+
+    /** 由 ChatScreen 传入 lifecycle；仅在界面 STARTED 期间轮询会话活跃状态对账。 */
+    fun attachLifecycle(lifecycle: Lifecycle) {
+        if (pollJob?.isActive == true) return
+        pollJob = viewModelScope.launchWhileStarted(lifecycle) {
             sessionLoaded.await()
-            // Poll adaptively: while idle (no running tool), back off to avoid needless
-            // network + recomposition churn in the background; stay tight while busy so a
-            // finished task is noticed promptly.
             while (true) {
                 val busy = eventReducer.sessionStatuses.value[sessionId] is SessionStatus.Busy ||
                     eventReducer.messages.value[sessionId].orEmpty().any { message ->
@@ -708,10 +719,6 @@ class ChatViewModel @Inject constructor(
                 reconcileActiveStatus()
             }
         }
-        loadProviders()
-        loadAgents()
-        loadCommands()
-
     }
 
     // 会话加载、历史分页与状态对账见 ChatViewModelHistoryExt.kt。
