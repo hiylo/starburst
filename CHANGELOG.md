@@ -22,6 +22,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `.github/workflows/ci.yml`), alongside the existing gitleaks secret scan and a new
   `scripts/check-file-size.sh` line-count guard wired into the same job.
 
+### Fixed
+- Long model display names pushed the context-budget ring and budget text off-screen in the bottom
+  selector row. Model names now truncate at `MODEL_LABEL_MAX_CHARS` (24) with an ellipsis (the full
+  name remains available in the model picker and context-usage dialog); truncation backs off before
+  splitting a surrogate pair, so emoji/CJK model names cannot produce a lone surrogate. The budget
+  ratio, percentage and warning/critical thresholds moved into testable pure functions
+  (`ChatInputBarDisplay.kt`), with `ChatInputBarDisplayTest` (16 cases) and `ContextBreakdownTest`
+  (9 cases) covering model-label truncation, budget math and the context breakdown scaling.
+- **Build** — Hilt upgraded 2.51 → 2.52. Hilt 2.51 with Kotlin 2.0.21 produced debug APKs that
+  crashed on launch (`NoClassDefFoundError: StarBurstApp_GeneratedInjector`, the generated
+  `@GeneratedEntryPoint` was not packaged into dex) and release builds that failed R8 on the same
+  missing class. 2.52 removes the runtime reference; both debug and release now build and the app
+  launches. Verified with a Compose instrumentation test (`ChatInputBarModelLabelTest`) on an
+  Android 34 emulator.
+
 ## [3.0.0] - 2026-09-17
 
 ### Added

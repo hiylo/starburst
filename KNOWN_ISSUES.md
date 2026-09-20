@@ -85,6 +85,15 @@ Items are removed from this list once fixed and verified.
   `ChatDialogs.kt`、`ChatOverlayCards.kt`、`ChatTerminal.kt`、`GitScreen*.kt`、
   `SettingsScreen.kt`、`StarBurstConnectionService*.kt`、`EventReducer*.kt`、
   `ChatViewModel*Ext.kt`）。
+- 2026-09-20 已补 JVM 侧可测的纯逻辑回归单测：`ChatInputBarDisplayTest`（16 例，模型名截断
+  `displayModelLabel` 含代理对安全、上下文预算比例/百分比/告警等级门槛
+  `contextBudgetRatio` / `contextBudgetPercentage` / `contextBudgetLevel`）与
+  `ContextBreakdownTest`（9 例，`computeContextBreakdown` 的向下折算、OTHER 兜底、
+  工具输入输出计量、零分段过滤）。Compose 渲染与状态传递路径仍无 JVM 覆盖，需真机复验。
+- 2026-09-20 已在 headless 模拟器（Android 34，独立 AVD `starburst_verify`）实测：
+  输入栏渲染 + 模型名截断（Compose instrumentation `ChatInputBarModelLabelTest` 2 例 OK）、
+  设置页主界面渲染 + 语言对话框（uiautomator）。受「无服务器连接」限制，聊天页消息卡片、
+  终端、Git 页、后台连接等仍待真机复验。
 - `TerminalEmulator.kt`（1278 行）、`ChatInputBar.kt`（1070 行）、`SettingsScreen.kt`（1073 行）、
   `StarBurstConnectionService.kt`（1075 行）仍高于 1000 行目标：继续拆分别需要把 30 余个可变字段
   （含 `cursorRow`/`cursorCol` 等 9 个 `private set` 属性）放宽为 `internal`/`internal set`、把巨型
