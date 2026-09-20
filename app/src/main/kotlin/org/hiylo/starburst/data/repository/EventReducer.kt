@@ -24,23 +24,18 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.Json
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 import javax.inject.Singleton
 
 private const val TAG = "EventReducer"
-private const val MAX_PENDING_DELTA_KEYS = 128
-private const val MAX_PENDING_DELTA_CHARS = 65_536
+internal const val MAX_PENDING_DELTA_KEYS = 128
+internal const val MAX_PENDING_DELTA_CHARS = 65_536
 
 /** callId → messageId 索引容量上限：超过后驱逐最旧条目，防止长时间运行无界增长。 */
-private const val MAX_CALL_ID_INDEX = 512
+internal const val MAX_CALL_ID_INDEX = 512
 
 /** 流式 delta 累积 flush 间隔（毫秒），与 UI 的节流采样对齐。 */
 private const val DELTA_FLUSH_INTERVAL_MS = 50L
@@ -50,7 +45,7 @@ internal fun compactSessionForCache(session: Session): Session = session.copy(
     permission = null,
 )
 
-private data class PendingDeltaKey(
+internal data class PendingDeltaKey(
     val sessionId: String,
     val messageId: String,
     val partId: String,
@@ -82,7 +77,7 @@ class EventReducer @Inject constructor(
     private val indexScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     /** 流式 delta 累积缓冲：把高频 text delta 合并后定期 flush，避免每个 delta 都复制整段已累计文本（O(n²)）。 */
-    private val deltaAccumulator = ConcurrentHashMap<PendingDeltaKey, StringBuilder>()
+    internal val deltaAccumulator = ConcurrentHashMap<PendingDeltaKey, StringBuilder>()
 
     init {
         // 定期 flush 累积的 delta（与 UI 的 50ms 节流采样对齐）。
@@ -96,74 +91,74 @@ class EventReducer @Inject constructor(
 
     private val pendingLock = Any()
     private var pendingRevision = 0L
-    private val deltaLock = Any()
-    private val pendingDeltas = LinkedHashMap<PendingDeltaKey, StringBuilder>()
-    private val removedMessageLock = Any()
-    private val removedMessageSessions = mutableMapOf<String, String>()
+    internal val deltaLock = Any()
+    internal val pendingDeltas = LinkedHashMap<PendingDeltaKey, StringBuilder>()
+    internal val removedMessageLock = Any()
+    internal val removedMessageSessions = mutableMapOf<String, String>()
 
     /**
      * callId → messageId 索引：shell/tool 结束类事件（如 next.shell.ended）不带 messageId，
      * 用该索引 O(1) 定位所属消息，避免每次全库扫描所有会话的所有 parts。
      * 带容量上限，防止长时间运行累积。
      */
-    private val callIdIndex = ConcurrentHashMap<String, String>()
-    private val callIndexLock = Any()
-    
+    internal val callIdIndex = ConcurrentHashMap<String, String>()
+    internal val callIndexLock = Any()
+
     // ============ State ============
-    
+
     /** Maps serverId → set of sessionIds belonging to that server */
     private val _serverSessions = MutableStateFlow<Map<String, Set<String>>>(emptyMap())
     val serverSessions: StateFlow<Map<String, Set<String>>> = _serverSessions.asStateFlow()
-    
+
     private val _sessions = MutableStateFlow<List<Session>>(emptyList())
     val sessions: StateFlow<List<Session>> = _sessions.asStateFlow()
-    
-    private val _sessionStatuses = MutableStateFlow<Map<String, SessionStatus>>(emptyMap())
+
+    internal val _sessionStatuses = MutableStateFlow<Map<String, SessionStatus>>(emptyMap())
     val sessionStatuses: StateFlow<Map<String, SessionStatus>> = _sessionStatuses.asStateFlow()
 
     /** Sessions that finished processing (Busy -> Idle) but have not yet been confirmed/opened by the user.
      *  Maps sessionId -> first completion timestamp, used for stable pin ordering. */
     private val _unconfirmedCompletedSessions = MutableStateFlow<Map<String, Long>>(emptyMap())
     val unconfirmedCompletedSessions: StateFlow<Map<String, Long>> = _unconfirmedCompletedSessions.asStateFlow()
-    
-    private val _messages = MutableStateFlow<Map<String, List<Message>>>(emptyMap()) // sessionId -> messages
+
+    internal val _messages = MutableStateFlow<Map<String, List<Message>>>(emptyMap()) // sessionId -> messages
     val messages: StateFlow<Map<String, List<Message>>> = _messages.asStateFlow()
 
     /** Last time the user sent a message in each session (sessionId -> epoch millis).
      *  Tracked separately from [messages] so session lists can sort by it without
      *  recomposing on every streaming part update. */
-    private val _lastUserMessageAt = MutableStateFlow<Map<String, Long>>(emptyMap())
+    internal val _lastUserMessageAt = MutableStateFlow<Map<String, Long>>(emptyMap())
     val lastUserMessageAt: StateFlow<Map<String, Long>> = _lastUserMessageAt.asStateFlow()
-    
-    private val _parts = MutableStateFlow<Map<String, List<Part>>>(emptyMap()) // messageId -> parts
+
+    internal val _parts = MutableStateFlow<Map<String, List<Part>>>(emptyMap()) // messageId -> parts
     val parts: StateFlow<Map<String, List<Part>>> = _parts.asStateFlow()
-    
+
     private val _sessionDiffs = MutableStateFlow<Map<String, List<FileDiff>>>(emptyMap())
     val sessionDiffs: StateFlow<Map<String, List<FileDiff>>> = _sessionDiffs.asStateFlow()
 
     private val _sessionErrors = MutableStateFlow<Map<String, Message.Assistant.ErrorInfo>>(emptyMap())
     val sessionErrors: StateFlow<Map<String, Message.Assistant.ErrorInfo>> = _sessionErrors.asStateFlow()
-    
+
     private val _pendingInteractions = MutableStateFlow<List<PendingInteraction>>(emptyList())
     val pendingInteractions: StateFlow<List<PendingInteraction>> = _pendingInteractions.asStateFlow()
-    
+
     private val _todos = MutableStateFlow<Map<String, List<SseEvent.TodoUpdated.Todo>>>(emptyMap())
     val todos: StateFlow<Map<String, List<SseEvent.TodoUpdated.Todo>>> = _todos.asStateFlow()
-    
+
     private val _vcsBranches = MutableStateFlow<Map<DirectoryScope, String?>>(emptyMap())
     val vcsBranches: StateFlow<Map<DirectoryScope, String?>> = _vcsBranches.asStateFlow()
-    
+
     private val _projectInfo = MutableStateFlow<Map<DirectoryScope, Project>>(emptyMap())
     val projectInfo: StateFlow<Map<DirectoryScope, Project>> = _projectInfo.asStateFlow()
 
-    private val _promptDeliveries = MutableStateFlow<Map<String, PromptDeliveryInfo>>(emptyMap())
+    internal val _promptDeliveries = MutableStateFlow<Map<String, PromptDeliveryInfo>>(emptyMap())
     val promptDeliveries: StateFlow<Map<String, PromptDeliveryInfo>> = _promptDeliveries.asStateFlow()
 
     private val _workspaceStatuses = MutableStateFlow<Map<WorkspaceScope, String>>(emptyMap())
     val workspaceStatuses: StateFlow<Map<WorkspaceScope, String>> = _workspaceStatuses.asStateFlow()
-    
+
     // ============ Event Processing ============
-    
+
     /**
      * Process an SSE event and update state.
      * @param event The SSE event to process
@@ -185,7 +180,7 @@ class EventReducer @Inject constructor(
                 _workspaceStatuses.update { it + (WorkspaceScope(serverId, workspaceId) to "error") }
             }
             is SseEvent.WorktreeReady, is SseEvent.WorktreeFailed -> Unit
-            
+
             is SseEvent.SessionCreated -> handleSessionCreated(event, serverId)
             is SseEvent.SessionUpdated -> handleSessionUpdated(event, serverId)
             is SseEvent.SessionDeleted -> handleSessionDeleted(event)
@@ -259,42 +254,42 @@ class EventReducer @Inject constructor(
             is SseEvent.NextToolProgress -> handleNextToolProgress(event)
             is SseEvent.NextToolSuccess -> handleNextToolSuccess(event)
             is SseEvent.NextToolFailed -> handleNextToolFailed(event)
-            
+
             is SseEvent.MessageUpdated -> handleMessageUpdated(event)
             is SseEvent.MessageRemoved -> handleMessageRemoved(event)
-            
+
             is SseEvent.MessagePartUpdated -> handleMessagePartUpdated(event)
             is SseEvent.MessagePartDelta -> handleMessagePartDelta(event)
             is SseEvent.MessagePartRemoved -> handleMessagePartRemoved(event)
-            
+
             is SseEvent.PermissionAsked -> handlePermissionAsked(event, serverId)
             is SseEvent.PermissionReplied -> handlePermissionReplied(event)
-            
+
             is SseEvent.QuestionAsked -> handleQuestionAsked(event, serverId)
             is SseEvent.QuestionReplied -> handleQuestionReplied(event)
             is SseEvent.QuestionRejected -> handleQuestionRejected(event)
-            
+
             is SseEvent.TodoUpdated -> handleTodoUpdated(event)
             is SseEvent.VcsBranchUpdated -> handleVcsBranchUpdated(event, serverId, directory, workspaceId)
             is SseEvent.LspUpdated -> { /* LSP events not needed in mobile */ }
             is SseEvent.ProjectUpdated -> handleProjectUpdated(event, serverId, directory, workspaceId)
         }
     }
-    
+
     // ============ Server Events ============
-    
+
     private fun handleServerConnected() {
         if (BuildConfig.DEBUG) Log.d(TAG, "Server connected")
     }
-    
+
     private fun handleServerInstanceDisposed(event: SseEvent.ServerInstanceDisposed, serverId: String) {
         if (BuildConfig.DEBUG) Log.d(TAG, "Server instance disposed")
         _vcsBranches.update { current -> current.filterKeys { it.serverId != serverId || it.directory != event.directory } }
         _projectInfo.update { current -> current.filterKeys { it.serverId != serverId || it.directory != event.directory } }
     }
-    
+
     // ============ Session Events ============
-    
+
     private fun handleSessionCreated(event: SseEvent.SessionCreated, serverId: String) {
         trackSession(serverId, event.info.id)
         _sessions.update { current ->
@@ -306,286 +301,8 @@ class EventReducer @Inject constructor(
         }
     }
 
-    private fun handleNextPrompted(event: SseEvent.Prompted, serverId: String) {
-        trackSession(serverId, event.sessionId)
-        _promptDeliveries.update {
-            it + (event.messageId to PromptDeliveryInfo(event.sessionId, PromptDeliveryState.PROMOTED))
-        }
-        val timestamp = event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()
-        handleMessageUpdated(SseEvent.MessageUpdated(Message.User(
-            id = event.messageId,
-            sessionId = event.sessionId,
-            time = TimeInfo(timestamp),
-        )))
-        val prompt = event.prompt?.jsonObject ?: return
-        prompt["text"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let { text ->
-            handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Text(
-                id = "${event.messageId}-prompt",
-                sessionId = event.sessionId,
-                messageId = event.messageId,
-                text = text,
-                time = Part.Text.Time(timestamp, timestamp),
-            )))
-        }
-        prompt["files"]?.jsonArray?.forEachIndexed { index, element ->
-            val file = element.jsonObject
-            handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.File(
-                id = "${event.messageId}-file-$index",
-                sessionId = event.sessionId,
-                messageId = event.messageId,
-                mime = "application/octet-stream",
-                filename = file["name"]?.jsonPrimitive?.contentOrNull,
-                url = file["uri"]?.jsonPrimitive?.contentOrNull,
-                source = file["source"],
-            )))
-        }
-    }
+    // Next* 流式生命周期（prompt/step/shell/tool）处理见 EventReducerStreamingExt.kt。
 
-    private fun handleNextStepStarted(event: SseEvent.NextStepStarted, serverId: String) {
-        trackSession(serverId, event.sessionId)
-        val model = event.model.jsonObject
-        val parentId = _messages.value[event.sessionId]
-            ?.filterIsInstance<Message.User>()
-            ?.maxByOrNull { it.time.created }
-            ?.id
-            ?: ""
-        handleMessageUpdated(SseEvent.MessageUpdated(Message.Assistant(
-            id = event.assistantMessageId,
-            sessionId = event.sessionId,
-            time = TimeInfo(event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
-            parentId = parentId,
-            providerId = model["providerID"]?.jsonPrimitive?.contentOrNull,
-            modelId = model["modelID"]?.jsonPrimitive?.contentOrNull,
-            variant = model["variant"]?.jsonPrimitive?.contentOrNull,
-            agent = event.agent,
-        )))
-        _sessionStatuses.update { it + (event.sessionId to SessionStatus.Busy) }
-    }
-
-    private fun handleNextStepEnded(event: SseEvent.NextStepEnded) {
-        val existing = _messages.value[event.sessionId]
-            ?.filterIsInstance<Message.Assistant>()
-            ?.firstOrNull { it.id == event.assistantMessageId }
-            ?: return
-        val tokens = event.tokens.jsonObject
-        val cache = tokens["cache"]?.jsonObject
-        handleMessageUpdated(SseEvent.MessageUpdated(existing.copy(
-            time = existing.time.copy(completed = event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
-            finish = event.finish,
-            cost = event.cost,
-            tokens = Message.Assistant.Tokens(
-                input = tokens["input"]?.jsonPrimitive?.intOrNull ?: 0,
-                output = tokens["output"]?.jsonPrimitive?.intOrNull ?: 0,
-                reasoning = tokens["reasoning"]?.jsonPrimitive?.intOrNull ?: 0,
-                cache = Message.Assistant.Tokens.Cache(
-                    read = cache?.get("read")?.jsonPrimitive?.intOrNull ?: 0,
-                    write = cache?.get("write")?.jsonPrimitive?.intOrNull ?: 0,
-                ),
-            ),
-        )))
-    }
-
-    private fun updateMessage(sessionId: String, messageId: String, transform: (Message) -> Message) {
-        _messages.update { current ->
-            val messages = current[sessionId].orEmpty()
-            if (messages.none { it.id == messageId }) current
-            else current + (sessionId to messages.map { if (it.id == messageId) transform(it) else it })
-        }
-    }
-
-    private fun handleNextStepFailed(event: SseEvent.NextStepFailed) {
-        val error = event.error.jsonObject
-        updateMessage(event.sessionId, event.assistantMessageId) { message ->
-            val assistant = message as? Message.Assistant ?: return@updateMessage message
-            assistant.copy(
-                time = assistant.time.copy(completed = event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
-                error = Message.Assistant.ErrorInfo(
-                    name = error["name"]?.jsonPrimitive?.contentOrNull ?: "Error",
-                    data = error["data"] ?: event.error,
-                ),
-            )
-        }
-    }
-
-    private fun handleNextShellStarted(event: SseEvent.NextShellStarted) {
-        indexCallId(event.callId, event.messageId)
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Tool(
-            id = event.callId,
-            sessionId = event.sessionId,
-            messageId = event.messageId,
-            callId = event.callId,
-            tool = "bash",
-            state = ToolState.Running(
-                input = mapOf("command" to JsonPrimitive(event.command)),
-                time = ToolState.Running.Time(event.timestamp),
-            ),
-        )))
-    }
-
-    private fun handleNextShellEnded(event: SseEvent.NextShellEnded) {
-        // 优先走 callId 索引 O(1) 定位（shell.ended 事件不带 messageId），
-        // 避免每次对全部会话的所有 parts 做全量扫描。
-        val existing = _parts.value[messageIdForCall(event.callId)]
-            ?.filterIsInstance<Part.Tool>()
-            ?.firstOrNull { it.callId == event.callId }
-            ?: _parts.value.values.asSequence().flatten()
-                .filterIsInstance<Part.Tool>()
-                .firstOrNull { it.sessionId == event.sessionId && it.callId == event.callId }
-            ?: return
-        val running = existing.state as? ToolState.Running ?: return
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = ToolState.Completed(
-                input = running.input,
-                output = event.output,
-                time = ToolState.Completed.Time(running.time?.start ?: event.timestamp, event.timestamp),
-            ),
-        )))
-    }
-
-    private fun findToolPart(messageId: String, callId: String): Part.Tool? =
-        _parts.value[messageId]?.filterIsInstance<Part.Tool>()?.firstOrNull { it.callId == callId }
-
-    /** 记录 callId → messageId 映射，供不带 messageId 的结束类事件 O(1) 定位。 */
-    private fun indexCallId(callId: String, messageId: String) {
-        synchronized(callIndexLock) {
-            callIdIndex[callId] = messageId
-            if (callIdIndex.size > MAX_CALL_ID_INDEX) {
-                val eldest = callIdIndex.keys.firstOrNull() ?: return
-                callIdIndex.remove(eldest)
-            }
-        }
-    }
-
-    /** 通过 callId 索引反查 messageId；无索引时返回 null（调用方需兜底扫描）。 */
-    private fun messageIdForCall(callId: String): String? =
-        synchronized(callIndexLock) { callIdIndex[callId] }
-
-    private fun handleNextToolInputStarted(event: SseEvent.NextToolInputStarted) {
-        if (findToolPart(event.messageId, event.callId) != null) return
-        indexCallId(event.callId, event.messageId)
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Tool(
-            id = event.callId,
-            sessionId = event.sessionId,
-            messageId = event.messageId,
-            callId = event.callId,
-            tool = event.name,
-            state = ToolState.Pending(),
-        )))
-    }
-
-    private fun handleNextToolInputDelta(event: SseEvent.NextToolInputDelta) {
-        val existing = findToolPart(event.messageId, event.callId) ?: return
-        val pending = existing.state as? ToolState.Pending ?: return
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = pending.copy(raw = pending.raw.orEmpty() + event.delta),
-        )))
-    }
-
-    private fun handleNextToolInputEnded(event: SseEvent.NextToolInputEnded) {
-        val existing = findToolPart(event.messageId, event.callId) ?: return
-        val input = runCatching { Json.parseToJsonElement(event.text).jsonObject }.getOrDefault(emptyMap())
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = when (val state = existing.state) {
-                is ToolState.Pending -> ToolState.Pending(input = input, raw = event.text)
-                is ToolState.Running -> state.copy(input = input)
-                is ToolState.Completed -> state.copy(input = input)
-                is ToolState.Error -> state.copy(input = input)
-            },
-        )))
-    }
-
-    private fun handleNextToolCalled(event: SseEvent.NextToolCalled) {
-        val existing = findToolPart(event.messageId, event.callId)
-        if (existing?.state is ToolState.Completed || existing?.state is ToolState.Error) return
-        val running = existing?.state as? ToolState.Running
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Tool(
-            id = existing?.id ?: event.callId,
-            sessionId = event.sessionId,
-            messageId = event.messageId,
-            callId = event.callId,
-            tool = event.tool,
-            state = ToolState.Running(
-                input = event.input.jsonObject,
-                title = running?.title,
-                metadata = running?.metadata,
-                time = ToolState.Running.Time(event.timestamp),
-            ),
-        )))
-    }
-
-    private fun toolContentText(content: kotlinx.serialization.json.JsonElement): String =
-        content.jsonArray.mapNotNull { item ->
-            item.jsonObject.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "text" }
-                ?.get("text")?.jsonPrimitive?.contentOrNull
-        }.joinToString("\n")
-
-    private fun toolMetadata(structured: kotlinx.serialization.json.JsonElement, output: String): Map<String, kotlinx.serialization.json.JsonElement> =
-        structured.jsonObject + if (output.isNotBlank()) mapOf("output" to JsonPrimitive(output)) else emptyMap()
-
-    private fun handleNextToolProgress(event: SseEvent.NextToolProgress) {
-        val existing = findToolPart(event.messageId, event.callId) ?: return
-        if (existing.state is ToolState.Completed || existing.state is ToolState.Error) return
-        val input = when (val state = existing.state) {
-            is ToolState.Pending -> state.input
-            is ToolState.Running -> state.input
-            is ToolState.Completed -> state.input
-            is ToolState.Error -> state.input
-        }
-        val output = toolContentText(event.content)
-        val start = (existing.state as? ToolState.Running)?.time?.start ?: event.timestamp
-        val title = (existing.state as? ToolState.Running)?.title
-        val metadata = (existing.state as? ToolState.Running)?.metadata.orEmpty() + toolMetadata(event.structured, output)
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = ToolState.Running(input, title = title, metadata = metadata, time = ToolState.Running.Time(start)),
-        )))
-    }
-
-    private fun handleNextToolSuccess(event: SseEvent.NextToolSuccess) {
-        val existing = findToolPart(event.messageId, event.callId) ?: return
-        val running = existing.state as? ToolState.Running
-        val input = running?.input ?: (existing.state as? ToolState.Pending)?.input.orEmpty()
-        val output = toolContentText(event.content)
-        val attachments = event.content.jsonArray.mapIndexedNotNull { index, item ->
-            val file = item.jsonObject.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "file" } ?: return@mapIndexedNotNull null
-            ToolState.Completed.Attachment(
-                id = "${event.callId}-file-$index",
-                sessionId = event.sessionId,
-                messageId = event.messageId,
-                mime = file["mime"]?.jsonPrimitive?.contentOrNull ?: "application/octet-stream",
-                filename = file["name"]?.jsonPrimitive?.contentOrNull,
-                url = file["uri"]?.jsonPrimitive?.contentOrNull,
-            )
-        }
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = ToolState.Completed(
-                input = input,
-                output = output,
-                title = running?.title,
-                metadata = running?.metadata.orEmpty() + event.structured.jsonObject,
-                time = ToolState.Completed.Time(running?.time?.start ?: event.timestamp, event.timestamp),
-                attachments = attachments,
-            ),
-        )))
-    }
-
-    private fun handleNextToolFailed(event: SseEvent.NextToolFailed) {
-        val existing = findToolPart(event.messageId, event.callId) ?: return
-        val running = existing.state as? ToolState.Running
-        val input = running?.input ?: (existing.state as? ToolState.Pending)?.input.orEmpty()
-        val errorObject = event.error.jsonObject
-        val error = errorObject["message"]?.jsonPrimitive?.contentOrNull
-            ?: errorObject["data"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
-            ?: event.error.toString()
-        handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-            state = ToolState.Error(
-                input = input,
-                error = error,
-                metadata = running?.metadata,
-                time = ToolState.Error.Time(running?.time?.start ?: event.timestamp, event.timestamp),
-            ),
-        )))
-    }
-    
     private fun handleSessionUpdated(event: SseEvent.SessionUpdated, serverId: String) {
         upsertSession(serverId, event.info)
     }
@@ -606,15 +323,15 @@ class EventReducer @Inject constructor(
             updated.sortedByDescending { it.time.updated }
         }
     }
-    
+
     /** Register a session as belonging to a server */
-    private fun trackSession(serverId: String, sessionId: String) {
+    internal fun trackSession(serverId: String, sessionId: String) {
         _serverSessions.update { current ->
             val existing = current[serverId] ?: emptySet()
             current + (serverId to (existing + sessionId))
         }
     }
-    
+
     private fun handleSessionDeleted(event: SseEvent.SessionDeleted) {
         val sessionId = event.info.id
         removeSession(sessionId)
@@ -649,7 +366,7 @@ class EventReducer @Inject constructor(
             removedMessageSessions.entries.removeAll { it.value == sessionId }
         }
     }
-    
+
     private fun handleSessionStatus(event: SseEvent.SessionStatus, serverId: String) {
         trackSession(serverId, event.sessionId)
         val previous = _sessionStatuses.value[event.sessionId]
@@ -661,7 +378,7 @@ class EventReducer @Inject constructor(
             markUnconfirmedCompleted(event.sessionId)
         }
     }
-    
+
     private fun handleSessionIdle(event: SseEvent.SessionIdle, serverId: String) {
         trackSession(serverId, event.sessionId)
         val previous = _sessionStatuses.value[event.sessionId]
@@ -670,7 +387,7 @@ class EventReducer @Inject constructor(
             markUnconfirmedCompleted(event.sessionId)
         }
     }
-    
+
     /** Marks a session as confirmed once the user has opened/acknowledged it. */
     fun confirmSession(sessionId: String) {
         _unconfirmedCompletedSessions.update { it - sessionId }
@@ -682,11 +399,16 @@ class EventReducer @Inject constructor(
             if (sessionId in current) current else current + (sessionId to System.currentTimeMillis())
         }
     }
-    
+
     private fun handleSessionDiff(event: SseEvent.SessionDiff) {
         _sessionDiffs.update { it + (event.sessionId to event.diff) }
     }
-    
+
+    /** 主动写入某会话的文件变更列表（REST /session/{id}/diff 拉取结果），供「查看变更」初始状态。 */
+    fun setSessionDiffs(sessionId: String, diffs: List<FileDiff>) {
+        _sessionDiffs.update { it + (sessionId to diffs) }
+    }
+
     private fun handleSessionError(event: SseEvent.SessionError) {
         Log.e(TAG, "Session ${event.sessionId} error: ${event.error.message}")
         event.sessionId?.let { sessionId ->
@@ -694,212 +416,25 @@ class EventReducer @Inject constructor(
             _sessionStatuses.update { it + (sessionId to SessionStatus.Idle) }
         }
     }
-    
-    // ============ Message Events ============
-    
-    private fun handleMessageUpdated(event: SseEvent.MessageUpdated) {
-        if (isMessageRemoved(event.info.id)) return
-        val sessionId = event.info.sessionId
-        recordLastUserMessage(event.info)
-        _messages.update { current ->
-            val sessionMessages = current[sessionId]?.toMutableList() ?: mutableListOf()
-            val existingIndex = sessionMessages.indexOfFirst { it.id == event.info.id }
-            
-            if (existingIndex >= 0) {
-                sessionMessages[existingIndex] = event.info
-            } else {
-                sessionMessages.add(event.info)
-                sessionMessages.sortBy { it.time.created }
-            }
-            
-            current + (sessionId to sessionMessages)
-        }
-    }
 
-    private fun recordLastUserMessage(message: Message) {
-        if (message !is Message.User) return
-        val created = message.time.created
-        _lastUserMessageAt.update { current ->
-            if (created > (current[message.sessionId] ?: 0L)) {
-                current + (message.sessionId to created)
-            } else {
-                current
-            }
-        }
-    }
-    
-    private fun handleMessageRemoved(event: SseEvent.MessageRemoved) {
-        synchronized(removedMessageLock) { removedMessageSessions[event.messageId] = event.sessionId }
-        _messages.update { current ->
-            val sessionMessages = current[event.sessionId]?.filter { it.id != event.messageId }
-            if (sessionMessages != null) {
-                if (sessionMessages.isEmpty()) current - event.sessionId else current + (event.sessionId to sessionMessages)
-            } else {
-                current
-            }
-        }
-        _parts.update { it - event.messageId }
-        synchronized(deltaLock) {
-            pendingDeltas.keys.removeAll { it.messageId == event.messageId }
-        }
-    }
+    // 消息/part 归并与流式 delta 缓冲见 EventReducerMessageExt.kt。
 
-    private fun isMessageRemoved(messageId: String): Boolean =
-        synchronized(removedMessageLock) { messageId in removedMessageSessions }
-    
-    // ============ Part Events ============
-    
-    private fun handleMessagePartUpdated(event: SseEvent.MessagePartUpdated) {
-        val messageId = event.part.messageId
-        if (isMessageRemoved(messageId)) return
-        val key = PendingDeltaKey(event.part.sessionId, messageId, event.part.id)
-        // message.part.updated 携带的是 part 的权威全量文本，未刷的流式 delta 已包含其中，
-        // 不能叠加（否则结尾重复）；只有 part 尚不存在时早到的 delta（pendingDeltas）才需要合并。
-        synchronized(deltaLock) {
-            val pending = pendingDeltas.remove(key)?.toString().orEmpty()
-            deltaAccumulator.remove(key)
-            val updatedPart = if (pending.isNotEmpty()) {
-                applyTextDelta(event.part, pending)
-            } else {
-                event.part
-            }
-            _parts.update { current ->
-                val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
-                val existingIndex = messageParts.indexOfFirst { it.id == updatedPart.id }
-
-                if (existingIndex >= 0) {
-                    messageParts[existingIndex] = updatedPart
-                } else {
-                    messageParts.add(updatedPart)
-                }
-
-                current + (messageId to messageParts)
-            }
-        }
-    }
-
-    /**
-     * 全量替换 part（start/end 事件）：携带的全量文本不应再叠加残留 delta，
-     * 否则 50ms flush 前到达的 ended 事件会与未刷的尾部 delta 重复拼接。
-     * 调用前清空该 part 的残留缓冲；且 flush 与本次替换都持有 deltaLock，
-     * 避免 flush 已快照的 delta 在替换完成后再被追加导致结尾重复。
-     */
-    private fun handleMessagePartFinal(event: SseEvent.MessagePartUpdated) {
-        val messageId = event.part.messageId
-        if (isMessageRemoved(messageId)) return
-        synchronized(deltaLock) {
-            pendingDeltas.keys.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
-            deltaAccumulator.remove(PendingDeltaKey(event.part.sessionId, messageId, event.part.id))
-            _parts.update { current ->
-                val messageParts = current[messageId]?.toMutableList() ?: mutableListOf()
-                val existingIndex = messageParts.indexOfFirst { it.id == event.part.id }
-                if (existingIndex >= 0) {
-                    messageParts[existingIndex] = event.part
-                } else {
-                    messageParts.add(event.part)
-                }
-                current + (messageId to messageParts)
-            }
-        }
-    }
-    
-    private fun handleMessagePartDelta(event: SseEvent.MessagePartDelta) {
-        if (isMessageRemoved(event.messageId)) return
-        if (event.field != "text") {
-            if (BuildConfig.DEBUG) Log.d(TAG, "Ignoring unsupported delta field=${event.field} part=${event.partId}")
-            return
-        }
-        val key = PendingDeltaKey(event.sessionId, event.messageId, event.partId)
-        // part 尚不存在时走旧缓冲（等 part.updated 事件到达再合并）。
-        val partExists = _parts.value[event.messageId]?.any { it.id == event.partId } == true
-        if (!partExists) {
-            bufferDelta(event)
-            return
-        }
-        // part 已存在：delta 累积到 buffer，由定时 flush 一次性合并，避免每次 delta 复制整段已累计文本（O(n²)）。
-        synchronized(deltaLock) {
-            deltaAccumulator.getOrPut(key) { StringBuilder() }.append(event.delta)
-        }
-    }
-
-    /** 供单元测试同步 flush 累积 delta（生产走 50ms 定时 flush，测试无协程推进）。 */
-    internal fun flushAccumulatedDeltasForTest() {
-        flushAccumulatedDeltas()
-    }
-
-    /** 把累积的 delta 一次性合并进 _parts（每次合并只复制一次整段文本）。 */
-    private fun flushAccumulatedDeltas() {
-        // 拿快照与写入 _parts 必须在同一把锁内完成：若先快照后释放锁再写入，
-        // handleMessagePartFinal/Updated 的全量替换可能挤进来，把已含这些 delta 的全量
-        // 文本写好后 flush 再把旧快照追加一遍，导致结尾内容重复（1,2,3→1,1,2）。
-        synchronized(deltaLock) {
-            if (deltaAccumulator.isEmpty()) return
-            val snapshot = deltaAccumulator.entries.map { it.key to it.value.toString() }.also { deltaAccumulator.clear() }
-            if (snapshot.isEmpty()) return
-            _parts.update { current ->
-                var updated = current
-                for ((key, text) in snapshot) {
-                    val messageParts = updated[key.messageId]?.toMutableList() ?: continue
-                    val idx = messageParts.indexOfFirst { it.id == key.partId }
-                    if (idx < 0) continue
-                    val part = messageParts[idx]
-                    messageParts[idx] = applyTextDelta(part, text)
-                    updated = updated + (key.messageId to messageParts)
-                }
-                updated
-            }
-        }
-    }
-    
-    private fun handleMessagePartRemoved(event: SseEvent.MessagePartRemoved) {
-        _parts.update { current ->
-            val messageParts = current[event.messageId]?.filter { it.id != event.partId }
-            if (messageParts != null) {
-                if (messageParts.isEmpty()) current - event.messageId else current + (event.messageId to messageParts)
-            } else {
-                current
-            }
-        }
-        synchronized(deltaLock) {
-            pendingDeltas.remove(PendingDeltaKey(event.sessionId, event.messageId, event.partId))
-            deltaAccumulator.remove(PendingDeltaKey(event.sessionId, event.messageId, event.partId))
-        }
-    }
-
-    private fun applyTextDelta(part: Part, delta: String): Part = when (part) {
-        is Part.Text -> part.copy(text = part.text + delta)
-        is Part.Reasoning -> part.copy(text = part.text + delta)
-        else -> part
-    }
-
-    private fun bufferDelta(event: SseEvent.MessagePartDelta) {
-        synchronized(deltaLock) {
-            val key = PendingDeltaKey(event.sessionId, event.messageId, event.partId)
-            if (key !in pendingDeltas && pendingDeltas.size >= MAX_PENDING_DELTA_KEYS) {
-                pendingDeltas.remove(pendingDeltas.keys.first())
-            }
-            val buffer = pendingDeltas.getOrPut(key) { StringBuilder() }
-            val available = MAX_PENDING_DELTA_CHARS - buffer.length
-            if (available > 0) buffer.append(event.delta.take(available))
-        }
-    }
-    
     // ============ Permission Events ============
-    
+
     private fun handlePermissionAsked(event: SseEvent.PermissionAsked, serverId: String) {
         trackSession(serverId, event.sessionId)
         upsertPending(PendingInteraction.Permission(event))
     }
-    
+
     private fun handlePermissionReplied(event: SseEvent.PermissionReplied) {
         synchronized(pendingLock) {
             removePending(PendingInteraction.Permission::class.java, event.sessionId, event.requestId)
             pendingRevision++
         }
     }
-    
+
     // ============ Question Events ============
-    
+
     private fun handleQuestionAsked(event: SseEvent.QuestionAsked, serverId: String) {
         trackSession(serverId, event.sessionId)
         upsertPending(PendingInteraction.Question(event))
@@ -909,7 +444,7 @@ class EventReducer @Inject constructor(
                 "questions=${event.questions.size} pending=${_pendingInteractions.value.size}",
         )
     }
-    
+
     private fun handleQuestionReplied(event: SseEvent.QuestionReplied) {
         synchronized(pendingLock) {
             removePending(PendingInteraction.Question::class.java, event.sessionId, event.requestId)
@@ -921,7 +456,7 @@ class EventReducer @Inject constructor(
             )
         }
     }
-    
+
     private fun handleQuestionRejected(event: SseEvent.QuestionRejected) {
         synchronized(pendingLock) {
             removePending(PendingInteraction.Question::class.java, event.sessionId, event.requestId)
@@ -1107,9 +642,9 @@ class EventReducer @Inject constructor(
             next
         }
     }
-    
+
     // ============ Batch Updates ============
-    
+
     /**
      * Load initial session list for a server.
      * Registers all session IDs as belonging to the given serverId.
@@ -1171,7 +706,7 @@ class EventReducer @Inject constructor(
         }
         if (BuildConfig.DEBUG) Log.d(TAG, "Manually updated session $sessionId status to $status")
     }
-    
+
     /**
      * Load messages for a session
      */
@@ -1235,7 +770,7 @@ class EventReducer @Inject constructor(
         val loadedIds = loaded.asSequence().map { it.id }.toSet()
         return merged + current.filterNot { it.id in loadedIds }
     }
-    
+
     /**
      * Clear all state (used when ALL servers disconnect)
      */
@@ -1262,7 +797,7 @@ class EventReducer @Inject constructor(
         _promptDeliveries.value = emptyMap()
         _workspaceStatuses.value = emptyMap()
     }
-    
+
     /**
      * Clear state for a single server.
      * Removes sessions belonging to that server and all associated data.
@@ -1273,10 +808,10 @@ class EventReducer @Inject constructor(
             _serverSessions.update { it - serverId }
             return
         }
-        
+
         // Remove the server's session tracking
         _serverSessions.update { it - serverId }
-        
+
         // Remove sessions
         _sessions.update { it.filter { s -> s.id !in sessionIds } }
         _sessionStatuses.update { it - sessionIds }
@@ -1288,7 +823,7 @@ class EventReducer @Inject constructor(
         _vcsBranches.update { current -> current.filterKeys { it.serverId != serverId } }
         _projectInfo.update { current -> current.filterKeys { it.serverId != serverId } }
         _workspaceStatuses.update { current -> current.filterKeys { it.serverId != serverId } }
-        
+
         // Remove messages and their parts
         val messageIds = _messages.value
             .filterKeys { it in sessionIds }
@@ -1320,22 +855,22 @@ class EventReducer @Inject constructor(
         _projectInfo.update { current -> current.filterKeys { it.serverId != serverId } }
         _workspaceStatuses.update { current -> current.filterKeys { it.serverId != serverId } }
     }
-    
+
     // ============ Todo Events ============
-    
+
     private fun handleTodoUpdated(event: SseEvent.TodoUpdated) {
         _todos.update { it + (event.sessionId to event.todos) }
     }
-    
+
     // ============ VCS Events ============
-    
+
     private fun handleVcsBranchUpdated(event: SseEvent.VcsBranchUpdated, serverId: String, directory: String?, workspaceId: String?) {
         val scope = DirectoryScope(serverId, directory ?: return, workspaceId)
         _vcsBranches.update { it + (scope to event.branch) }
     }
-    
+
     // ============ Project Events ============
-    
+
     private fun handleProjectUpdated(event: SseEvent.ProjectUpdated, serverId: String, directory: String?, workspaceId: String?) {
         val scope = DirectoryScope(serverId, directory ?: return, workspaceId)
         _projectInfo.update { it + (scope to event.info) }
