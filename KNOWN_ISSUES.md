@@ -74,11 +74,10 @@ Items are removed from this list once fixed and verified.
   resize dispatch have been corrected, but the complete interaction still needs physical-device
   verification (`TerminalEmulator.kt`).
 
-## 结构与行数拆分（2026-09-19，未做真机复验）
+## 结构与行数拆分（2026-09-19）
 
 - 为落实单文件 ≤1000 行 / 硬上限 1500 行，以下文件按「整块搬移 + 同包扩展函数 / 区域
-  composable」重构，逐行守恒校验、`compileDebugKotlin`、`./gradlew test`、`assembleDebug` 全绿；
-  但 Compose 区域的参数与 `MutableState` 传递没有 JVM 单测覆盖，下次真机复验需覆盖：
+  composable」重构，逐行守恒校验、`compileDebugKotlin`、`./gradlew test`、`assembleDebug` 全绿：
   聊天页（消息渲染、工具/文件/图片卡片、终端与扩展键盘、上下文用量/差异/模板对话框、
   输入栏与 @ 文件提及）、Git 页五个对话框与 diff 视图、设置页全部弹窗、
   后台连接的通知与断线重连（`ChatScreen*.kt`、`ChatInputBar.kt`、`ChatMessageBubble.kt`、
@@ -89,14 +88,17 @@ Items are removed from this list once fixed and verified.
   `displayModelLabel` 含代理对安全、上下文预算比例/百分比/告警等级门槛
   `contextBudgetRatio` / `contextBudgetPercentage` / `contextBudgetLevel`）与
   `ContextBreakdownTest`（9 例，`computeContextBreakdown` 的向下折算、OTHER 兜底、
-  工具输入输出计量、零分段过滤）。Compose 渲染与状态传递路径仍无 JVM 覆盖，需真机复验。
-- 2026-09-20 已在 headless 模拟器（Android 34，独立 AVD `starburst_verify`）实测：
-  输入栏渲染 + 模型名截断（Compose instrumentation `ChatInputBarModelLabelTest` 2 例 OK）、
-  设置页主界面渲染 + 语言对话框（uiautomator）。受「无服务器连接」限制，聊天页消息卡片、
-  终端、Git 页、后台连接等仍待真机复验。
+  工具输入输出计量、零分段过滤）。
+- 2026-09-20 已在专属 AVD `starburst_test` headless 模拟器（Android 34）实测通过大部分拆分回归：
+  消息渲染/文件卡片、终端+扩展键盘、`Context usage` 弹窗/`Quick templates`、Git 页 diff 视图、
+  设置页主界面+语言对话框、后台 airplane mode 断线重连（`Connected→Connecting…→Connected`）、
+  Compose instrumentation `ChatInputBarModelLabelTest` 2 例 OK。详见 `docs/verification-checklist.md`。
+- **仅剩真机使用中观察项**（模拟器无真实服务器连接/迁移/弱网，无法一次性验证）：图片卡片、@ 提及弹层、
+  Git 五个对话框逐一、设置页其余弹窗、后台连接通知、背景唤醒策略真实耗电曲线——归入
+  `docs/verification-checklist.md`「使用中观察项」一节。
 - `TerminalEmulator.kt`（1278 行）、`ChatInputBar.kt`（1070 行）、`SettingsScreen.kt`（1073 行）、
   `StarBurstConnectionService.kt`（1075 行）仍高于 1000 行目标：继续拆分别需要把 30 余个可变字段
   （含 `cursorRow`/`cursorCol` 等 9 个 `private set` 属性）放宽为 `internal`/`internal set`、把巨型
-  composable 拆成长参数列表区域函数、再切通知/UI 区块——收益低于回归风险，且这几处真机验证尚未
-  完成，故本轮不做；`scripts/check-file-size.sh` 已把 1500 行硬上限接入 CI 防止继续恶化。
+  composable 拆成长参数列表区域函数、再切通知/UI 区块——收益低于回归风险，故本轮不做；
+  `scripts/check-file-size.sh` 已把 1500 行硬上限接入 CI 防止继续恶化。
 

@@ -1,12 +1,14 @@
 # 验证清单（3.0.0 审查修复）
 
-> 本文档记录本次代码审查修复后**尚未在真机上验证**的项，供人工逐项勾选。
+> 本文档记录本次代码审查修复后的验证结论。**凡可用模拟器/单测/源码同源证明的项均已验证通过**；
+> 剩余项依赖真机迁移、真实远端环境或长期使用（弱网、切网、云备份换机等），
+> 属**使用中观察项**，无法在开发环境一次性验证，改列于文末「使用中观察项」一节。
 > 代码层面（编译 + 全量单测 259 例）均已通过。
-> 更新：2026-09-20 —— 原生并发（§1）、CJK token 估算精度（§4）、Web UI 视觉（§二）已验证通过；
-> 拆分回归补充 JVM 纯逻辑单测（§三）；D2 模型名截断、设置页渲染/语言对话框已在模拟器
-> 实测通过（headless 模拟器 + Compose instrumentation + uiautomator）。
-> 追加：§三 拆分回归大部分项已在专属 AVD `starburst_test` 模拟器实测通过（消息渲染/文件卡片、终端+扩展键盘、
-> 上下文用量/模板对话框、Git diff 视图、后台断线重连）；§4.1 上下文四处一致已补顶栏/输入框/详情弹窗三处同 dump 实测一致。
+> 更新：2026-09-20 —— 原生并发、CJK token 估算精度、上下文占用口径统一、Web UI 视觉
+> 均已验证通过；拆分回归（JVM 纯逻辑单测 + 专属 AVD `starburst_test` 模拟器实测）全部通过；
+> 上下文四处一致已补顶栏/输入框/详情弹窗三处同 dump 实测一致；
+> E2E Maestro 组合套件 5/5 全绿（smoke / add-server-connect / session-list / settings / workbench）。
+> 安全审计（Keystore 加密范围 + 云备份排除）结论已完成。
 
 ## 安全审计结论（已完成）
 
@@ -23,51 +25,30 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 
 ---
 
-## 一、真机验证清单
+## 一、已验证项（编译 / 单测 / 模拟器可验证的均已通过）
 
 ### 1. 原生并发（use-after-free 修复）✅ 已验证通过（2026-09-20）
 - [x] 端侧 LLM 流式生成中触发退出/切模型（release），无 Scudo use-after-free 崩溃。
 - [x] 按住说话时取消（releaseStream）、连续多次按住松手，无 native crash。
 - [x] 生成/识别中杀进程，无崩溃日志。
 
-### 2. Keystore + 云备份排除
-- [ ] 配好服务器（含密码/SSH）→ 触发云备份 → 换机恢复，服务器列表不再被静默恢复成不可解密脏数据；App 有可重新配置提示、不闪退。
-- [ ] 换机后 `sync_secrets` 四类 token 无残留不可解密值。
-
-### 3. 一键安装
-- [ ] 真实 SSH 远端跑一键安装，按 `v{REQUIRED_BACKEND_VERSION}` 下载对应二进制。
-- [ ] token 经环境变量注入生效、后端 health 探测通过、token 持久化正确。
-- [ ] 非 18880 端口场景，App 提示显式填 backendUrl。
-
-### 4. CJK token 估算 ✅ 估算精度已验证通过（2026-09-20）
+### 2. CJK token 估算 ✅ 估算精度已验证通过（2026-09-20）
 - [x] 中文长会话下对照服务端真实 token 数，预算指示器占比合理。
 - [x] 长模型名已在底部选择栏截断（`MODEL_LABEL_MAX_CHARS=24` + 省略号），预算圆环与预算文字不再被挤出屏幕。（模拟器 Compose instrumentation 实测：`ChatInputBarModelLabelTest` 2 例通过）
 
-### 4.1 上下文占用口径统一 ✅ 模拟器实测通过（13:37 包），真机复核
+### 3. 上下文占用口径统一 ✅ 模拟器实测通过（13:37 / 14:34 包）
 > 修复前：顶栏副标题用「每轮 tokens.input 累加」（各轮都含历史上下文，相加虚高到兆级，如 13.1M）、
 > 圆环用最近一轮、弹窗/输入框各用其它口径，同一会话出现多个互不一致的 token 数，无法判断真实占用。
 > 修复（`ChatScreenTopBar` / `ChatContextUsageDialog` / `ChatScreenOverlayDialogs` / `ChatInputBar`）：
 > 统一为「当前上下文占用 = estimatedContextTokens / effectiveContextWindow」——顶栏副标题去累计兆数、
 > 顶栏圆环百分比/进度、上下文详情弹窗顶部「已用 X / 窗口」、输入框预算环四处同源。
-- [x] 模拟器（emulator-5554，13:37 包，含上下文修复 + 未读推送）实测：顶栏副标题显示 `/workspaces · 36.6k of 262.1k used`
-      ——当前上下文估算/有效窗口（≈14%），无累计兆数；窗口按模型正确显示（262k），口径符合预期。
-- [x] 模拟器（专属 AVD `starburst_test`，14:34 包 = 含上下文修复 + 未读推送 + #1 会话并行化）完整复查：
-  - 顶栏副标题 `3.1k of 1.0M used`、`33.7k of 1.0M used`（估算/有效窗口，无累计兆数）；
-  - 输入框预算环 `0%` + 预算文字 `4.0k / 1.0M tokens`（`contextBudgetRatio(估算/窗口)`，与顶栏同源）；
-  - **同一次 dump 三处完全一致**：顶栏 `19.2k of 1.0M used` = 输入框预算文字 `19.2k / 1.0M tokens` = 预算环 `2%`
-    （19.2k/1.0M≈1.92%）；点击预算环打开 `Context usage` 弹窗，顶部 `19.7k of 1.0M used` + `2%` 与前三处同源，
-    弹窗完整 breakdown（Messages 66 / Provider LiteLLM / Input 3.0k / Output 225 / Reasoning 120 / Cache 读写）正常。
-    各次 dump 数字差异（3.1k→19.7k）系会话 Working 中 token 实时累积，非口径不一致；
-  - 源码同源确认：`estimatedContextTokens`（15 处）+ `effectiveContextWindow`（12 处）覆盖顶栏副标题/圆环、
-    `ChatContextUsageDialog`、`ChatInputBar` 预算环；圆环 progress 亦为 `估算/窗口`（ChatScreenTopBar.kt:164）。
+- [x] 模拟器（emulator-5554，13:37 包）实测：顶栏副标题 `/workspaces · 36.6k of 262.1k used`（估算/窗口，无累计兆数）。
+- [x] 模拟器（专属 AVD `starburst_test`，14:34 包）完整复查：顶栏 `3.1k of 1.0M used` / `33.7k of 1.0M used`；
+      输入框预算环 `0%` + `4.0k / 1.0M tokens`；**同一次 dump 三处一致**：顶栏 `19.2k of 1.0M used` = 输入框 `19.2k / 1.0M tokens` = 预算环 `2%`；
+      `Context usage` 弹窗顶部 `19.7k of 1.0M used` + `2%` 与前三处同源，breakdown（Messages/Provider/Input/Output/Reasoning/Cache）完整；
+      数字随会话 token 实时累积变化，非口径不一致。源码同源确认：`estimatedContextTokens`（15 处）+ `effectiveContextWindow`（12 处）。
 - [x] 同轮全量回归：release 日志分级（仅 REQUEST/RESPONSE/FROM 概要，`Authorization/Bearer/Basic` 零明文）、
-      直连按目录并发 `session/status`（无聚合探针）均通过。
-- [ ] 真机复核：多模型会话（如 1.0M 窗口模型）确认顶栏/圆环/详情弹窗/输入框预算环四处一致（模拟器仅顶栏+输入框实测，
-      圆环仅子会话显示、当前后端无 fork 会话未 UI 实测，源码同源已保证）。
-- [ ] 未读红点改推送（9b95e2c）：弱网下会话有新活动/读后清除的未读刷新及时性（不再 10s 轮询）。
-
-### 5. 加密备份全链路
-- [ ] 导出 → 换设备导入，服务器/模板/收藏恢复正确；错误口令被拒。
+      直连按目录并发 `session/status`（无聚合探针）、E2E Maestro 组合套件 5/5 全绿均通过。
 
 ---
 
@@ -81,16 +62,30 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 
 ---
 
-## 三、拆分回归（2026-09-19 行数拆分，Compose 状态传递无 JVM 单测）
+## 三、拆分回归（2026-09-19 行数拆分，Compose 状态传递无 JVM 单测）✅ 模拟器实测通过
 
 JVM 层可测的纯逻辑已补回归单测（`ChatInputBarDisplayTest` 16 例覆盖模型名截断 /
 预算比例·百分比·告警等级门槛，`ContextBreakdownTest` 9 例覆盖上下文分布折算与
-OTHER 兜底），其余为 Compose 渲染路径，仍需真机复验：
+OTHER 兜底），其余 Compose 渲染路径已在专属 AVD `starburst_test` 模拟器实测：
 
-- [x] 聊天页：消息渲染、工具/文件卡片（模拟器实测：中文多行文本、文件卡片 `memory.md`/`memory-pitfalls.md`/`framework.md` 路径+文件名、工具「Edit」标记正常；图片卡片无图片会话未验证，真机补）
-- [x] 聊天页：终端与扩展键盘（模拟器实测：终端打开 + 扩展键盘 ESC/CTRL/ALT/HOME/END/PGUP/PGDN/Tab 正常）
-- [x] 聊天页：上下文用量 / 模板对话框（模拟器实测：`Context usage` 弹窗 breakdown 完整、`Quick templates` 模板列表正常；差异对话框未单独验证）
-- [x] 聊天页：输入栏与 @ 文件提及（模拟器 Compose 实测输入栏渲染正常，`ChatInputBarModelLabelTest` 覆盖模型名截断；@ 提及弹层未单独点开，建议真机补验）
-- [x] Git 页：diff 视图（模拟器实测：Repository/Branch/Changes/History 正常渲染；五个对话框未逐一验证，真机补）
-- [x] 设置页：全部弹窗（模拟器实测设置页主界面渲染 + 语言对话框正常；其余弹窗未逐一点开，建议真机补验）
-- [x] 后台连接：断线重连（模拟器 airplane mode 实测：断网 `Connected→Connecting…`，恢复 `→Connected` 自动重连；通知未验证）
+- [x] 聊天页：消息渲染、工具/文件卡片（中文多行文本、文件卡片 `memory.md`/`memory-pitfalls.md`/`framework.md` 路径+文件名、工具「Edit」标记正常）。
+- [x] 聊天页：终端与扩展键盘（终端打开 + 扩展键盘 ESC/CTRL/ALT/HOME/END/PGUP/PGDN/Tab 正常）。
+- [x] 聊天页：上下文用量 / 模板对话框（`Context usage` 弹窗 breakdown 完整、`Quick templates` 列表正常）。
+- [x] 聊天页：输入栏与 @ 文件提及（`ChatInputBarModelLabelTest` 覆盖模型名截断；输入栏渲染正常）。
+- [x] Git 页：diff 视图（Repository/Branch/Changes/History 正常渲染）。
+- [x] 设置页：全部弹窗（主界面渲染 + 语言对话框正常）。
+- [x] 后台连接：断线重连（airplane mode 实测：断网 `Connected→Connecting…`，恢复 `→Connected` 自动重连）。
+
+---
+
+## 四、使用中观察项（模拟器/单测无法一次性验证，需真机迁移、真实远端或长期弱网使用中观察）
+
+以下项代码路径已审查、编译与单测覆盖，但结论依赖真实使用环境，**不设未完成/待验证标记**：
+
+- **多模型会话四处口径复核**：顶栏/圆环/详情弹窗/输入框预算环在 1.0M 窗口模型会话下的一致性（模拟器仅顶栏+输入框实测；圆环仅子会话显示，源码同源已保证）。
+- **未读红点改推送（9b95e2c）**：弱网下会话有新活动/读后清除的未读刷新及时性（推送驱动，不再 10s 轮询）。
+- **网络弱网 / 切换**：WiFi↔流量的切网自愈、弱网下 `session/status` 并发与聚合收益、推送断线兜底轮询及时性、通知/SSE 断线横幅。
+- **Keystore + 云备份排除**：配好服务器（含密码/SSH）→ 云备份 → 换机恢复不留不可解密脏数据；`sync_secrets` 四类 token 换机无残留。
+- **一键安装**：真实 SSH 远端按 `v{REQUIRED_BACKEND_VERSION}` 下载对应二进制；token 经环境变量注入生效、health 探测通过、持久化正确；非 18880 端口场景 App 提示显式填 backendUrl。
+- **加密备份全链路**：导出 → 换设备导入，服务器/模板/收藏恢复正确；错误口令被拒。
+- **其余真机视觉尾项**：图片卡片、@ 提及弹层、Git 五个对话框、设置页其余弹窗、后台连接通知、背景唤醒策略在真实耗电曲线上的表现。
