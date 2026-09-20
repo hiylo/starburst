@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -294,15 +295,19 @@ class WorkbenchViewModel @Inject constructor(
 
             refreshSessions()
             startPushStream()
-            // 推送断线时的轮询兜底。
+            // 推送断线时的轮询兜底：推送在线时不轮询，断开才周期刷新。
             viewModelScope.launch {
                 while (isActive) {
                     delay(SESSION_POLL_INTERVAL_MS)
-                    refreshSessions()
+                    if (!pushActive) refreshSessions()
                 }
             }
         }
     }
+
+    /** 推送流是否在线：在线时不轮询，断线期间由周期刷新兜底。 */
+    @Volatile
+    private var pushActive = false
 
     /** 订阅后端 `/api/ws` 推送：事件流实时聚合；状态类事件立即全量刷新会话状态。 */
     private fun startPushStream() {
@@ -311,9 +316,13 @@ class WorkbenchViewModel @Inject constructor(
             var backoffMs = 2_000L
             while (isActive) {
                 try {
-                    backendPushListener.eventFlow(backendUrl, backendToken).collect { ev ->
-                        handlePushEvent(ev)
-                    }
+                    backendPushListener.eventFlow(backendUrl, backendToken)
+                        // 每次（重）连推送前从后端兜底同步一次未读集合，补偿断线期间丢失的事件。
+                        .onStart { resyncUnread() }
+                        .collect { ev ->
+                            pushActive = true
+                            handlePushEvent(ev)
+                        }
                     // 正常断开（WS 被服务端按 idle 掐断）不算故障：
                     // 退避时间回到基础值，避免空闲断流后重连延迟越拖越长。
                     backoffMs = 2_000L
@@ -322,6 +331,7 @@ class WorkbenchViewModel @Inject constructor(
                 } catch (e: Exception) {
                     if (BuildConfig.DEBUG) Log.d(TAG, "push stream stopped: ${e.message}")
                 }
+                pushActive = false
                 delay(backoffMs)
                 backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
             }
@@ -329,9 +339,14 @@ class WorkbenchViewModel @Inject constructor(
     }
 
     private fun handlePushEvent(ev: PushSessionEvent) {
-        // 正在查看的会话有新活动视为已读（与后端/Web 一致：任一端看过后全端清除）。
-        if (ev.sessionId == _panel.value?.sessionId && isUnreadTriggerEventType(ev.eventType)) {
-            markSessionRead(ev.sessionId)
+        // 未读状态优先走推送：后端把「有未读活动」的这些事件标记会话未读（口径与 isUnreadTriggerEvent
+        // 一致），不再每 10s 轮询 /api/unread。正在查看的会话有新活动视为已读（任一端看过后全端清除）。
+        if (isUnreadTriggerEventType(ev.eventType)) {
+            if (ev.sessionId == _panel.value?.sessionId) {
+                markSessionRead(ev.sessionId)
+            } else {
+                markSessionUnread(ev.sessionId)
+            }
         }
         when (ev.eventType) {
             "session.status", "session.updated" -> {
@@ -406,16 +421,9 @@ class WorkbenchViewModel @Inject constructor(
             // 补齐缺失的 busy/retry 子会话对象，保证父会话能归并子会话的处理中状态。
             val sessionsWithChildren = hydrateBusyChildren(activeConn, sessions, statuses)
             val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession)
-            // 未读新消息：仅后端已配置/可达时才有意义（后端 session_unread 为权威状态）。
-            val unread = if (backendUrl.isBlank()) emptySet() else {
-                runCatching { backendApi.listUnread(backendUrl, backendToken) }
-                    .getOrElse { e ->
-                        if (e is CancellationException) throw e
-                        if (BuildConfig.DEBUG) Log.d(TAG, "load unread failed: ${e.message}")
-                        emptySet()
-                    }
-            }
-            val enriched = items.map { if (it.session.id in unread) it.copy(unread = true) else it }
+            // 未读不再随每次刷新轮询 /api/unread：保留当前本地已跟踪的未读集合（由推送标记/读后清除驱动）。
+            val currentUnread = _uiState.value.sessions.asSequence().filter { it.unread }.map { it.session.id }.toSet()
+            val enriched = items.map { if (it.session.id in currentUnread) it.copy(unread = true) else it }
             _uiState.update { current ->
                 current.copy(
                     sessions = enriched,
@@ -534,6 +542,34 @@ class WorkbenchViewModel @Inject constructor(
                     if (e is CancellationException) throw e
                     if (BuildConfig.DEBUG) Log.d(TAG, "mark session read failed: ${e.message}")
                 }
+        }
+    }
+
+    /** 推送命中未读触发事件时，把会话标记为本地未读（口径与后端 session_unread 一致）。 */
+    private fun markSessionUnread(sessionId: String) {
+        _uiState.update { current ->
+            if (current.sessions.none { it.session.id == sessionId }) return@update current
+            current.copy(sessions = current.sessions.map { item ->
+                if (item.session.id == sessionId && !item.unread) item.copy(unread = true) else item
+            })
+        }
+    }
+
+    /** 从后端一次性拉取未读集合作为兜底（进工作台/推送重连时），不做周期轮询。 */
+    private fun resyncUnread() {
+        if (backendUrl.isBlank()) return
+        viewModelScope.launch {
+            val unread = runCatching { backendApi.listUnread(backendUrl, backendToken) }
+                .getOrElse { e ->
+                    if (e is CancellationException) throw e
+                    if (BuildConfig.DEBUG) Log.d(TAG, "resync unread failed: ${e.message}")
+                    return@launch
+                }
+            _uiState.update { state ->
+                state.copy(sessions = state.sessions.map { item ->
+                    item.copy(unread = item.session.id in unread)
+                })
+            }
         }
     }
 
