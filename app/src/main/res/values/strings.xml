@@ -33,7 +33,6 @@
     <string name="diagnostics_level_warn">Warnings and errors</string>
     <string name="diagnostics_level_info">Info, warnings, and errors</string>
     <string name="diagnostics_level_debug">Debug (maximum detail)</string>
-    <string name="diagnostics_level_current">Logging: %1$s</string>
     <string name="update_available_title">Update available</string>
     <string name="update_available_message">Version %1$s is ready.</string>
     <string name="update_open_release">View release</string>
@@ -51,21 +50,15 @@
     <!-- Server Management -->
     <string name="server_name">Server Name</string>
     <string name="server_name_hint">My OpenCode Server</string>
-    <string name="server_name_required">Name is required</string>
-    <string name="server_url">Server URL</string>
-    <string name="server_url_hint">http://192.0.2.100:4096</string>
-    <string name="server_url_example">e.g. http://192.0.2.10:4096 or https://my-server:443</string>
     <string name="server_username">Username</string>
     <string name="server_username_hint">opencode</string>
     <string name="server_password">Password</string>
-    <string name="server_password_hint">Optional</string>
     <string name="server_save">Save</string>
     <string name="server_cancel">Cancel</string>
     <string name="server_delete">Delete</string>
     <string name="server_delete_confirm_title">Delete server?</string>
     <string name="server_delete_confirm_message">Delete “%1$s”? This cannot be undone.</string>
     <string name="server_add">Add Server</string>
-    <string name="server_invalid_url">Invalid URL format</string>
     <string name="server_auto_connect">Auto-connect on app launch</string>
     <string name="server_auto_connect_desc">Automatically connect when the app starts</string>
     
@@ -104,15 +97,12 @@
     <string name="sessions_add_saved_path_placeholder">e.g. /home/user/code</string>
     <string name="sessions_add_saved_path_invalid">Enter a valid path</string>
     <string name="sessions_remove_saved_path">Remove path</string>
-    <string name="sessions_working">Working</string>
     <string name="sessions_retrying">Retrying</string>
     <string name="sessions_selected_count">%1$d selected</string>
     <string name="sessions_select_all">Select all</string>
     <string name="sessions_delete_selected">Delete selected</string>
     <string name="sessions_delete_selected_confirm">Delete %1$d sessions? This cannot be undone.</string>
-    <string name="session_status_idle">Idle</string>
     <string name="session_status_busy">Working…</string>
-    <string name="session_status_retry">Retrying (%1$d/%2$d)</string>
     <string name="session_status_pending_question">Awaiting selection</string>
     <string name="session_rename">Rename Session</string>
     <string name="session_copy_id">Copy session ID</string>
@@ -123,14 +113,8 @@
     <string name="session_favorite_move_down">Move favorite down</string>
     <string name="session_category">Category</string>
     <string name="session_category_none">No category</string>
-    <string name="cross_sessions_favorites_title">Favorites and categories</string>
     <string name="cross_sessions_favorites">Favorites</string>
-    <string name="cross_sessions_empty_favorites">No favorite sessions on connected servers</string>
-    <string name="cross_sessions_empty_category">No sessions in this category on connected servers</string>
-    <string name="cross_sessions_toggle_favorite">Add or remove favorite</string>
-    <string name="cross_sessions_retrying">Retrying (%1$d)</string>
     <string name="cross_sessions_all">All</string>
-    <string name="cross_sessions_empty_favorite_category">No favorite sessions in this category on connected servers</string>
     <string name="cross_sessions_offline">Offline</string>
     <string name="cross_sessions_connect_title">Connect to server?</string>
     <string name="cross_sessions_connect_message">%1$s is offline. Connect to open this session?</string>
@@ -147,10 +131,6 @@
     <string name="session_pin_sort_title">Reorder pinned sessions</string>
     <string name="session_pin_sort_hint">Drag to reorder pinned sessions</string>
     <string name="session_pin_sort_apply">Apply</string>
-    <string name="cross_sessions_title">Pinned and categories</string>
-    <string name="cross_sessions_pinned">Pinned</string>
-    <string name="cross_sessions_empty_pinned">No pinned sessions on connected servers</string>
-    <string name="cross_sessions_toggle_pin">Toggle pin</string>
     <string name="session_rename_title">Title</string>
     <string name="session_rename_button">Rename</string>
     <string name="session_delete">Delete Session</string>
@@ -162,12 +142,10 @@
     <string name="session_not_found">Session not found or it may have been deleted.\nPlease go back and refresh the session list.</string>
     
     <!-- Chat Screen -->
-    <string name="chat_input_hint">Message OpenCode…</string>
     <string name="chat_send">Send</string>
     <string name="chat_send_shell">Send shell command</string>
     <string name="chat_shell_mode_hold_send_hint">Shell mode active. Hold Send to switch back.</string>
     <string name="chat_stop">Stop</string>
-    <string name="chat_abort">Abort</string>
     <string name="chat_empty">Start a conversation with OpenCode</string>
     <string name="chat_server_disconnected">Server disconnected</string>
     <string name="chat_copy">Copy</string>
@@ -199,20 +177,6 @@
     <string name="template_expand">Expand prompt</string>
     <string name="template_collapse">Collapse prompt</string>
     <string name="template_save_failed">Name and prompt are required</string>
-    <string name="session_template_title">Session templates</string>
-    <string name="session_template_empty">No session templates yet. Save a reusable new-session preset (directory + system prompt + model + prompt) below.</string>
-    <string name="session_template_name_label">Name</string>
-    <string name="session_template_directory_label">Directory</string>
-    <string name="session_template_system_prompt_label">System prompt (optional)</string>
-    <string name="session_template_model_provider_label">Provider (optional)</string>
-    <string name="session_template_model_id_label">Model (optional)</string>
-    <string name="session_template_prompt_label">Prompt template (optional)</string>
-    <string name="session_template_add">Add</string>
-    <string name="session_template_save">Save</string>
-    <string name="session_template_edit">Edit</string>
-    <string name="session_template_delete">Delete</string>
-    <string name="session_template_save_failed">Name and directory are required</string>
-    <string name="sessions_session_templates">Session templates</string>
     <string name="chat_attach_title">Attach</string>
     <string name="chat_attach_photo">Photo or image</string>
     <string name="chat_attach_photo_hint">Choose one or more images from your gallery</string>
@@ -224,10 +188,8 @@
     <string name="chat_remove">Remove</string>
     <string name="chat_clear">Clear</string>
     <string name="chat_scroll_bottom">Scroll to bottom</string>
-    <string name="chat_open_webui">Open in Web UI</string>
     <string name="chat_dismiss">Dismiss</string>
     <string name="chat_session_create_failed">Failed to create session</string>
-    <string name="chat_agent_name">Agent: %1$s</string>
     <string name="chat_fork_failed">Failed to fork session</string>
     <string name="chat_share_url_copied">Share URL copied</string>
     <string name="chat_suggestions_generating">Generating suggestions…</string>
@@ -240,8 +202,6 @@
     <string name="chat_suggestions_source_fallback">via fallback</string>
     <string name="chat_share_failed">Failed to share session</string>
     <string name="chat_copied_clipboard">Copied to clipboard</string>
-    <string name="chat_no_message_copy">No assistant message to copy</string>
-    <string name="chat_session_aborted">Session aborted</string>
     <string name="chat_session_compacted">Session compacted</string>
     <string name="chat_session_compact_failed">Failed to compact session</string>
     <string name="chat_session_unshared">Session unshared</string>
@@ -257,8 +217,6 @@
     <string name="chat_messages_restored">Messages restored</string>
     <string name="chat_session_renamed">Session renamed</string>
     <string name="chat_session_rename_failed">Failed to rename</string>
-    <string name="chat_commands_hint">Type / to see available commands</string>
-    <string name="chat_response">Response</string>
     <string name="chat_hide_steps">Hide steps</string>
     <string name="chat_status_edits">%1$d edit</string>
     <string name="chat_status_edits_plural">%1$d edits</string>
@@ -291,10 +249,8 @@
     <string name="chat_hint_explain">Explain how…</string>
     <string name="chat_hint_help">Help me with…</string>
     <string name="chat_type_message">Type a message below</string>
-    <string name="chat_empty_message">(empty message)</string>
     <string name="chat_messages_reverted">Messages reverted</string>
     <string name="chat_tap_restore">Tap to restore, or use /redo</string>
-    <string name="chat_thinking">Thinking</string>
     <string name="chat_edit_label">Edit</string>
     <string name="chat_write_label">Write</string>
     <string name="chat_tasks_label">Tasks</string>
@@ -305,7 +261,6 @@
     <string name="model_cap_toolcall">Function calling</string>
     <string name="model_cap_reasoning">Reasoning</string>
     <string name="model_cap_attachment">Attachments</string>
-    <string name="chat_select_model">Select model</string>
     <string name="chat_question_label">Question</string>
     <string name="chat_permission_label">Permission: %1$s</string>
     <string name="chat_question_inline">Question: %1$s</string>
@@ -318,22 +273,10 @@
     <string name="chat_save_image">Save image</string>
     <string name="chat_image_saved">Image saved</string>
     <string name="chat_image_save_failed">Failed to save image</string>
-    <string name="chat_tasks_count">%1$d/%2$d</string>
     <string name="chat_cost_format">$%1$s</string>
-    <string name="chat_context_format">%1$d%% ctx</string>
     <string name="chat_context_details">Context usage</string>
     <string name="chat_context_used">%1$s of %2$s used</string>
     <string name="chat_context_remaining">%1$s tokens available</string>
-    <string name="chat_context_current_turn">Current context</string>
-    <string name="chat_context_input">Input</string>
-    <string name="chat_context_output">Output</string>
-    <string name="chat_context_reasoning">Reasoning</string>
-    <string name="chat_context_cache_read">Cache read</string>
-    <string name="chat_context_cache_write">Cache write</string>
-    <string name="chat_context_session_totals">Session totals</string>
-    <string name="chat_context_tokens_processed">Tokens processed</string>
-    <string name="chat_context_messages">Messages</string>
-    <string name="chat_context_cost">Cost</string>
     <string name="chat_context_stats_session">Session</string>
     <string name="chat_context_stats_messages">Messages</string>
     <string name="chat_context_stats_provider">Provider</string>
@@ -359,9 +302,6 @@
     <string name="chat_context_breakdown_note">Estimated based on message content</string>
     <string name="chat_context_system_prompt_title">System prompt</string>
     <string name="chat_context_raw_messages_title">Raw messages</string>
-    <string name="chat_context_export_session">Export session</string>
-    <string name="chat_context_export_success">Session exported</string>
-    <string name="chat_context_export_failed">Failed to export session</string>
     <string name="chat_collapse">Collapse</string>
     <string name="chat_expand">Expand</string>
     <string name="chat_large_content_notice">Content too large, previewing first %1$d characters. Tap to view full text.</string>
@@ -373,9 +313,6 @@
     
     <!-- Slash Commands -->
     <string name="cmd_new">Create a new session</string>
-    <string name="cmd_sessions">Resume a previous session</string>
-    <string name="cmd_models">Switch to a different model</string>
-    <string name="cmd_agents">Switch to the next agent</string>
     <string name="cmd_compact">Compact session to reduce context size</string>
     <string name="cmd_fork">Create a new session from a message</string>
     <string name="cmd_share">Share session and copy URL</string>
@@ -384,10 +321,6 @@
     <string name="cmd_redo">Redo the last undone message</string>
     <string name="cmd_rename">Rename this session</string>
     <string name="cmd_shell_mode">Switch to shell mode</string>
-    <string name="cmd_copy">Copy last assistant response</string>
-    <string name="cmd_abort">Abort the running session</string>
-    <string name="cmd_help">Show available commands</string>
-    
     <!-- Tool Display Titles -->
     <string name="tool_read_file">Read file</string>
     <string name="tool_write_file">Write file</string>
@@ -401,14 +334,10 @@
     <string name="tool_apply_patch">Apply patch</string>
     <string name="tool_shell">Shell</string>
     <string name="tool_read">Read</string>
-    <string name="chat_input_mode_normal">Prompt</string>
     <string name="chat_shell_placeholder">Enter shell command…</string>
-    <string name="chat_shell_executed">Shell command sent</string>
     <string name="chat_shell_failed">Failed to run shell command</string>
     <string name="chat_shell_empty">Enter a shell command first</string>
     <string name="chat_shell_attachments_unsupported">Shell mode does not support attachments</string>
-    <string name="chat_terminal_empty">No terminal commands yet</string>
-    <string name="chat_terminal_run">Run</string>
     <string name="chat_terminal_connected">Connected</string>
     <string name="chat_terminal_disconnected">Disconnected</string>
     <string name="chat_terminal_starting">Starting</string>
@@ -419,19 +348,11 @@
     <string name="chat_terminal_close_tab">Close tab</string>
     <string name="chat_terminal_new_tab">New</string>
     <string name="chat_terminal_keyboard">Keyboard</string>
-    <string name="chat_terminal_ctrl_c">Ctrl+C</string>
-    <string name="chat_terminal_clear">Clear</string>
     <string name="chat_terminal_connect_failed">Failed to open terminal</string>
-    <string name="chat_terminal_tap_keyboard">Tap to open keyboard</string>
     <string name="chat_terminal_panel_hint_swipe">Swipe right from the left edge to open the terminal panel. You can also touch and hold the edge.</string>
     <string name="chat_terminal_panel_hint_gestures">Touch and hold the left edge of the screen to open the terminal panel.</string>
     
     <!-- Patch File Actions -->
-    <string name="patch_created">Created</string>
-    <string name="patch_deleted">Deleted</string>
-    <string name="patch_moved">Moved</string>
-    <string name="patch_patched">Patched</string>
-    
     <!-- Permissions -->
     <string name="permission_title">Permission Required</string>
     <string name="permission_allow_once">Once</string>
@@ -460,10 +381,13 @@
     <string name="settings_accent_color_desc">Brand accent used across the app (disabled with Material You)</string>
     <string name="settings_theme_scheme">Theme scheme</string>
     <string name="settings_theme_scheme_desc">Full color schemes that change the whole app look. Non-default schemes replace the accent color.</string>
+    <string name="settings_cartoon_style">Cartoon style</string>
+    <string name="settings_cartoon_style_desc">Rounder corners, bold outlines and solid shadows. Works with any color scheme.</string>
     <string name="settings_theme_scheme_default">Default</string>
     <string name="settings_theme_scheme_candy">Candy</string>
     <string name="settings_theme_scheme_ocean">Ocean</string>
     <string name="settings_theme_scheme_sunset">Sunset</string>
+    <string name="settings_theme_scheme_bubble">Bubble</string>
 
     <!-- LLM provider settings -->
     <string name="llm_provider_title">LLM service</string>
@@ -527,10 +451,6 @@
     <string name="settings_auto_expand_tools_desc">Expand tool cards by default instead of collapsing</string>
     <string name="settings_haptic_feedback">Haptic feedback</string>
     <string name="settings_haptic_feedback_desc">Vibrate on send and revert actions</string>
-    <string name="settings_haptic_strength">Haptic strength</string>
-    <string name="settings_haptic_strength_light">Light</string>
-    <string name="settings_haptic_strength_medium">Medium</string>
-    <string name="settings_haptic_strength_strong">Strong</string>
     <string name="settings_haptic_pattern">Haptic pattern</string>
     <string name="settings_haptic_pattern_value">%1$d ms · amplitude %2$d/255</string>
     <string name="settings_haptic_duration_value">Duration: %1$d ms</string>
@@ -552,7 +472,6 @@
     <string name="settings_compress_images_quality">WebP quality</string>
     <string name="settings_compress_images_quality_value">%1$d%%</string>
     <string name="settings_session_categories">Session categories</string>
-    <string name="settings_session_categories_desc">Create reusable labels with a name, color, and icon</string>
     <string name="settings_category_add">Add category</string>
     <string name="settings_category_edit">Edit category</string>
     <string name="settings_category_name">Name</string>
@@ -570,7 +489,6 @@
     <string name="settings_group_notifications">Group notifications by session</string>
     <string name="settings_group_notifications_desc">Fold multiple notifications from the same session into one</string>
     <string name="settings_dnd_schedule">Do Not Disturb schedule</string>
-    <string name="settings_dnd_schedule_desc">Mute all notifications during the configured window</string>
     <string name="settings_dnd_schedule_range">%1$s – %2$s</string>
     <string name="settings_dnd_schedule_start">Start time</string>
     <string name="settings_dnd_schedule_end">End time</string>
@@ -586,16 +504,13 @@
     <string name="server_settings_providers_desc">Enable or disable providers for this server</string>
     <string name="server_settings_providers_connected">Connected</string>
     <string name="server_settings_providers_available">Available</string>
-    <string name="server_settings_provider_connected">Connected</string>
     <string name="server_settings_provider_source_env">Source: Environment</string>
     <string name="server_settings_provider_source_api">Source: API key</string>
     <string name="server_settings_provider_source_config">Source: Config</string>
     <string name="server_settings_provider_source_custom">Source: Custom</string>
     <string name="server_settings_provider_source_other">Source: Other</string>
     <string name="server_settings_provider_env_connected">Connected from environment variables</string>
-    <string name="server_settings_provider_unavailable">Unavailable</string>
     <string name="server_settings_connect_provider">Connect %1$s</string>
-    <string name="server_settings_no_connect_methods">No connection methods are available for this provider</string>
     <string name="server_settings_api_key_title">API key for %1$s</string>
     <string name="server_settings_api_key_placeholder">Paste API key</string>
     <string name="server_settings_oauth_title">Connect %1$s</string>
@@ -627,13 +542,6 @@
     <string name="server_mcp_status_needs_auth">Authentication required</string>
     <string name="server_mcp_status_needs_registration">Client registration required</string>
     <string name="server_mcp_status_unknown">Unknown status</string>
-    <string name="server_settings_defaults">Defaults</string>
-    <string name="server_settings_default_model">Default model</string>
-    <string name="server_settings_small_model">Small model</string>
-    <string name="server_settings_default_agent">Default agent</string>
-    <string name="server_settings_auto">Auto</string>
-    <string name="server_settings_model_filter">Model filter</string>
-    <string name="server_settings_model_filter_desc">Choose which models appear in selectors</string>
     <string name="server_settings_search_placeholder">Search models</string>
     <string name="server_settings_empty">No models found</string>
     <string name="server_settings_load_error">Failed to load models</string>
@@ -681,7 +589,6 @@
     <string name="notification_inbox_title">StarBurst — %1$d/%2$d connected</string>
     <string name="notification_status_connected">Connected</string>
     <string name="notification_status_connecting">Connecting…</string>
-    <string name="notification_response_ready">Response ready</string>
     <string name="notification_new_session">New session</string>
     <string name="notification_needs_permission_project">%1$s in %2$s needs permission</string>
     <string name="notification_needs_permission">%1$s needs permission</string>
@@ -692,11 +599,10 @@
     <string name="notification_session_error">Session error</string>
     <string name="notification_group_summary">StarBurst notifications</string>
     <string name="notification_export_progress">Session export progress</string>
-    <string name="notification_task_complete">Task completed</string>
-    
     <!-- Errors -->
-    <string name="error_network">Network error</string>
     <string name="error_unknown">An error occurred</string>
+    <string name="session_error_title">Session ended with an error</string>
+    <string name="session_error_banner">The session stopped unexpectedly.</string>
     
     <!-- Common -->
     <string name="ok">OK</string>
@@ -707,14 +613,10 @@
     <string name="back">Back</string>
     <string name="more_options">More options</string>
     <string name="open">Open</string>
-    <string name="image_count_single">1 image</string>
-    <string name="image_count_multiple">%1$d images</string>
-    <string name="share_send_image_to">Send image to…</string>
     <string name="attachment_count_single">1 attachment</string>
     <string name="attachment_count_multiple">%1$d attachments</string>
     <string name="share_send_attachments_to">Send attachments to…</string>
     <string name="share_no_connected_servers">No connected servers</string>
-    <string name="share_connect_first">Connect to a server first, then share images</string>
     <string name="share_no_servers_body">Connect a server to choose a chat for these attachments. They will stay ready while you connect.</string>
     <string name="share_add_server">Add server</string>
     <string name="share_manage_servers">Go to servers</string>
@@ -730,7 +632,6 @@
     <string name="menu_open_in_web">Open in Web</string>
     <string name="menu_git">Git</string>
     <string name="menu_workspace_files">Workspace files</string>
-    <string name="workspace_files_title">Workspace files</string>
     <string name="workspace_download_file">Download file</string>
     <string name="workspace_file_saved">File saved</string>
     <string name="workspace_file_save_failed">Could not save file</string>
@@ -759,7 +660,6 @@
     <string name="menu_export_session">Export session</string>
     <string name="chat_session_exported">Session exported</string>
     <string name="chat_session_export_failed">Failed to export session</string>
-    <string name="chat_session_exporting">Exporting… %s</string>
     <string name="chat_images_optimized_summary">Images optimized (%1$d)
 Size: %2$s -&gt; %3$s
 Tokens: ~%4$d -&gt; ~%5$d</string>
@@ -776,9 +676,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="chat_reasoning_complete">Thought for %1$s</string>
     <string name="chat_message_queued">Queued</string>
     <string name="chat_message_sent">Sent</string>
-    <string name="chat_subagent_session">Subagent session</string>
-    <string name="chat_subagent_read_only_description">Messages can’t be sent to a subagent session.</string>
-
     <!-- Git screen -->
     <string name="git_title">Git</string>
     <string name="git_repository">Repository</string>
@@ -802,7 +699,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="git_status_added">Added</string>
     <string name="git_status_modified">Modified</string>
     <string name="git_status_deleted">Deleted</string>
-    <string name="git_status_untracked">Untracked</string>
     <string name="git_diff">Diff</string>
     <string name="git_loading">Loading…</string>
     <string name="git_load_failed">Could not load Git information</string>
@@ -810,7 +706,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="git_not_repository_desc">Git is only available for projects tracked by Git.</string>
     <string name="git_operation_failed">Git operation failed</string>
     <string name="git_operation_success">Done</string>
-    <string name="git_operation_in_progress">Working…</string>
     <string name="git_confirm_commit">Commit</string>
     <string name="git_generate_message">Generate</string>
     <string name="git_generate_failed">Generate failed, please retry</string>
@@ -853,15 +748,9 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="settings_asr_model_title">Voice recognition model</string>
     <string name="settings_asr_model_desc">On-device speech recognition model for voice input (~295 MB)</string>
     <string name="settings_asr_model_ready">Ready — voice input enabled</string>
-    <string name="sync_settings_desc">Sync settings and servers through Gist or WebDAV</string>
     <string name="sync_settings_desc_v2">Sync settings and servers through Gist, WebDAV, or a system file provider</string>
-    <string name="sync_settings_primary_desc">Keep settings and servers in a primary storage and optionally mirror them to a backup</string>
-    <string name="sync_settings_primary_backup_desc">Keep settings and servers in the primary sync storage and optionally mirror them to the backup sync storage</string>
-    <string name="sync_settings_primary_backup_destination_desc">Keep settings and servers at the primary sync destination and optionally mirror them to the backup destination</string>
     <string name="sync_common_settings">Common settings</string>
     <string name="sync_backend">Storage</string>
-    <string name="sync_storage_desc">Enable one or both storages and choose which one is the source of truth. The other storage is maintained as a backup.</string>
-    <string name="sync_single_storage_desc">Choose one storage for synchronization. Gist and WebDAV connection settings are kept separately when you switch.</string>
     <string name="sync_single_storage_desc_v2">Choose one storage for synchronization. Connection settings are kept separately when you switch.</string>
     <string name="sync_backend_gist">GitHub Gist</string>
     <string name="sync_backend_webdav">WebDAV</string>
@@ -882,7 +771,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="sync_document_permission_error">Permanent read and write access is required. Choose a provider that supports persistent document access.</string>
     <string name="sync_credential_saved_hint">Leave empty to keep the securely stored value</string>
     <string name="sync_credential_stored">Stored securely; enter a new value to replace it</string>
-    <string name="sync_credential_stored_short">Stored securely</string>
     <string name="sync_open_gist">Open Gist</string>
     <string name="sync_encrypted_passwords">Sync server passwords</string>
     <string name="sync_encrypted_passwords_desc">Encrypt passwords with a separate passphrase before upload</string>
@@ -901,25 +789,15 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="sync_backend_status">Storage status: %1$s</string>
     <string name="sync_backend_status_disabled">Disabled</string>
     <string name="sync_backend_status_diverged">Changed independently</string>
-    <string name="sync_role_primary">Primary storage</string>
-    <string name="sync_make_primary">Make primary</string>
     <string name="sync_last_sync">Last sync: %1$s</string>
     <string name="sync_conflict_desc">Both local and remote settings changed. Choose which copy to keep.</string>
     <string name="sync_choose_version">Choose sync version</string>
     <string name="sync_choose_version_desc">Force the remote copy onto this device, or overwrite remote storage with this device’s settings.</string>
-    <string name="sync_choose_version_multi_desc">Restore this device from either storage, or overwrite every enabled storage with this device’s settings.</string>
     <string name="sync_use_remote">Use remote</string>
-    <string name="sync_use_backend">Use %1$s version</string>
     <string name="sync_keep_local">Keep local</string>
-    <string name="sync_connect">Connect and sync</string>
-    <string name="sync_save_and_sync">Save and sync</string>
     <string name="sync_save_connection">Save connection</string>
     <string name="sync_synchronize_changes">Synchronize changes</string>
     <string name="sync_direction_desc">Local-only changes are uploaded; remote-only changes are downloaded. If both copies changed, you’ll be asked which one to keep.</string>
-    <string name="sync_primary_direction_desc">Changes are resolved against the primary storage, then copied to the backup. Independently changed backup data is never overwritten automatically.</string>
-    <string name="sync_primary_backup_direction_desc">Changes are resolved against the primary sync storage, then copied to the backup sync storage. Independently changed backup data is never overwritten automatically.</string>
-    <string name="sync_primary_backup_destination_direction_desc">Changes are resolved against the primary sync destination, then copied to the backup destination. Independently changed backup data is never overwritten automatically.</string>
-    <string name="sync_now">Sync now</string>
     <string name="sync_disconnect">Disconnect sync</string>
     <string name="sync_privacy_notice">Messages, drafts, logs, provider tokens, local-runtime credentials, and sync credentials are never uploaded. Server passwords are included only when encrypted password sync is enabled.</string>
 
@@ -929,8 +807,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="server_mgmt_system_info">System information</string>
     <string name="server_mgmt_config">Server config</string>
     <string name="server_mgmt_version">Version</string>
-    <string name="server_mgmt_server_version">Server version %s</string>
-    <string name="server_mgmt_upgrade">Upgrade</string>
     <string name="server_mgmt_active_sessions">Active sessions</string>
     <string name="server_mgmt_sessions_value">%1$d active</string>
     <string name="server_mgmt_sessions_busy_value">%1$d active · %2$d busy</string>
@@ -985,9 +861,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_status_blocked">Blocked</string>
     <string name="task_action_cancel">Cancel</string>
     <string name="task_action_unblock">Unblock</string>
-    <string name="tasks_connected">Connected</string>
-    <string name="tasks_disconnected">Disconnected</string>
-    <string name="tasks_blocked_hint">Blocked by a failed prerequisite</string>
     <string name="task_detail_depends_on">Depends on</string>
     <string name="task_detail_progress">Progress</string>
     <string name="task_detail_summary">Summary</string>
@@ -1091,7 +964,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="widget_servers">Servers</string>
     <string name="widget_server_connected">● %1$s</string>
     <string name="widget_server_offline">○ %1$s</string>
-    <string name="widget_server_tap_hint">Tap to connect</string>
     <string name="widget_active_sessions">New messages</string>
     <string name="widget_no_active_sessions">No new messages</string>
     <string name="widget_task_summary">%1$d running · %2$d queued · %3$d failed</string>
@@ -1104,10 +976,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
 
     <!-- Bookmarks & full-text search -->
     <string name="bookmarks_title">Bookmarks</string>
-    <string name="bookmarks_desc">View your saved messages</string>
     <string name="bookmarks_title_for">Bookmarks · %1$s</string>
     <string name="fts_search_title">Full-text search</string>
-    <string name="fts_search_desc">Search across all messages</string>
     <string name="fts_search_title_for">Full-text search · %1$s</string>
     <string name="fts_search_hint">Search messages by keyword</string>
     <string name="fts_search_prompt">Type a keyword to start searching</string>
@@ -1120,8 +990,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="chat_bookmark">Bookmark</string>
     <string name="menu_view_share">View share</string>
     <string name="menu_copy_share_link">Copy share link</string>
-    <string name="menu_back_to_parent">Back to parent session</string>
-    <string name="fork_branches">Fork branches</string>
     <string name="server_mgmt_process_cpu">opencode CPU</string>
     <string name="server_mgmt_process_memory">opencode Memory</string>
     <string name="confirm">Confirm</string>
@@ -1171,9 +1039,6 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="agents_md_refine">Improve</string>
     <string name="agents_md_edit">Edit</string>
     <string name="agents_md_generating">Generating…</string>
-    <string name="agents_md_generating_phase1">Analyzing project structure…</string>
-    <string name="agents_md_generating_phase2">Generating AGENTS.md…</string>
-    <string name="agents_md_generating_phase3">Finalizing content…</string>
     <string name="agents_md_modify">Modify with instruction</string>
     <string name="agents_md_modify_hint">Describe the change, e.g. \'add a testing convention\'</string>
     <string name="agents_md_saving">Saving…</string>
@@ -1186,14 +1051,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <!-- AI Workbench (2.0 server dashboard) -->
     <string name="workbench_title">AI Workbench</string>
     <string name="workbench_enter">Open AI Workbench</string>
-    <string name="workbench_live_events">Live activity</string>
-    <string name="workbench_live_events_empty">No recent session activity</string>
-    <string name="workbench_events_failed">Failed to load activity events</string>
-    <string name="workbench_all_sessions">All sessions</string>
     <string name="workbench_sessions_empty">No sessions on this server yet</string>
-    <string name="workbench_progress_question">asking</string>
-    <string name="workbench_progress_busy">working</string>
-    <string name="workbench_progress_idle">idle</string>
     <string name="workbench_panel_me">You</string>
     <string name="workbench_panel_ai">AI</string>
     <string name="workbench_loading">Loading…</string>
@@ -1211,27 +1069,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="workbench_menu_delete_session">Delete session</string>
     <string name="workbench_delete_session_failed">Failed to delete session</string>
     <string name="workbench_error_resolve_conn">Could not resolve server connection</string>
-    <string name="workbench_error_no_backend">Backend not configured</string>
-    <string name="workbench_error_events">Failed to load event stream</string>
     <string name="workbench_error_sessions">Failed to load session list</string>
-    <string name="workbench_event_busy">Started working</string>
-    <string name="workbench_event_idle">Finished</string>
-    <string name="workbench_event_retry">Retrying</string>
-    <string name="workbench_event_error">Failed</string>
-    <string name="workbench_event_question_waiting">Waiting for answer: %1$s</string>
-    <string name="workbench_event_permission">Permission needed: %1$s</string>
-    <string name="workbench_event_error_detail">Error: %1$s</string>
-    <string name="workbench_event_tool">Running tool: %1$s</string>
-    <string name="workbench_event_file">Modified file: %1$s</string>
-    <string name="workbench_event_question">Waiting for your answer</string>
-    <string name="workbench_event_permission_short">Permission required</string>
-    <string name="workbench_event_file_short">File modified</string>
-    <string name="workbench_event_tool_short">Tool running</string>
-    <string name="workbench_event_reply">New reply</string>
-    <string name="workbench_event_user">Message received</string>
-    <string name="workbench_event_project">Project action</string>
-    <string name="workbench_event_status">Status updated</string>
-    <string name="workbench_event_misc">New activity</string>
     <string name="server_backend_not_configured">Backend not configured</string>
     <string name="server_load_failed">Failed to load</string>
     <string name="server_generate_failed">Generation failed</string>

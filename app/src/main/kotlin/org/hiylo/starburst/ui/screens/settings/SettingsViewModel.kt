@@ -254,6 +254,18 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
+    val cartoonStyle = settingsRepository.cartoonStyle.stateIn(
+        scope = viewModelScope,
+        started = SharingStarted.WhileSubscribed(5000),
+        initialValue = SettingsRepository.DEFAULT_CARTOON_STYLE
+    )
+
+    fun setCartoonStyle(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsRepository.setCartoonStyle(enabled)
+        }
+    }
+
     val compactMessages = settingsRepository.compactMessages.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),

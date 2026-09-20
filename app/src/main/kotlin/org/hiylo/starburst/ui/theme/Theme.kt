@@ -387,6 +387,67 @@ internal val StarBurstSchemes: Map<String, ThemeScheme> = mapOf(
             onError = Color(0xFF690005),
         ),
     ),
+    "bubble" to ThemeScheme(
+        id = "bubble",
+        light = lightColorScheme(
+            primary = Color(0xFFFF2D8E),
+            onPrimary = Color(0xFFFFFFFF),
+            primaryContainer = Color(0xFFFFD6E8),
+            onPrimaryContainer = Color(0xFF3F001F),
+            secondary = Color(0xFF00B8E8),
+            onSecondary = Color(0xFFFFFFFF),
+            secondaryContainer = Color(0xFFC9F2FF),
+            onSecondaryContainer = Color(0xFF003543),
+            tertiary = Color(0xFFFFC300),
+            onTertiary = Color(0xFF3E2A00),
+            tertiaryContainer = Color(0xFFFFF0C2),
+            onTertiaryContainer = Color(0xFF2B1D00),
+            background = Color(0xFFFFFBFE),
+            onBackground = Color(0xFF23191E),
+            surface = Color(0xFFFFFBFE),
+            onSurface = Color(0xFF23191E),
+            surfaceVariant = Color(0xFFF4E6EE),
+            onSurfaceVariant = Color(0xFF524249),
+            surfaceContainer = Color(0xFFFFF0F6),
+            surfaceContainerLow = Color(0xFFFFF5F9),
+            surfaceContainerLowest = Color(0xFFFFFFFF),
+            surfaceContainerHigh = Color(0xFFF9E7F0),
+            surfaceContainerHighest = Color(0xFFF3E1EB),
+            outline = Color(0xFF857177),
+            outlineVariant = Color(0xFFD6C2CB),
+            error = Color(0xFFBA1A1A),
+            onError = Color(0xFFFFFFFF),
+        ),
+        dark = darkColorScheme(
+            primary = Color(0xFFFF9DC2),
+            onPrimary = Color(0xFF5A0030),
+            primaryContainer = Color(0xFF86125E),
+            onPrimaryContainer = Color(0xFFFFD6E8),
+            secondary = Color(0xFF66E0F5),
+            onSecondary = Color(0xFF003A43),
+            secondaryContainer = Color(0xFF005364),
+            onSecondaryContainer = Color(0xFFC9F2FF),
+            tertiary = Color(0xFFF0C14A),
+            onTertiary = Color(0xFF3E2A00),
+            tertiaryContainer = Color(0xFF5C4100),
+            onTertiaryContainer = Color(0xFFFFF0C2),
+            background = Color(0xFF1F1217),
+            onBackground = Color(0xFFECDFE3),
+            surface = Color(0xFF1F1217),
+            onSurface = Color(0xFFECDFE3),
+            surfaceVariant = Color(0xFF514047),
+            onSurfaceVariant = Color(0xFFD6BEC6),
+            surfaceContainer = Color(0xFF2B1D22),
+            surfaceContainerLow = Color(0xFF170C10),
+            surfaceContainerLowest = Color(0xFF12070B),
+            surfaceContainerHigh = Color(0xFF36272C),
+            surfaceContainerHighest = Color(0xFF413237),
+            outline = Color(0xFFA08990),
+            outlineVariant = Color(0xFF514047),
+            error = Color(0xFFFFB4AB),
+            onError = Color(0xFF690005),
+        ),
+    ),
 )
 
 /**
@@ -397,6 +458,7 @@ internal val StarBurstSchemes: Map<String, ThemeScheme> = mapOf(
  * - Dynamic color on Android 12+ (Material You)
  * - AMOLED dark mode with pure black surfaces
  * - Selectable accent colors (ignored when dynamic color is enabled)
+ * - Cartoon style: larger radii, thick ink outlines, solid shadows
  * - Edge-to-edge display
  */
 @Composable
@@ -407,6 +469,7 @@ fun StarBurstTheme(
     dimTheme: Boolean = false,
     accentColor: String = "indigo",
     themeScheme: String = "default",
+    cartoonStyle: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val accent = StarBurstAccents[accentColor] ?: StarBurstAccents.getValue("indigo")
@@ -444,7 +507,15 @@ fun StarBurstTheme(
         }
     }
 
-    CompositionLocalProvider(LocalAmoledTheme provides (darkTheme && amoledDark)) {
+    // 自适应 Shape 在绘制期读取该开关，故这里同步写入全局状态。
+    SideEffect {
+        CartoonStyleState.enabled = cartoonStyle
+    }
+
+    CompositionLocalProvider(
+        LocalAmoledTheme provides (darkTheme && amoledDark),
+        LocalCartoonStyle provides cartoonStyle,
+    ) {
         MaterialTheme(
             colorScheme = colorScheme,
             typography = Typography,
