@@ -351,17 +351,13 @@ internal fun ChatInputBar(
         }
 
         // 上下文预算指示器：估算用量 vs 有效窗口，与下方预算文字同源同门槛，>80% 告警色。
-        val budgetRatio = if (effectiveContextWindow > 0) {
-            estimatedContextTokens.toDouble() / effectiveContextWindow
-        } else {
-            0.0
-        }
-        val budgetColor = when {
-            budgetRatio >= 0.9 -> MaterialTheme.colorScheme.error
-            budgetRatio > 0.8 -> MaterialTheme.colorScheme.tertiary
+        val budgetRatio = contextBudgetRatio(estimatedContextTokens, effectiveContextWindow)
+        val budgetColor = when (contextBudgetLevel(budgetRatio)) {
+            ContextBudgetLevel.CRITICAL -> MaterialTheme.colorScheme.error
+            ContextBudgetLevel.WARNING -> MaterialTheme.colorScheme.tertiary
             else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
         }
-        val budgetPercentage = Math.round(budgetRatio * 100).toInt()
+        val budgetPercentage = contextBudgetPercentage(budgetRatio)
         if (isBusy && retryStatus == null) {
             val lastRunningTool = if (isBusy) {
                 messages.asReversed().firstNotNullOfOrNull { message ->
@@ -491,7 +487,7 @@ internal fun ChatInputBar(
                                     )
                                 }
                                 Text(
-                                    text = modelLabel,
+                                    text = displayModelLabel(modelLabel),
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                                 )
@@ -1050,8 +1046,9 @@ internal fun ChatInputBar(
     if (showContextDetails) {
         ContextUsageDialog(
             usage = contextUsage,
-            contextWindow = contextWindow,
+            contextWindow = effectiveContextWindow,
             messages = contextMessages,
+            estimatedContextTokens = estimatedContextTokens,
             onDismiss = { showContextDetails = false },
         )
     }

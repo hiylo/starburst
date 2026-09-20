@@ -72,6 +72,7 @@ internal fun ChatScreenTopBar(
     showRenameDialogState: MutableState<Boolean>,
     showSessionDiffDialogState: MutableState<Boolean>,
     showTimelineDialogState: MutableState<Boolean>,
+    showProjectOverviewState: MutableState<Boolean>,
     showAttachmentOptionsState: MutableState<Boolean>,
     showSubagentContextDetailsState: MutableState<Boolean>,
     onNavigateBack: () -> Unit,
@@ -89,6 +90,7 @@ internal fun ChatScreenTopBar(
     var showRenameDialog by showRenameDialogState
     var showSessionDiffDialog by showSessionDiffDialogState
     var showTimelineDialog by showTimelineDialogState
+    var showProjectOverview by showProjectOverviewState
     var showAttachmentOptions by showAttachmentOptionsState
     var showSubagentContextDetails by showSubagentContextDetailsState
 
@@ -104,19 +106,24 @@ internal fun ChatScreenTopBar(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                // Subtitle: project path, total tokens and cost for the session
-                val totalTokens = uiState.totalInputTokens + uiState.totalOutputTokens
-                val hasTokenOrCost = totalTokens > 0 || uiState.totalCost > 0
+                // Subtitle: project path, current context estimate and cost for the session.
+                // 用「当前上下文估算 / 有效窗口」而非累计 token：opencode 每轮 tokens.input
+                // 都含历史上下文，把所有轮次相加会虚高到兆级（用户困惑的 13.1M），既不是
+                // 当前占用、也会随会话变长无限膨胀。统一与输入框预算环/圆环同口径。
+                val ctxTokens = uiState.estimatedContextTokens
+                val ctxWindow = uiState.effectiveContextWindow
+                val hasCtx = ctxTokens > 0 && ctxWindow > 0
+                val hasCost = uiState.totalCost > 0
                 val hasDirectory = uiState.sessionDirectory.isNotBlank()
-                if (hasDirectory || hasTokenOrCost) {
+                if (hasDirectory || hasCtx || hasCost) {
                     val parts = mutableListOf<String>()
                     if (hasDirectory) {
                         parts.add(uiState.sessionDirectory)
                     }
-                    if (totalTokens > 0) {
-                        parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
+                    if (hasCtx) {
+                        parts.add(stringResource(R.string.chat_context_used, formatTokenCount(ctxTokens), formatTokenCount(ctxWindow)))
                     }
-                    if (uiState.totalCost > 0) {
+                    if (hasCost) {
                         parts.add(stringResource(R.string.chat_cost_format, String.format(Locale.ROOT, "%.4f", uiState.totalCost)))
                     }
                     if (parts.isNotEmpty()) {
@@ -139,11 +146,11 @@ internal fun ChatScreenTopBar(
         actions = {
             if (
                 uiState.parentSessionId != null &&
-                uiState.contextWindow > 0 &&
-                uiState.lastContextTokens > 0
+                uiState.effectiveContextWindow > 0 &&
+                uiState.estimatedContextTokens > 0
             ) {
                 val percentage = Math.round(
-                    uiState.lastContextTokens.toDouble() / uiState.contextWindow * 100,
+                    uiState.estimatedContextTokens.toDouble() / uiState.effectiveContextWindow * 100,
                 ).toInt()
                 val indicatorColor = when {
                     percentage >= 90 -> MaterialTheme.colorScheme.error
@@ -154,7 +161,7 @@ internal fun ChatScreenTopBar(
                     Box(contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(
                             progress = {
-                                (uiState.lastContextTokens.toFloat() / uiState.contextWindow)
+                                (uiState.estimatedContextTokens.toFloat() / uiState.effectiveContextWindow)
                                     .coerceIn(0f, 1f)
                             },
                             modifier = Modifier.size(30.dp),
@@ -235,6 +242,17 @@ internal fun ChatScreenTopBar(
                         },
                         leadingIcon = {
                             Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                        },
+                    )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_project_overview)) },
+                        onClick = {
+                            showMenu = false
+                            showProjectOverview = true
+                            viewModel.loadProjectOverview()
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Analytics, contentDescription = null)
                         },
                     )
                     DropdownMenuItem(

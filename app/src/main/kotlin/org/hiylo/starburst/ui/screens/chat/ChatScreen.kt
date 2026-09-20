@@ -130,6 +130,8 @@ fun ChatScreen(
     var showSessionDiffDialog by showSessionDiffDialogState
     val showTimelineDialogState = remember { mutableStateOf(false) }
     var showTimelineDialog by showTimelineDialogState
+    val showProjectOverviewState = remember { mutableStateOf(false) }
+    var showProjectOverview by showProjectOverviewState
     val showAttachmentOptionsState = remember { mutableStateOf(false) }
     var showAttachmentOptions by showAttachmentOptionsState
     val showTemplatePickerState = remember { mutableStateOf(false) }
@@ -856,6 +858,7 @@ fun ChatScreen(
                 showRenameDialogState = showRenameDialogState,
                 showSessionDiffDialogState = showSessionDiffDialogState,
                 showTimelineDialogState = showTimelineDialogState,
+                showProjectOverviewState = showProjectOverviewState,
                 showAttachmentOptionsState = showAttachmentOptionsState,
                 showSubagentContextDetailsState = showSubagentContextDetailsState,
                 onNavigateBack = onNavigateBack,
@@ -974,6 +977,7 @@ fun ChatScreen(
         showCustomCommandsDialogState = showCustomCommandsDialogState,
         showSessionDiffDialogState = showSessionDiffDialogState,
         showTimelineDialogState = showTimelineDialogState,
+        showProjectOverviewState = showProjectOverviewState,
         showAttachmentOptionsState = showAttachmentOptionsState,
         showTemplatePickerState = showTemplatePickerState,
         showSubagentContextDetailsState = showSubagentContextDetailsState,

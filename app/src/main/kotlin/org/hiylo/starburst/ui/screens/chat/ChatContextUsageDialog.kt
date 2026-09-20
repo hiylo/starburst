@@ -55,10 +55,14 @@ internal fun ContextUsageDialog(
     usage: ContextUsageDetails,
     contextWindow: Int,
     messages: List<ChatMessage> = emptyList(),
+    estimatedContextTokens: Int = 0,
     onDismiss: () -> Unit,
 ) {
     val isAmoled = isAmoledTheme()
-    val used = usage.currentTotal
+    // 顶部「已用 X / 窗口」与顶栏/圆环/输入框预算环统一为当前上下文估算
+    // （estimatedContextTokens）。usage.currentTotal 是最近一轮模型 tokens 的
+    // 口径，留在明细网格里展示即可，避免与估算口径并存造成三个数不一致。
+    val used = if (estimatedContextTokens > 0) estimatedContextTokens else usage.currentTotal
     val percentage = if (contextWindow > 0) (used.toDouble() / contextWindow * 100).roundToInt() else 0
     val remaining = (contextWindow - used).coerceAtLeast(0)
     val progressColor = when {
