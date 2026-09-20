@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -147,6 +148,11 @@ private fun OverviewContent(state: ProjectOverviewState.Loaded) {
             fontWeight = FontWeight.SemiBold,
         )
         Spacer(Modifier.height(12.dp))
+        // Git 统计
+        state.gitStat?.let { gs ->
+            OverviewGitRow(gs)
+            Spacer(Modifier.height(12.dp))
+        }
         // 表一：文件数量
         OverviewCountTable(
             title = stringResource(R.string.project_overview_file_count_section),
@@ -171,6 +177,53 @@ private fun OverviewContent(state: ProjectOverviewState.Loaded) {
         if (state.largeFiles.isNotEmpty()) {
             Spacer(Modifier.height(16.dp))
             OverviewLargestFiles(state.largeFiles)
+        }
+    }
+}
+
+@Composable
+private fun OverviewGitRow(gs: GitStat) {
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(
+                imageVector = Icons.Default.AccountTree,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = gs.branch,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (gs.commitCount > 0) {
+                Text(
+                    text = "${gs.commitCount} commits",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        if (gs.lastCommit.isNotBlank()) {
+            Text(
+                text = gs.lastCommit,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (gs.modifiedFiles > 0 || gs.diffStat.isNotBlank()) {
+            val parts = mutableListOf<String>()
+            if (gs.modifiedFiles > 0) parts.add("${gs.modifiedFiles} files changed")
+            if (gs.diffStat.isNotBlank()) parts.add(gs.diffStat)
+            Text(
+                text = parts.joinToString(" · "),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
         }
     }
 }

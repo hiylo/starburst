@@ -35,6 +35,15 @@ data class LargeFile(
     val bytes: Long,
 )
 
+/** Git 仓库统计（若项目不是 git 仓库则为 null）。 */
+data class GitStat(
+    val branch: String,
+    val commitCount: Int,
+    val lastCommit: String,
+    val modifiedFiles: Int,
+    val diffStat: String,
+)
+
 /** 项目概览的加载状态。 */
 sealed interface ProjectOverviewState {
     /** 尚未加载。 */
@@ -48,6 +57,7 @@ sealed interface ProjectOverviewState {
         val directory: String,
         val stats: List<FileTypeStat>,
         val largeFiles: List<LargeFile>,
+        val gitStat: GitStat?,
     ) : ProjectOverviewState {
         val totalFiles: Int get() = stats.sumOf { it.fileCount }
         val totalLines: Int get() = stats.sumOf { it.lineCount }
@@ -151,11 +161,12 @@ internal fun ChatViewModel.loadProjectOverview() {
         try {
             val raw = overviewShell.runCommand(buildOverviewScript(directory), PROJECT_OVERVIEW_TIMEOUT_MS)
             val (stats, largeFiles) = parseOverview(raw, directory)
+            val gitStat = parseGitStat(raw)
             if (stats.isEmpty()) {
                 _projectOverview.value =
                     ProjectOverviewState.Error(context.getString(R.string.project_overview_empty))
             } else {
-                _projectOverview.value = ProjectOverviewState.Loaded(directory, stats, largeFiles)
+                _projectOverview.value = ProjectOverviewState.Loaded(directory, stats, largeFiles, gitStat)
             }
         } catch (e: Exception) {
             e.rethrowCancellation()
@@ -180,6 +191,14 @@ private fun buildOverviewScript(directory: String): String {
         append("find $q \\( $prune \\) -prune -o -type f -print0 2>/dev/null | xargs -0 awk '")
         append(CLASSIFY_AWK)
         append("' 2>/dev/null\n")
+        append("printf '\\n__OVERVIEW_GIT__\\n'\n")
+        append("cd $q 2>/dev/null && {\n")
+        append("  echo \"branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)\"\n")
+        append("  echo \"commits=$(git rev-list --count HEAD 2>/dev/null)\"\n")
+        append("  echo \"last=$(git log -1 --format='%h %s' 2>/dev/null | head -1)\"\n")
+        append("  echo \"modified=$(git status --porcelain 2>/dev/null | wc -l)\"\n")
+        append("  echo \"diffstat=$(git diff --shortstat 2>/dev/null | tr -d '\\n')\"\n")
+        append("} || echo 'not_a_repo'\n")
         append("printf '\\n__OVERVIEW_END__\\n'\n")
     }
 }
@@ -264,6 +283,29 @@ private fun parseOverview(raw: String, directory: String): Pair<List<FileTypeSta
         .map { (path, bytes) -> LargeFile(relativePath(directory, path), bytes) }
 
     return stats to largeFiles
+}
+
+/** 解析 `__OVERVIEW_GIT__` 段，返回 [GitStat]；非 git 仓库返回 null。 */
+private fun parseGitStat(raw: String): GitStat? {
+    val section = sectionOf(raw, "__OVERVIEW_GIT__", "__OVERVIEW_END__")
+    if (section.isBlank() || section.contains("not_a_repo")) return null
+    var branch = ""
+    var commitCount = 0
+    var lastCommit = ""
+    var modifiedFiles = 0
+    var diffStat = ""
+    for (line in section.lineSequence()) {
+        val trimmed = line.trim()
+        when {
+            trimmed.startsWith("branch=") -> branch = trimmed.removePrefix("branch=").trim()
+            trimmed.startsWith("commits=") -> commitCount = trimmed.removePrefix("commits=").trim().toIntOrNull() ?: 0
+            trimmed.startsWith("last=") -> lastCommit = trimmed.removePrefix("last=").trim()
+            trimmed.startsWith("modified=") -> modifiedFiles = trimmed.removePrefix("modified=").trim().toIntOrNull() ?: 0
+            trimmed.startsWith("diffstat=") -> diffStat = trimmed.removePrefix("diffstat=").trim()
+        }
+    }
+    if (branch.isBlank()) return null
+    return GitStat(branch, commitCount, lastCommit, modifiedFiles, diffStat)
 }
 
 /** 提取 [begin] 与 [end] 两个标记行之间的内容。 */
