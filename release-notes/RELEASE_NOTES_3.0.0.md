@@ -99,3 +99,32 @@ style, and a refined Flame theme.
 - Unit tests (261 cases) + Compose instrumentation (2 cases) + Maestro E2E (5 flows) all green.
 - File-size CI guard (`scripts/check-file-size.sh`, 1500-line hard cap).
 - Single-file governance: largest sources split into same-package extension files.
+
+## Install and verify
+
+```bash
+# Verify the APK
+sha256sum app-release-v3.0.0.apk
+# Expected: 9c99e4ecca34c2eb1f11647f21d6bb62513d562dae6a1959ee0a4b0e08b145e9
+
+# Install (overwrite an existing installation)
+adb install -r app-release-v3.0.0.apk
+```
+
+## Backend pairing
+
+This version requires starburst-backend **>= 2.0.1** (`BackendGate.REQUIRED_BACKEND_VERSION`).
+
+- Backend **v2.0.0**: Test Intelligence becomes the third main capability; the artifact name is
+  corrected from `startburst-backend-*` to `starburst-backend-*` -- the already-published assets of
+  v1.0.0 / v1.1.0 still use the old name, so `install.sh` returns 404 for them.
+- Backend **v2.0.1**: `install.sh` verifies the download against SHA-256 (mismatch deletes the
+  artifact and exits).
+
+The app's one-click install pulls `install.sh` from the `v2.0.1` tag, so verification is applied
+automatically.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/hiylo/starburst-backend/v2.0.1/scripts/install.sh \
+  | sudo env STARBURST_DEFAULT_TOKEN=<your-token> bash -- --port 18880 --version 2.0.1
+```
