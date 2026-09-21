@@ -9,29 +9,7 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Added
-- **Cartoon style: rounded display font** — headings and labels now switch to a bundled
-  Baloo 2 family (SIL OFL, 3 static weights, Latin-only, ~268KB) when Cartoon style is on.
-  `body*` text and code stay on the system font / monospace in both modes, so long-form reading
-  and Chinese prose are untouched. OFL notice ships at `assets/licenses/Baloo2-OFL.txt`.
-- **Cartoon style: icon treatments** — two new wrappers in `ui/components/CartoonIcon.kt`.
-  `CartoonInkIcon` inks the glyph silhouette (a 12-sample offset ring) and is used on the chat
-  composer, top bars, list actions and FABs; `CartoonStickerIcon` sits the glyph on a tilted,
-  outlined, hard-shadowed chip and is used on the 40dp+ empty-state and hero icons.
-- **Cartoon style: `MaterialTheme.shapes` ramp** — the whole shape scale (10/16/26/32/38dp) is
-  swapped while Cartoon style is on, so the M3 components that never took an adaptive shape
-  (cards, snackbars, outlined text fields, chips, FABs, dropdown menus) round out too.
-
-### Changed
-- Settings → Appearance → Cartoon style description now mentions the rounded heading font and the
-  ink-outlined icons (both locales).
-- **Session list: batch compact** — a Compress action in the multi-select top bar now summarizes
-  every selected session in one go (using each session's own model, falling back to the server
-  default) to reduce context, mirroring the single-session Compact menu item.
-
-## [3.0.0] - 2026-09-20
+## [3.0.0] - 2026-09-21
 
 ### Added
 - **Project Overview** — a new entry in the chat top-bar ⋮ menu that scans the session's project
@@ -56,6 +34,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   bundle (AES-256-GCM + PBKDF2) via the Storage Access Framework.
 - **Token usage card** — a workbench card surfacing `/api/stats` (token usage / tasks / archives).
 - **Notification quick actions** — inline RemoteInput reply from question/completion notifications.
+- **Cartoon style: rounded display font** — headings and labels now switch to a bundled
+  Baloo 2 family (SIL OFL, 3 static weights, Latin-only, ~268KB) when Cartoon style is on.
+  `body*` text and code stay on the system font / monospace in both modes, so long-form reading
+  and Chinese prose are untouched. OFL notice ships at `assets/licenses/Baloo2-OFL.txt`.
+- **Cartoon style: icon treatments** — two new wrappers in `ui/components/CartoonIcon.kt`.
+  `CartoonInkIcon` inks the glyph silhouette (a 12-sample offset ring) and is used on the chat
+  composer, top bars, list actions and FABs; `CartoonStickerIcon` sits the glyph on a tilted,
+  outlined, hard-shadowed chip and is used on the 40dp+ empty-state and hero icons.
+- **Cartoon style: `MaterialTheme.shapes` ramp** — the whole shape scale (10/16/26/32/38dp) is
+  swapped while Cartoon style is on, so the M3 components that never took an adaptive shape
+  (cards, snackbars, outlined text fields, chips, FABs, dropdown menus) round out too.
+- **Session list: batch compact** — a Compress action in the multi-select top bar now summarizes
+  every selected session in one go (using each session's own model, falling back to the server
+  default) to reduce context, mirroring the single-session Compact menu item.
 
 ### Changed
 - **Top bar subtitle** — the chat top bar now shows the session's cumulative token usage
@@ -66,6 +58,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Flame theme** — palette retuned for a more vivid "passionate red": primary
   `#E53935`→`#FF1744` (Red A400), secondary `#F4511E`→`#FF6D00` (Orange A700),
   tertiary `#B71C1C`→`#D50000` (Red A700); dark-mode counterparts brightened accordingly.
+- Settings → Appearance → Cartoon style description now mentions the rounded heading font and the
+  ink-outlined icons (both locales).
 - **Single-file size governance** — the largest Kotlin sources were split by responsibility with no
   behaviour change: chat screen (`ChatScreen*.kt`, `ChatInputBar.kt`), message bubble, chat
   dialogs and overlay cards, terminal panel, Git screen, settings screen, plus the SSE event
@@ -104,6 +98,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   atomically with the connection state.
 - MnnLlm/MnnAsr native access serialized under one lock (use-after-free guard).
 - ASR recorder now stops on ViewModel clear (no more leaked microphone).
+- Parent sessions showed as idle while their sub-agent children were still running, in the session
+  list and on the workbench. Backend push events no longer drop `session.idle` / `session.status`
+  writes for child sessions (only the "reply ready" notification is suppressed, matching the official
+  Web UI / TUI), the cross-server session list now aggregates child busy/retry onto the parent via
+  `childBusyByParent`, and `WorkbenchViewModel.applyPushedStatus` gained a monotonic guard so a
+  stale lagging `idle` push cannot overwrite the aggregated "in progress" state.
+  `CrossServerSessionsTest` gained 2 regression cases.
 
 ### Engineering
 - Unit tests for backup payload, bookmark-tag backward compat, template serialization, and token

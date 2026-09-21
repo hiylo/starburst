@@ -3,12 +3,15 @@
 > 本文档记录本次代码审查修复后的验证结论。**凡可用模拟器/单测/源码同源证明的项均已验证通过**；
 > 剩余项依赖真机迁移、真实远端环境或长期使用（弱网、切网、云备份换机等），
 > 属**使用中观察项**，无法在开发环境一次性验证，改列于文末「使用中观察项」一节。
-> 代码层面（编译 + 全量单测 259 例）均已通过。
+> 代码层面（编译 + 全量单测 261 例）均已通过。
 > 更新：2026-09-20 —— 原生并发、CJK token 估算精度、上下文占用口径统一、Web UI 视觉
 > 均已验证通过；拆分回归（JVM 纯逻辑单测 + 专属 AVD `starburst_test` 模拟器实测）全部通过；
 > 上下文四处一致已补顶栏/输入框/详情弹窗三处同 dump 实测一致；
 > E2E Maestro 组合套件 5/5 全绿（smoke / add-server-connect / session-list / settings / workbench）。
 > 安全审计（Keystore 加密范围 + 云备份排除）结论已完成。
+> 更新：2026-09-21 —— 卡通风格层完善（圆体标题字体 Baloo 2 + 墨线/贴纸图标 + shapes 圆角阶）、
+> 会话列表多选批量压缩、父会话借子会话状态显示「处理中」三项并入 3.0.0；
+> 全量单测 259→261 例（新增 `CrossServerSessionsTest` 子会话状态传播 2 例）全绿。
 
 ## 安全审计结论（已完成）
 
@@ -78,7 +81,26 @@ OTHER 兜底），其余 Compose 渲染路径已在专属 AVD `starburst_test` �
 
 ---
 
-## 四、使用中观察项（模拟器/单测无法一次性验证，需真机迁移、真实远端或长期弱网使用中观察）
+## 四、2026-09-21 并入项验证（卡通风格层 + 批量压缩 + 父会话状态传播）
+
+- [x] **父会话借子会话状态显示「处理中」**（JVM 单测）：`CrossServerSessionsTest` 新增 2 例
+      —— 子会话 `Busy` 时列表项状态为 `Busy`（父会话自身 idle）；无子会话运行时保持 `Idle`。
+      全量单测 261 例全绿。推送侧改动（`handleBackendPushEvent` 不再丢弃子会话 idle/status 写入、
+      `applyPushedStatus` 单调守卫）代码路径已审查，行为等价的判定条件
+      （`isChildSession` / `shouldApplyPushStatus` / `childBusyByParent`）已被上述单测覆盖，
+      真机侧需实跑一个 subagent 任务确认列表与工作台同步显示「处理中」。
+- [x] **卡通风格层**（源码 + 编译）：圆体标题字体 Baloo 2 三份静态权重已入 `res/font/`
+      （bold/extra_bold/semi_bold，共 ~268KB），OFL 声明入 `assets/licenses/Baloo2-OFL.txt`；
+      `Type.kt` 仅替换 display/label 字族，`body*` 与等宽代码保持系统字体，中文正文不受影响；
+      `CartoonInkIcon` / `CartoonStickerIcon` 两个包装器 + `MaterialTheme.shapes` 圆角阶
+      全链路接入。release 编译通过（字体资源进包无缺失）。
+- [x] **会话列表多选批量压缩**（源码 + 编译）：多选顶栏 Compress 逐项 summarize，
+      逐会话用自身模型、回退服务器默认模型，语义对齐单会话 Compact 菜单项。
+- [ ] 上述三项的模拟器/真机视觉与交互实测尚未补跑（本轮并入以编译 + 单测 + 源码同源为准）。
+
+---
+
+## 五、使用中观察项（模拟器/单测无法一次性验证，需真机迁移、真实远端或长期弱网使用中观察）
 
 以下项代码路径已审查、编译与单测覆盖，但结论依赖真实使用环境，**不设未完成/待验证标记**：
 

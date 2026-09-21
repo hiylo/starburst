@@ -4,9 +4,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 # StarBurst v3.0.0 - Release Notes
 
-Released 2026-09-20. The **Test Intelligence** roadmap begins, plus major client increments:
-project overview, battery optimization, lifecycle-aware polling, E2E test suite, and a refined
-Flame theme.
+Released 2026-09-21. The **Test Intelligence** roadmap begins, plus major client increments:
+project overview, battery optimization, lifecycle-aware polling, E2E test suite, a rounded Cartoon
+style, and a refined Flame theme.
 
 ## Highlights
 
@@ -15,6 +15,17 @@ Flame theme.
   Git repository info (branch, commit count, last commit, modified files and diffstat). Shell-side
   scanning uses `find | xargs wc -c` + an awk line-classifier with C-style and `#`-style comment
   detection.
+- **Cartoon style: rounded display font + icon treatments** — headings and labels switch to a
+  bundled Baloo 2 family (SIL OFL, 3 weights, Latin-only, ~268KB) and icons gain two wrappers
+  (`CartoonInkIcon` inked glyph, `CartoonStickerIcon` tilted hard-shadowed chip);
+  `body*` text, code and Chinese prose stay on the system font / monospace. OFL notice ships at
+  `assets/licenses/Baloo2-OFL.txt`.
+- **Cartoon style: `MaterialTheme.shapes` ramp** — the whole shape scale is swapped while Cartoon
+  style is on, so M3 components that never took an adaptive shape (cards, snackbars, outlined text
+  fields, chips, FABs, dropdown menus) round out too.
+- **Session list: batch compact** — a Compress action in the multi-select top bar summarizes every
+  selected session at once (each using its own model, falling back to the server default) to reduce
+  context, mirroring the single-session Compact menu item.
 - **Battery optimization** — WakeLock now held only when a session is actively running (busy/retry),
   not during idle background; WS ping interval 20s→60s; release builds no longer persist INFO logs
   to SQLite; `backgroundWakeLock` default changed to false.
@@ -35,6 +46,8 @@ Flame theme.
 - Top bar subtitle shows cumulative token usage (total input + output) and cost, distinct from the
   input bar budget ring (current context occupancy / effective window).
 - Flame theme palette retuned for a more vivid red.
+- Settings → Appearance → Cartoon style description mentions the rounded heading font and the
+  ink-outlined icons (both locales).
 - Largest Kotlin sources split by responsibility; no file exceeds the 1500-line hard cap.
 - CI runs JVM unit tests on every push/PR (`./gradlew test` on JDK 17) + gitleaks + file-size guard.
 - Session loading parallelized: child-session BFS, git state, and initial diff run concurrently.
@@ -43,6 +56,9 @@ Flame theme.
 ## Added
 
 - Project Overview (file/line stats + Git repository info) in the chat ⋮ menu.
+- Cartoon style rounded display font (Baloo 2, OFL), inked/sticker icon wrappers, and a
+  `MaterialTheme.shapes` ramp.
+- Session list multi-select Compress (batch compact).
 - Prompt & session templates, session timeline, custom system prompt + context budget.
 - File diff viewer, in-editor AI actions, on-device code assist (MNN).
 - Service log live tail, bookmark tags & groups, encrypted backup & restore.
@@ -67,9 +83,14 @@ Flame theme.
 - Connection state desync — flags now reconcile atomically.
 - MnnLlm/MnnAsr native access serialized under one lock (use-after-free guard).
 - ASR recorder stops on ViewModel clear (no leaked microphone).
+- Parent sessions showed as idle while their sub-agent children were still running (session list
+  and workbench). Child-session push events are no longer dropped — only the "reply ready"
+  notification is suppressed, matching the official Web UI / TUI — the list aggregates child
+  busy/retry onto the parent, and a monotonic guard stops a stale lagging `idle` push from
+  overwriting the aggregated state.
 
 ## Engineering
 
-- Unit tests (259 cases) + Compose instrumentation (2 cases) + Maestro E2E (5 flows) all green.
+- Unit tests (261 cases) + Compose instrumentation (2 cases) + Maestro E2E (5 flows) all green.
 - File-size CI guard (`scripts/check-file-size.sh`, 1500-line hard cap).
 - Single-file governance: largest sources split into same-package extension files.

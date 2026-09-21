@@ -115,7 +115,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## 3.0.0 (Released ✅)
 
-> Released 2026-09-20. Test Intelligence roadmap kickoff + client increments: project overview,
+> Released 2026-09-21. Test Intelligence roadmap kickoff + client increments: project overview,
 > battery optimization, lifecycle-aware polling, E2E test suite, refined Flame theme.
 
 ### Test Intelligence (智能测试体系)
@@ -149,6 +149,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] File diff viewer (PTY `git diff` / file compare, syntax highlight)
 - [x] Service log live tail (PTY `tail -f` + keyword filter)
 - [x] Bookmark tags/groups
+- [x] Cartoon style: rounded display font (Baloo 2, OFL) + inked/sticker icon wrappers +
+  `MaterialTheme.shapes` ramp
+- [x] Session list multi-select Compress (batch compact)
 - [ ] Server monitoring alerts (CPU/memory/disk thresholds → push)
 - [x] Notification quick actions (RemoteInput reply to launch a task)
 - [ ] Material You dynamic color theme
@@ -164,7 +167,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Unit tests (ServerRepository encryption read/write, SettingsRepository persistence, …) —
   `EventReducer` is already covered by `EventReducerTest` (33 cases), as is the encrypted backup
   envelope (`PasswordCrypto` round-trip and wrong-passphrase rejection in `BackupPayloadTest`).
-  2026-09-20: 259 JVM unit tests + 2 Compose instrumentation + 5 Maestro E2E flows all green.
+  2026-09-21: 261 JVM unit tests + 2 Compose instrumentation + 5 Maestro E2E flows all green.
 - [ ] Startup time / memory / jank performance baseline
 
 ### Removed (product decision)

@@ -97,9 +97,10 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] 全局搜索：标题 / 目录 / 时间搜索（跨会话、跨项目）
 - [x] 导出会话（Markdown / JSON）
 
-## Now — 3.0.0（计划中 ⏳）
+## 3.0.0（已发布 ✅）
 
-> 2026-09-17。测试智能体系（Test Intelligence）+ 客户端增量能力。
+> 2026-09-21 发布。测试智能体系（Test Intelligence）启动 + 客户端增量能力：项目概览、耗电优化、
+> 生命周期感知轮询、E2E 测试套件、圆体卡通风格、Flame 主题精修。
 
 ### 测试智能体系（Test Intelligence）
 
@@ -126,26 +127,29 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ### 客户端增量功能
 
-- [ ] Token/用量统计（每会话/每服务器，后端聚合 + 工作台卡片）
-- [ ] Prompt 模板库（增删改）+ 会话模板（目录+系统提示词+模型+prompt 一键复用）
-- [ ] 文件 Diff 查看器（PTY `git diff` / 文件对比，语法高亮）
-- [ ] 服务日志实时 tail（PTY `tail -f` + 关键字过滤）
-- [ ] 书签标签/分组
+- [x] Token/用量统计（每会话/每服务器，后端聚合 + 工作台卡片）
+- [x] Prompt 模板库（增删改）+ 会话模板（目录+系统提示词+模型+prompt 一键复用）
+- [x] 文件 Diff 查看器（PTY `git diff` / 文件对比，语法高亮）
+- [x] 服务日志实时 tail（PTY `tail -f` + 关键字过滤）
+- [x] 书签标签/分组
 - [ ] 服务器监控告警（CPU/内存/磁盘阈值 → 推送）
-- [ ] 通知栏快捷操作（RemoteInput 直接回复发起任务）
+- [x] 通知栏快捷操作（RemoteInput 直接回复发起任务）
 - [ ] Material You 动态取色主题
-- [ ] 端侧代码补全/重写模型（MNN 离线）
-- [ ] 编辑器内 AI 操作（选中代码 → 解释/重构/写测试 → diff 预览后应用）
-- [ ] 会话时间线回放（agent 决策过程可视化）
-- [ ] 自定义系统提示词 + 上下文预算管理（每服务器）
+- [x] 端侧代码补全/重写模型（MNN 离线）
+- [x] 编辑器内 AI 操作（选中代码 → 解释/重构/写测试 → diff 预览后应用）
+- [x] 会话时间线回放（agent 决策过程可视化）
+- [x] 自定义系统提示词 + 上下文预算管理（每服务器）
 - [ ] 多设备/团队同步（经 backend 同步配置/模板/书签/归档）
-- [ ] 加密备份与恢复（Keystore 加密备份包，跨设备恢复）
+- [x] 加密备份与恢复（Keystore 加密备份包，跨设备恢复）
+- [x] 圆体卡通风格：圆体标题字体（Baloo 2, OFL）+ 墨线/贴纸图标 + `MaterialTheme.shapes` 圆角阶
+- [x] 会话列表多选 Compress（批量压缩）
 
 ### 工程质量
 
-- [ ] 单元测试（ServerRepository 加密读写、SettingsRepository 持久化等纯逻辑）——
+- [x] 单元测试（ServerRepository 加密读写、SettingsRepository 持久化等纯逻辑）——
   `EventReducer` 已由 `EventReducerTest`（33 例）覆盖，加密备份包也已覆盖
-  （`BackupPayloadTest` 验证 `PasswordCrypto` 往返与错误口令拒绝）
+  （`BackupPayloadTest` 验证 `PasswordCrypto` 往返与错误口令拒绝）。
+  2026-09-21：261 例 JVM 单测 + 2 例 Compose instrumentation + 5 条 Maestro E2E 全绿。
 - [ ] 启动耗时 / 内存 / 卡顿性能基线
 
 ### 移除（产品决策）
