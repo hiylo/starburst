@@ -178,25 +178,32 @@ internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfi
 internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerConfig, ev: PushSessionEvent) {
     when (ev.eventType) {
         "session.idle" -> {
-            if (isChildSession(ev.sessionId)) return
             // 状态准确：推送驱动，把该会话立即置为空闲（不依赖 SSE/轮询）。
+            // 子会话（subagent）的状态同样要写入：会话列表靠 childBusyByParent 把
+            // 正在跑子会话的父会话标为「处理中」，子会话 idle 后父会话才能解除该状态。
+            // 仅抑制子会话的「回复就绪」通知（与官方 WebUI/TUI 行为一致），不抑制状态写入。
+            val child = isChildSession(ev.sessionId)
             eventReducer.updateSessionStatus(ev.sessionId, SessionStatus.Idle)
+            if (child) return
             serviceScope.launch {
                 delay(250)
                 notifySessionComplete(server, ev.sessionId)
             }
         }
         "session.status", "session.updated" -> {
-            if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
             // 状态准确：以推送事件的 status 为准（/session/status 快照可能不全），
             // 立即写入 eventReducer，聊天与会话列表实时反映。
+            // 子会话的 busy/retry 同样写入——这是「运行子会话时父会话显示处理中」
+            // 的实时数据源（SSE 偶发丢帧或重连间隙时，推送是兜底通道）。
             // 加单调守卫：聚合快照可能滞后，旧 idle 不得抢跑真实 busy/retry/question，
             // 避免运行中会话被误标完成并触发 markUnconfirmedCompleted/完成通知。
+            val child = ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)
             val status = ev.status()
             if (status != null && shouldApplyPushStatus(eventReducer.sessionStatuses.value[ev.sessionId], status)) {
                 eventReducer.updateSessionStatus(ev.sessionId, status)
             }
             refreshSessionStatusesSoon(server)
+            if (child) return
         }
         "question.asked", "question.updated" -> {
             if (isChildSession(ev.sessionId)) return

@@ -383,6 +383,15 @@ class WorkbenchViewModel @Inject constructor(
 
     /** 推送解析出的会话状态立即写入列表（不等待下一次轮询）。 */
     private fun applyPushedStatus(sessionId: String, status: SessionStatus) {
+        // 加单调守卫：聚合快照可能滞后，旧 idle 不得抢跑真实 busy/retry/question。
+        // 否则父会话等待子会话（subagent）期间，滞后推送的 parent idle 会把
+        // childBusyByParent 归并出来的「处理中」覆盖回空闲，造成列表显示空闲。
+        val current = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.status
+        val applicable = when (current) {
+            is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Retry -> status !is SessionStatus.Idle
+            else -> true
+        }
+        if (!applicable) return
         _uiState.update { state ->
             state.copy(
                 sessions = state.sessions.map { item ->

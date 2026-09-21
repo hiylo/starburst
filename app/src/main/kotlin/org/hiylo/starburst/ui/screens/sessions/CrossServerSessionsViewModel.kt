@@ -62,7 +62,7 @@ data class CrossServerSessionsUiState(
     val connectedServerCount: Int = 0,
 )
 
-private data class ServerSessionPreferences(
+internal data class ServerSessionPreferences(
     val favoriteIds: List<String>,
     val categoryAssignments: Map<String, String>,
 )
@@ -214,7 +214,7 @@ internal fun moveCrossServerFavoriteOrder(
     } + reordered.drop(existingVisibleCount)
 }
 
-private data class SourceState(
+internal data class SourceState(
     val servers: List<ServerConfig>,
     val sessions: List<Session>,
     val serverSessions: Map<String, Set<String>>,
@@ -222,7 +222,7 @@ private data class SourceState(
     val categories: List<SessionCategory>,
 )
 
-private fun buildCrossServerSessionsState(
+internal fun buildCrossServerSessionsState(
     source: SourceState,
     preferences: Map<String, ServerSessionPreferences>,
     connectedIds: Set<String>,
@@ -232,6 +232,16 @@ private fun buildCrossServerSessionsState(
     val sessionsById = source.sessions.associateBy(Session::id)
     val categoriesById = source.categories.associateBy(SessionCategory::id)
     val serverIndices = source.servers.withIndex().associate { it.value.id to it.index }
+    // 子会话（subagent）忙/重试时父会话在列表中显示「处理中」，与
+    // SessionListViewModel / WorkbenchViewModel 的口径一致（子会话本身不出现在列表里）。
+    val childBusyByParent = mutableMapOf<String, SessionStatus>()
+    for (child in source.sessions) {
+        val parentId = child.parentId ?: continue
+        val childStatus = source.statuses[child.id] ?: continue
+        if (childStatus is SessionStatus.Busy || childStatus is SessionStatus.Retry) {
+            childBusyByParent[parentId] = childStatus
+        }
+    }
     val rawItems = source.servers
         .asSequence()
         .flatMap { server ->
@@ -253,7 +263,11 @@ private fun buildCrossServerSessionsState(
                 CrossServerSessionItem(
                     server = server,
                     session = session,
-                    status = source.statuses[sessionId] ?: SessionStatus.Idle,
+                    // 父会话自身 idle 但子会话忙时，借子会话状态显示「处理中」。
+                    status = when (val self = source.statuses[sessionId]) {
+                        is SessionStatus.Busy, is SessionStatus.Retry -> self
+                        else -> childBusyByParent[sessionId] ?: self ?: SessionStatus.Idle
+                    },
                     category = category,
                     isFavorite = true,
                     favoriteIndex = favoriteIndex,

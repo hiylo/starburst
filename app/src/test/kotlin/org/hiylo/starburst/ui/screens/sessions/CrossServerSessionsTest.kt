@@ -77,6 +77,66 @@ class CrossServerSessionsTest {
         )
     }
 
+    @Test
+    fun `favorite parent shows busy when its child subagent is running`() {
+        // 父会话自身空闲，但子会话（subagent）正在运行 → 列表应显示「处理中」而非空闲。
+        val parent = Session(
+            id = "parent",
+            title = "parent",
+            directory = "/project/parent",
+            time = Session.Time(created = 1, updated = 2),
+        )
+        val child = Session(
+            id = "child",
+            title = "child",
+            directory = "/project/parent",
+            parentId = "parent",
+            time = Session.Time(created = 1, updated = 3),
+        )
+        val source = SourceState(
+            servers = listOf(server),
+            sessions = listOf(parent, child),
+            serverSessions = mapOf(server.id to setOf("parent", "child")),
+            statuses = mapOf("child" to SessionStatus.Busy),
+            categories = listOf(category),
+        )
+        val preferences = mapOf(
+            server.id to ServerSessionPreferences(
+                favoriteIds = listOf("parent"),
+                categoryAssignments = mapOf("parent" to category.id),
+            ),
+        )
+        val state = buildCrossServerSessionsState(source, preferences, setOf(server.id), emptyList(), emptyMap())
+        val item = state.items.first()
+        assertEquals("parent", item.session.id)
+        assertEquals(SessionStatus.Busy, item.status)
+    }
+
+    @Test
+    fun `favorite parent shows idle when no child subagent runs`() {
+        val parent = Session(
+            id = "parent",
+            title = "parent",
+            directory = "/project/parent",
+            time = Session.Time(created = 1, updated = 2),
+        )
+        val source = SourceState(
+            servers = listOf(server),
+            sessions = listOf(parent),
+            serverSessions = mapOf(server.id to setOf("parent")),
+            statuses = mapOf("parent" to SessionStatus.Idle),
+            categories = listOf(category),
+        )
+        val preferences = mapOf(
+            server.id to ServerSessionPreferences(
+                favoriteIds = listOf("parent"),
+                categoryAssignments = mapOf("parent" to category.id),
+            ),
+        )
+        val state = buildCrossServerSessionsState(source, preferences, setOf(server.id), emptyList(), emptyMap())
+        assertEquals(SessionStatus.Idle, state.items.first().status)
+    }
+
     private fun item(
         id: String,
         isFavorite: Boolean,
