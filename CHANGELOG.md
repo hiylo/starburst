@@ -113,6 +113,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Backend (starburst-backend, non-intel)
 - Hardware threshold alerts (CPU/memory/disk → `alert.hardware` push).
 - Multi-device sync (`GET/PUT /api/sync`, last-write-wins).
+- **Required backend bumped 1.0.0 → 2.0.1** (`BackendGate.REQUIRED_BACKEND_VERSION`). starburst-backend
+  v2.0.0 added Test Intelligence as a third main capability and renamed release artifacts
+  `startburst-backend-*` → `starburst-backend-*` (v1.0.0/v1.1.0 assets still use the old name, so
+  `install.sh` 404s against them); v2.0.1 adds SHA-256 verification to `install.sh`. The install
+  action now pins `v2.0.1`. The upgrade prompt's "required version" reads from the same constant
+  instead of a duplicated string resource (`backend_required_version` removed).
 
 ## [2.0.0] - 2026-09-16
 

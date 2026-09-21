@@ -73,6 +73,11 @@ style, and a refined Flame theme.
 - Passwords removed from Intents/PendingIntents.
 - WebView hardening (no mixed content, external links in browser, HTTP-auth host check).
 - Install script pinned to a release tag with a randomized backend token.
+- **Required backend bumped to 2.0.1** — one-click install now pulls `install.sh` from the `v2.0.1`
+  tag, which verifies the downloaded binary against the release's `SHA256SUMS` (mismatch aborts and
+  deletes the partial file). v2.0.0 also fixes the artifact-name break that made installs from
+  v1.0.0/v1.1.0 404 (`startburst-backend-*` → `starburst-backend-*`) and restores the missing
+  `windows-amd64.exe` + `SHA256SUMS` assets.
 
 ## Fixed
 

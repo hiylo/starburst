@@ -36,7 +36,7 @@ data class BackendProbeResult(
 object BackendGate {
 
     /** App 要求的最低的 starburst-backend 版本。低于该版本时视为后端状态异常（需要升级）。 */
-    const val REQUIRED_BACKEND_VERSION: String = "1.0.0"
+    const val REQUIRED_BACKEND_VERSION: String = "2.0.1"
 
     /**
      * 后端是否「正常可用」（健康且版本达标）。后端相关功能入口的显隐统一使用该判定。

@@ -24,7 +24,10 @@ App 全部持久化位置中，用 Android Keystore 密钥（`starburst_sync_sec
 
 其余 prefs（`locale`、`disconnected_servers`、widget snapshot）非 Keystore 加密数据，无换机密文不可解风险。
 
-**遗留（发布时补齐）**：`install.sh` 下载的二进制未做 SHA-256 校验（已钉 tag，可再加 `STARBURST_BIN_SHA256` 参数钉 checksum）。
+**遗留项已清零**：`install.sh` 下载的二进制 SHA-256 校验已随 starburst-backend **v2.0.1** 补齐
+（下载后与 release 的 `SHA256SUMS` 比对，不匹配即删产物并 `exit 1`；无校验和/非 http(s) 来源降级为
+警告跳过，`STARBURST_SKIP_CHECKSUM=1` 可显式跳过）。App `REQUIRED_BACKEND_VERSION` 已同步为 `2.0.1`，
+一键安装按该 tag 拉取 `install.sh`，校验自动生效。
 
 ---
 

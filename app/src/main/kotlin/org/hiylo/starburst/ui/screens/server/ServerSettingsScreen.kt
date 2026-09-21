@@ -67,6 +67,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.gate.BackendGate
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -595,7 +596,7 @@ private fun BackendStatusCard(
                                     text = stringResource(
                                         R.string.backend_needs_upgrade_desc,
                                         backendVersion.orEmpty(),
-                                        stringResource(R.string.backend_required_version),
+                                        BackendGate.REQUIRED_BACKEND_VERSION,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
