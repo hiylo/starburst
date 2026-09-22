@@ -267,6 +267,9 @@ fun NavGraphBuilder.ServerRoutes(navController: NavHostController) {
         val serverId = it.arguments?.getString("serverId").orEmpty()
         ServerManagementScreen(
             onNavigateBack = { navController.popBackStack() },
+            onNavigateToTestIntel = { url, user, pwd, name, id ->
+                navController.navigate(Screen.TestIntel.createRoute(url, user, pwd, name, id))
+            },
             onNavigateToKb = { url, user, pwd, name, id ->
                 navController.navigate(Screen.Kb.createRoute(url, user, pwd, name, id))
             },
