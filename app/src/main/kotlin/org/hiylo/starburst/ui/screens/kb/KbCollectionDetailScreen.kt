@@ -34,6 +34,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
@@ -41,7 +42,9 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -201,6 +204,7 @@ fun KbCollectionDetailScreen(
                 state = uiState,
                 isAmoled = isAmoled,
                 onDeleteDocument = { deleteTarget = it },
+                onViewDocument = { viewModel.viewDocumentContent(it) },
             )
         }
     }
@@ -250,6 +254,13 @@ fun KbCollectionDetailScreen(
             },
         )
     }
+
+    uiState.documentContent?.let { view ->
+        DocumentContentDialog(
+            view = view,
+            onDismiss = viewModel::dismissDocumentContent,
+        )
+    }
 }
 
 @Composable
@@ -257,6 +268,7 @@ private fun ColumnScope.DocumentsSection(
     state: KbCollectionDetailUiState,
     isAmoled: Boolean,
     onDeleteDocument: (KbDocument) -> Unit,
+    onViewDocument: (KbDocument) -> Unit,
 ) {
     Text(
         text = stringResource(R.string.kb_documents),
@@ -295,6 +307,7 @@ private fun ColumnScope.DocumentsSection(
                         isAmoled = isAmoled,
                         deleting = state.deletingId == document.id,
                         onDeleteClick = { onDeleteDocument(document) },
+                        onViewContent = { onViewDocument(document) },
                     )
                 }
             }
@@ -308,6 +321,7 @@ private fun KbDocumentCard(
     isAmoled: Boolean,
     deleting: Boolean,
     onDeleteClick: () -> Unit,
+    onViewContent: () -> Unit,
 ) {
     Card(
         shape = AppCardShape,
@@ -333,6 +347,16 @@ private fun KbDocumentCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(
+                    onClick = onViewContent,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Visibility,
+                        contentDescription = stringResource(R.string.kb_view_content),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 StatusBadge(text = kbStatusLabel(document.status), color = kbStatusColor(document.status))
                 IconButton(
                     onClick = onDeleteClick,
@@ -768,6 +792,81 @@ private fun DeleteDocumentDialog(
                     Spacer(Modifier.width(6.dp))
                 }
                 Text(stringResource(R.string.kb_delete_document))
+            }
+        }
+    }
+}
+
+@Composable
+private fun DocumentContentDialog(
+    view: DocumentContentView,
+    onDismiss: () -> Unit,
+) {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = view.documentName,
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Text(
+            text = stringResource(R.string.kb_view_content),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp),
+        )
+        when {
+            view.loading -> Row(
+                modifier = Modifier.padding(24.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                Text(stringResource(R.string.loading), style = MaterialTheme.typography.bodySmall)
+            }
+            view.chunks.isEmpty() -> Text(
+                text = stringResource(R.string.kb_content_empty),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+            else -> Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 360.dp)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+            ) {
+                view.chunks.forEach { chunk ->
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        if (chunk.title.isNotBlank() && chunk.title != view.documentName) {
+                            Text(
+                                text = chunk.title,
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                        }
+                        Text(
+                            text = chunk.content,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(
+                onClick = onDismiss,
+                outlined = true,
+            ) {
+                Text(stringResource(R.string.close))
             }
         }
     }

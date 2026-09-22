@@ -28,6 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendKbApi
+import org.hiylo.starburst.data.api.KbChunk
 import org.hiylo.starburst.data.api.KbCollection
 import org.hiylo.starburst.data.api.KbDocument
 import org.hiylo.starburst.data.api.KbSearchResult
@@ -49,6 +50,15 @@ data class KbCollectionDetailUiState(
     val searching: Boolean = false,
     val results: List<KbSearchResult> = emptyList(),
     val searchError: String? = null,
+    val documentContent: DocumentContentView? = null,
+)
+
+/** 正在查看的文档内容（摄入切片，按 seq 拼接）。 */
+data class DocumentContentView(
+    val documentId: Long,
+    val documentName: String,
+    val chunks: List<KbChunk> = emptyList(),
+    val loading: Boolean = false,
 )
 
 /** 文件大小超限异常：携带实际大小与上限，用于给出明确提示。 */
@@ -248,6 +258,33 @@ class KbCollectionDetailViewModel @Inject constructor(
                 onResult(false)
             }
         }
+    }
+
+    /** 打开文档内容查看（拉取摄入切片）；失败用 Toast 提示。 */
+    fun viewDocumentContent(document: KbDocument) {
+        if (_uiState.value.documentContent != null) return
+        _uiState.update {
+            it.copy(documentContent = DocumentContentView(document.id, document.name, loading = true))
+        }
+        viewModelScope.launch {
+            try {
+                val chunks = kbApi.getDocumentChunks(backendUrl, backendToken, document.id)
+                _uiState.update { state ->
+                    state.copy(documentContent = state.documentContent?.copy(chunks = chunks, loading = false))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { state ->
+                    state.copy(documentContent = state.documentContent?.copy(loading = false))
+                }
+                Toast.makeText(context, R.string.kb_content_load_failed, Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    fun dismissDocumentContent() {
+        _uiState.update { it.copy(documentContent = null) }
     }
 
     /** 读取 content Uri 的文本内容；失败返回 null，超限抛 [KbFileTooLargeException]。 */

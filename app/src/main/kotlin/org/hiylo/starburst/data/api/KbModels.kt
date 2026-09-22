@@ -47,6 +47,23 @@ data class KbSearchResult(
     val score: Double = 0.0,
 )
 
+/** KB 文档的一个切片（摄入时切分，`GET /api/kb/documents/{id}/chunks` 返回）。 */
+@Serializable
+data class KbChunk(
+    val id: Long = 0,
+    val seq: Int = 0,
+    val title: String = "",
+    val content: String = "",
+    val createdAt: String = "",
+)
+
+/** `GET /api/kb/documents/{id}/chunks` 的响应包装。 */
+@Serializable
+internal data class KbChunksResponse(
+    val documentId: Long = 0,
+    val chunks: List<KbChunk> = emptyList(),
+)
+
 /** 已生成的文档（后端 /api/documents，docType：xlsx | docx | pptx）。 */
 @Serializable
 data class GeneratedDocument(

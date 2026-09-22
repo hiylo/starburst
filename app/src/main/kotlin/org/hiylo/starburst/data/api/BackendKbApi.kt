@@ -102,6 +102,14 @@ class BackendKbApi @Inject constructor(
         return resp.documents
     }
 
+    /** 获取 KB 文档的已摄入切片（`GET /api/kb/documents/{id}/chunks`），用于查看实际内容。 */
+    suspend fun getDocumentChunks(backendUrl: String, token: String, id: Long): List<KbChunk> {
+        val resp: KbChunksResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/kb/documents/$id/chunks") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.chunks
+    }
+
     /** 删除知识库文档（`DELETE /api/kb/documents/{id}`）。 */
     suspend fun deleteDocument(backendUrl: String, token: String, id: Long): Boolean {
         val resp: HttpResponse = httpClient.delete("${backendUrl.trimEnd('/')}/api/kb/documents/$id") {

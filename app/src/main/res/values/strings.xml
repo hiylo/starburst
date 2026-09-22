@@ -1276,5 +1276,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_delete_document_confirm">Delete “%1$s”? This cannot be undone.</string>
     <string name="kb_delete_document_failed">Failed to delete document</string>
     <string name="kb_file_too_large">File is %1$s, larger than the %2$s limit.</string>
+    <string name="kb_view_content">View content</string>
+    <string name="kb_content_empty">This document has no extractable content</string>
+    <string name="kb_content_load_failed">Failed to load document content</string>
     <string name="chat_rag_context_attached">Knowledge base context loaded (%1$d sources)</string>
 </resources>

@@ -1244,5 +1244,8 @@
     <string name="kb_delete_document_confirm">确定删除“%1$s”？此操作无法撤销。</string>
     <string name="kb_delete_document_failed">删除文档失败</string>
     <string name="kb_file_too_large">文件大小 %1$s，超过 %2$s 上限。</string>
+    <string name="kb_view_content">查看内容</string>
+    <string name="kb_content_empty">该文档没有可提取的内容</string>
+    <string name="kb_content_load_failed">加载文档内容失败</string>
     <string name="chat_rag_context_attached">已带入知识库资料（%1$d 条）</string>
 </resources>
