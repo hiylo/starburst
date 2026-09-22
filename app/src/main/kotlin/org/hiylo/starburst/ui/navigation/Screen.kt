@@ -300,28 +300,4 @@ sealed class Screen(val route: String) {
     data object Diagnostics : Screen("diagnostics")
     data object LlmProvider : Screen("llm_provider_settings")
     data object About : Screen("about")
-
-    data object KnowledgeBase : Screen("knowledge_base") {
-        fun createRoute(
-            serverUrl: String,
-            username: String,
-            password: String,
-            serverName: String,
-            serverId: String,
-        ): String = serverRoute("knowledge_base", serverUrl, username, password, serverName, serverId)
-    }
-
-    data object KnowledgeBaseCollection : Screen("knowledge_base_collection") {
-        fun createRoute(
-            serverUrl: String,
-            username: String,
-            password: String,
-            serverName: String,
-            serverId: String,
-            collectionId: Long,
-        ): String = serverRoute(
-            "knowledge_base_collection", serverUrl, username, password, serverName, serverId,
-            "collectionId" to collectionId.toString(),
-        )
-    }
 }

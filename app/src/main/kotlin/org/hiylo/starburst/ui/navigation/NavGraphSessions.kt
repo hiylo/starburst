@@ -330,7 +330,7 @@ fun NavGraphBuilder.SessionsRoutes(
                             },
                             onNavigateToKnowledgeBase = {
                                 navController.navigate(
-                                    Screen.KnowledgeBase.createRoute(
+                                    Screen.Kb.createRoute(
                                         serverUrl = serverUrl,
                                         username = username,
                                         password = password,
@@ -480,7 +480,7 @@ fun NavGraphBuilder.SessionsRoutes(
                     },
                     onNavigateToKnowledgeBase = {
                         navController.navigate(
-                            Screen.KnowledgeBase.createRoute(
+                            Screen.Kb.createRoute(
                                 serverUrl = serverUrl,
                                 username = username,
                                 password = password,
