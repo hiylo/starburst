@@ -11,6 +11,8 @@ package org.hiylo.starburst.ui.screens.kb
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Base64
+import android.widget.Toast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -31,6 +33,7 @@ import org.hiylo.starburst.data.api.KbDocument
 import org.hiylo.starburst.data.api.KbSearchResult
 import org.hiylo.starburst.data.repository.ServerRepository
 import java.io.ByteArrayOutputStream
+import java.util.Locale
 import javax.inject.Inject
 
 /** 知识库集合详情页的 UI 状态。 */
@@ -41,11 +44,18 @@ data class KbCollectionDetailUiState(
     val documents: List<KbDocument> = emptyList(),
     val ingesting: Boolean = false,
     val ingestError: String? = null,
+    val deletingId: Long? = null,
     val query: String = "",
     val searching: Boolean = false,
     val results: List<KbSearchResult> = emptyList(),
     val searchError: String? = null,
 )
+
+/** 文件大小超限异常：携带实际大小与上限，用于给出明确提示。 */
+private class KbFileTooLargeException(
+    val actualBytes: Long,
+    val limitBytes: Long,
+) : Exception()
 
 /**
  * 知识库：集合详情 ViewModel。
@@ -152,34 +162,65 @@ class KbCollectionDetailViewModel @Inject constructor(
         }
     }
 
-    /** 摄入文本类文件（经 contentResolver 读为文本，走 `content` 字段）。 */
+    /** 摄入文件：文本类走 `content` 字段，二进制（PDF/Office）base64 后走 `contentBase64`。 */
     fun ingestFile(name: String, uri: Uri, mime: String, onResult: (Boolean) -> Unit = {}) {
         val trimmedName = name.trim()
         if (trimmedName.isEmpty() || _uiState.value.ingesting) return
         viewModelScope.launch {
             _uiState.update { it.copy(ingesting = true, ingestError = null) }
             try {
-                val text = withContext(Dispatchers.IO) { readTextFile(uri) }
-                if (text.isNullOrBlank()) {
-                    _uiState.update {
-                        it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
+                if (isTextMime(mime)) {
+                    val text = withContext(Dispatchers.IO) { readTextFile(uri) }
+                    if (text.isNullOrBlank()) {
+                        _uiState.update {
+                            it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
+                        }
+                        onResult(false)
+                        return@launch
                     }
-                    onResult(false)
-                    return@launch
+                    kbApi.ingest(
+                        backendUrl = backendUrl,
+                        token = backendToken,
+                        collectionId = collectionId,
+                        name = trimmedName,
+                        mime = mime.ifBlank { null },
+                        content = text,
+                    )
+                } else {
+                    val contentBase64 = withContext(Dispatchers.IO) { readBinaryFileBase64(uri) }
+                    if (contentBase64.isNullOrBlank()) {
+                        _uiState.update {
+                            it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
+                        }
+                        onResult(false)
+                        return@launch
+                    }
+                    kbApi.ingest(
+                        backendUrl = backendUrl,
+                        token = backendToken,
+                        collectionId = collectionId,
+                        name = trimmedName,
+                        mime = mime.ifBlank { null },
+                        contentBase64 = contentBase64,
+                    )
                 }
-                kbApi.ingest(
-                    backendUrl = backendUrl,
-                    token = backendToken,
-                    collectionId = collectionId,
-                    name = trimmedName,
-                    mime = mime.ifBlank { null },
-                    content = text,
-                )
                 _uiState.update { it.copy(ingesting = false) }
                 onResult(true)
                 loadDocuments()
             } catch (e: CancellationException) {
                 throw e
+            } catch (e: KbFileTooLargeException) {
+                _uiState.update {
+                    it.copy(
+                        ingesting = false,
+                        ingestError = context.getString(
+                            R.string.kb_file_too_large,
+                            formatBytes(e.actualBytes),
+                            formatBytes(e.limitBytes),
+                        ),
+                    )
+                }
+                onResult(false)
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
@@ -189,11 +230,33 @@ class KbCollectionDetailViewModel @Inject constructor(
         }
     }
 
-    /** 读取 content Uri 的文本内容；非 content 协议、读取失败或超过大小上限返回 null。 */
+    /** 删除文档（`DELETE /api/kb/documents/{id}`）；成功后刷新文档列表。 */
+    fun deleteDocument(id: Long, onResult: (Boolean) -> Unit = {}) {
+        if (_uiState.value.deletingId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(deletingId = id) }
+            try {
+                kbApi.deleteDocument(backendUrl, backendToken, id)
+                _uiState.update { it.copy(deletingId = null) }
+                onResult(true)
+                loadDocuments()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(deletingId = null) }
+                Toast.makeText(context, R.string.kb_delete_document_failed, Toast.LENGTH_SHORT).show()
+                onResult(false)
+            }
+        }
+    }
+
+    /** 读取 content Uri 的文本内容；失败返回 null，超限抛 [KbFileTooLargeException]。 */
     private fun readTextFile(uri: Uri): String? {
         if (uri.scheme != "content") return null
         // 先查元数据大小预检，超大文件直接拒绝，避免全量读入内存。
-        if (contentSize(uri)?.let { it > KB_FILE_SIZE_LIMIT_BYTES } == true) return null
+        contentSize(uri)?.let { size ->
+            if (size > KB_FILE_SIZE_LIMIT_BYTES) throw KbFileTooLargeException(size, KB_FILE_SIZE_LIMIT_BYTES)
+        }
         return try {
             context.contentResolver.openInputStream(uri)?.use { input ->
                 val output = ByteArrayOutputStream()
@@ -203,11 +266,44 @@ class KbCollectionDetailViewModel @Inject constructor(
                     val read = input.read(buffer)
                     if (read < 0) break
                     total += read
-                    if (total > KB_FILE_SIZE_LIMIT_BYTES) return null
+                    if (total > KB_FILE_SIZE_LIMIT_BYTES) {
+                        throw KbFileTooLargeException(total.toLong(), KB_FILE_SIZE_LIMIT_BYTES)
+                    }
                     output.write(buffer, 0, read)
                 }
                 String(output.toByteArray(), Charsets.UTF_8)
             }
+        } catch (e: KbFileTooLargeException) {
+            throw e
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** 读取 content Uri 的二进制并 base64（NO_WRAP）；失败返回 null，超限抛异常。 */
+    private fun readBinaryFileBase64(uri: Uri): String? {
+        if (uri.scheme != "content") return null
+        contentSize(uri)?.let { size ->
+            if (size > KB_BINARY_SIZE_LIMIT_BYTES) throw KbFileTooLargeException(size, KB_BINARY_SIZE_LIMIT_BYTES)
+        }
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    if (total > KB_BINARY_SIZE_LIMIT_BYTES) {
+                        throw KbFileTooLargeException(total.toLong(), KB_BINARY_SIZE_LIMIT_BYTES)
+                    }
+                    output.write(buffer, 0, read)
+                }
+                Base64.encodeToString(output.toByteArray(), Base64.NO_WRAP)
+            }
+        } catch (e: KbFileTooLargeException) {
+            throw e
         } catch (e: Exception) {
             null
         }
@@ -226,6 +322,17 @@ class KbCollectionDetailViewModel @Inject constructor(
             }
         }
     }.getOrNull()
+
+    /** 判断 MIME 是否走文本 `content` 摄入路径（其余视为二进制 base64 摄入）。 */
+    private fun isTextMime(mime: String): Boolean =
+        mime.startsWith("text/") || mime in TEXT_LIKE_MIMES
+
+    /** 字节数转可读文本（MiB/KiB/B），用于超限提示。 */
+    private fun formatBytes(bytes: Long): String = when {
+        bytes >= 1024L * 1024L -> String.format(Locale.ROOT, "%.1f MiB", bytes / 1024.0 / 1024.0)
+        bytes >= 1024L -> String.format(Locale.ROOT, "%.1f KiB", bytes / 1024.0)
+        else -> "$bytes B"
+    }
 
     /** 更新搜索输入框内容。 */
     fun setQuery(text: String) {
@@ -268,7 +375,13 @@ class KbCollectionDetailViewModel @Inject constructor(
     }
 
     private companion object {
-        /** 文本摄入文件大小上限（字节）；超过则拒绝，避免 OOM 与超长请求体。 */
-        const val KB_FILE_SIZE_LIMIT_BYTES = 5 * 1024 * 1024
+        /** 文本/JSON 类文件摄入大小上限（字节）；对齐后端 JSON body 4 MiB 限制。 */
+        const val KB_FILE_SIZE_LIMIT_BYTES = 4L * 1024 * 1024
+
+        /** 二进制文件摄入大小上限（字节）；base64 后约膨胀 4/3，限 3 MiB 防 413。 */
+        const val KB_BINARY_SIZE_LIMIT_BYTES = 3L * 1024 * 1024
+
+        /** 走 `content` 字段的文本类 MIME。 */
+        val TEXT_LIKE_MIMES = setOf("application/json", "application/xml")
     }
 }

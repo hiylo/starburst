@@ -13,11 +13,13 @@ import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -33,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.UploadFile
@@ -54,6 +57,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -102,6 +106,7 @@ fun KbCollectionDetailScreen(
     val isAmoled = isAmoledTheme()
     var showIngestDialog by rememberSaveable { mutableStateOf(false) }
     var showSearchDialog by rememberSaveable { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<KbDocument?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -195,6 +200,7 @@ fun KbCollectionDetailScreen(
             DocumentsSection(
                 state = uiState,
                 isAmoled = isAmoled,
+                onDeleteDocument = { deleteTarget = it },
             )
         }
     }
@@ -231,12 +237,26 @@ fun KbCollectionDetailScreen(
             },
         )
     }
+
+    deleteTarget?.let { target ->
+        DeleteDocumentDialog(
+            documentName = target.name,
+            deleting = uiState.deletingId != null,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                viewModel.deleteDocument(target.id) { ok ->
+                    if (ok) deleteTarget = null
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun ColumnScope.DocumentsSection(
     state: KbCollectionDetailUiState,
     isAmoled: Boolean,
+    onDeleteDocument: (KbDocument) -> Unit,
 ) {
     Text(
         text = stringResource(R.string.kb_documents),
@@ -270,7 +290,12 @@ private fun ColumnScope.DocumentsSection(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 items(state.documents, key = { it.id }) { document ->
-                    KbDocumentCard(document = document, isAmoled = isAmoled)
+                    KbDocumentCard(
+                        document = document,
+                        isAmoled = isAmoled,
+                        deleting = state.deletingId == document.id,
+                        onDeleteClick = { onDeleteDocument(document) },
+                    )
                 }
             }
         }
@@ -281,6 +306,8 @@ private fun ColumnScope.DocumentsSection(
 private fun KbDocumentCard(
     document: KbDocument,
     isAmoled: Boolean,
+    deleting: Boolean,
+    onDeleteClick: () -> Unit,
 ) {
     Card(
         shape = AppCardShape,
@@ -307,6 +334,22 @@ private fun KbDocumentCard(
                     modifier = Modifier.weight(1f),
                 )
                 StatusBadge(text = kbStatusLabel(document.status), color = kbStatusColor(document.status))
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !deleting,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    if (deleting) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.kb_delete_document),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -425,7 +468,19 @@ private fun IngestDialog(
             )
         } else {
             AppSecondaryButton(
-                onClick = { fileLauncher.launch(arrayOf("text/*")) },
+                onClick = {
+                    fileLauncher.launch(
+                        arrayOf(
+                            "text/*",
+                            "application/pdf",
+                            "application/msword",
+                            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            "application/json",
+                        )
+                    )
+                },
                 outlined = true,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -671,4 +726,49 @@ private fun displayNameOf(contentResolver: android.content.ContentResolver, uri:
         }
     }
     return queried ?: uri.lastPathSegment?.substringAfterLast('/') ?: ""
+}
+
+@Composable
+private fun DeleteDocumentDialog(
+    documentName: String,
+    deleting: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.kb_delete_document),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Text(
+            text = stringResource(R.string.kb_delete_document_confirm, documentName),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(
+                onClick = onDismiss,
+                outlined = true,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+            AppPrimaryButton(
+                onClick = onConfirm,
+                enabled = !deleting,
+                destructive = true,
+            ) {
+                if (deleting) {
+                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(stringResource(R.string.kb_delete_document))
+            }
+        }
+    }
 }

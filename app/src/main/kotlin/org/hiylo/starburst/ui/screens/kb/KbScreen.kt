@@ -26,6 +26,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -44,6 +45,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -83,6 +85,7 @@ fun KbScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isAmoled = isAmoledTheme()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var deleteTarget by remember { mutableStateOf<KbCollection?>(null) }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -164,7 +167,12 @@ fun KbScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     items(uiState.collections, key = { it.id }) { collection ->
-                        KbCollectionCard(collection = collection, onClick = { onOpenCollection(collection.id) })
+                        KbCollectionCard(
+                            collection = collection,
+                            onClick = { onOpenCollection(collection.id) },
+                            deleting = uiState.deletingId == collection.id,
+                            onDeleteClick = { deleteTarget = collection },
+                        )
                     }
                 }
             }
@@ -182,12 +190,27 @@ fun KbScreen(
             },
         )
     }
+
+    deleteTarget?.let { target ->
+        DeleteCollectionDialog(
+            collectionName = target.name,
+            deleting = uiState.deletingId != null,
+            onDismiss = { deleteTarget = null },
+            onConfirm = {
+                viewModel.deleteCollection(target.id) { ok ->
+                    if (ok) deleteTarget = null
+                }
+            },
+        )
+    }
 }
 
 @Composable
 private fun KbCollectionCard(
     collection: KbCollection,
     onClick: () -> Unit,
+    deleting: Boolean,
+    onDeleteClick: () -> Unit,
 ) {
     val isAmoled = isAmoledTheme()
     Card(
@@ -222,6 +245,22 @@ private fun KbCollectionCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(
+                    onClick = onDeleteClick,
+                    enabled = !deleting,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    if (deleting) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Delete,
+                            contentDescription = stringResource(R.string.kb_delete_collection),
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
             }
             if (collection.description.isNotBlank()) {
                 Text(
@@ -309,6 +348,51 @@ private fun CreateCollectionDialog(
                 Text(
                     stringResource(if (creating) R.string.kb_creating else R.string.kb_create),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DeleteCollectionDialog(
+    collectionName: String,
+    deleting: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
+) {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.kb_delete_collection),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Text(
+            text = stringResource(R.string.kb_delete_collection_confirm, collectionName),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(
+                onClick = onDismiss,
+                outlined = true,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+            AppPrimaryButton(
+                onClick = onConfirm,
+                enabled = !deleting,
+                destructive = true,
+            ) {
+                if (deleting) {
+                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(stringResource(R.string.kb_delete_collection))
             }
         }
     }

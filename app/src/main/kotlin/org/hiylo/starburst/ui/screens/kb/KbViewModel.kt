@@ -9,6 +9,7 @@
 package org.hiylo.starburst.ui.screens.kb
 
 import android.content.Context
+import android.widget.Toast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -32,6 +33,7 @@ data class KbCollectionListUiState(
     val error: String? = null,
     val collections: List<KbCollection> = emptyList(),
     val creating: Boolean = false,
+    val deletingId: Long? = null,
 )
 
 /**
@@ -106,6 +108,26 @@ class KbCollectionListViewModel @Inject constructor(
                 throw e
             } catch (e: Exception) {
                 _uiState.update { it.copy(creating = false) }
+                onResult(false)
+            }
+        }
+    }
+
+    /** 删除集合（`DELETE /api/kb/collections/{id}`），级联删除文档；成功后刷新列表。 */
+    fun deleteCollection(id: Long, onResult: (Boolean) -> Unit = {}) {
+        if (_uiState.value.deletingId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(deletingId = id) }
+            try {
+                kbApi.deleteCollection(backendUrl, backendToken, id)
+                _uiState.update { it.copy(deletingId = null) }
+                onResult(true)
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(deletingId = null) }
+                Toast.makeText(context, R.string.kb_delete_collection_failed, Toast.LENGTH_SHORT).show()
                 onResult(false)
             }
         }

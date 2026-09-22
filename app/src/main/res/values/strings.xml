@@ -1269,5 +1269,12 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_search_failed">Search failed</string>
     <string name="kb_score">Score %1$.2f</string>
     <string name="kb_search_source_unknown">Document</string>
+    <string name="kb_delete_collection">Delete collection</string>
+    <string name="kb_delete_collection_confirm">Delete “%1$s”? Its documents will be permanently removed.</string>
+    <string name="kb_delete_collection_failed">Failed to delete collection</string>
+    <string name="kb_delete_document">Delete document</string>
+    <string name="kb_delete_document_confirm">Delete “%1$s”? This cannot be undone.</string>
+    <string name="kb_delete_document_failed">Failed to delete document</string>
+    <string name="kb_file_too_large">File is %1$s, larger than the %2$s limit.</string>
     <string name="chat_rag_context_attached">Knowledge base context loaded (%1$d sources)</string>
 </resources>

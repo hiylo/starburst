@@ -1237,5 +1237,12 @@
     <string name="kb_search_failed">搜索失败</string>
     <string name="kb_score">得分 %1$.2f</string>
     <string name="kb_search_source_unknown">文档</string>
+    <string name="kb_delete_collection">删除集合</string>
+    <string name="kb_delete_collection_confirm">确定删除“%1$s”？该集合下的所有文档将被永久删除。</string>
+    <string name="kb_delete_collection_failed">删除集合失败</string>
+    <string name="kb_delete_document">删除文档</string>
+    <string name="kb_delete_document_confirm">确定删除“%1$s”？此操作无法撤销。</string>
+    <string name="kb_delete_document_failed">删除文档失败</string>
+    <string name="kb_file_too_large">文件大小 %1$s，超过 %2$s 上限。</string>
     <string name="chat_rag_context_attached">已带入知识库资料（%1$d 条）</string>
 </resources>
