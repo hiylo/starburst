@@ -870,12 +870,12 @@ fun SessionListScreen(
                         Text(
                             text = stringResource(R.string.sessions_empty),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = stringResource(R.string.sessions_tap_plus),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -1413,7 +1413,7 @@ private fun ProjectHeader(
                 )
                 if (!branch.isNullOrBlank()) {
                     Surface(
-                        shape = RoundedCornerShape(5.dp),
+                        shape = RoundedCornerShape(50),
                         color = MaterialTheme.colorScheme.secondaryContainer,
                     ) {
                         Text(

@@ -101,6 +101,7 @@ import org.hiylo.starburst.ui.components.appDialogContainerColor
 import org.hiylo.starburst.ui.components.appDialogElevation
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.AppLoadingEdge
 import org.hiylo.starburst.ui.components.sessionCategoryColor
@@ -438,6 +439,7 @@ internal fun SessionRow(
         Card(
             modifier = Modifier
                 .fillMaxWidth()
+                .cartoonChrome(AppCardShape)
                 .combinedClickable(
                     onClick = onClick,
                     onLongClick = onLongClick,

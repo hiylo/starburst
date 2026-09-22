@@ -372,7 +372,7 @@ private fun FavoritesCard(onClick: () -> Unit) {
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
-        border = appAmoledBorder(alpha = 0.65f),
+        border = appAmoledBorder(),
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),

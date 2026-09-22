@@ -89,6 +89,7 @@ app/src/main/kotlin/org/hiylo/starburst/
 
 - 提交消息：`{type}({scope}): {subject}`，type：`feat`/`fix`/`refactor`/`docs`/`chore`/`test`
 - 远端：`github`（SSH）、`gitlab`（内网，URL 中不含 token）
+  > 安全红线中「禁止内网 IP」针对**版本库内容**（代码/配置/文档），本地 git remote 配置不在版本库中，可使用真实内网地址。
 
 ## CI
 

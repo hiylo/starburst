@@ -695,7 +695,7 @@ private fun ShareTargetPickerDialog(
                         }
                     }
                     else -> {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
 
                         if (items.isEmpty()) {
                             Column(
@@ -854,7 +854,7 @@ private fun ShareTargetPickerDialog(
                             }
                         }
 
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
                         Column(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
                             verticalArrangement = Arrangement.spacedBy(4.dp),
