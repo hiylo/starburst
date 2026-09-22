@@ -15,9 +15,11 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
+import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.plugins.HttpRequestTimeoutException
 import io.ktor.client.plugins.timeout
 import io.ktor.client.request.preparePost
+import io.ktor.client.request.put
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsChannel
@@ -571,6 +573,214 @@ class BackendApi @Inject constructor(
             timeout { requestTimeoutMillis = 120_000L }
         }.body()
         return resp.text
+    }
+
+    /** 列出后端已分析的 Intel 项目（`GET /api/intel/projects`）。 */
+    suspend fun intelProjects(backendUrl: String, token: String): List<IntelProject> {
+        val resp: IntelProjectsResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/projects") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.projects
+    }
+
+    /** 列出某项目的 Intel 模块（`GET /api/intel/modules`）。 */
+    suspend fun intelModules(backendUrl: String, token: String, projectId: Long): List<IntelModule> {
+        val resp: IntelModulesResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/modules") {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+        }.body()
+        return resp.modules
+    }
+
+    /** 列出某项目的功能点（`GET /api/intel/features`，projectId 在 query）。 */
+    suspend fun intelFeatures(backendUrl: String, token: String, projectId: Long): List<IntelFeature> {
+        val resp: IntelFeaturesResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/features") {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+        }.body()
+        return resp.features
+    }
+
+    /** 列出某项目的测试运行（`GET /api/intel/runs`）。 */
+    suspend fun intelRuns(backendUrl: String, token: String, projectId: Long): List<IntelTestRun> {
+        val resp: IntelRunsResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/runs") {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+        }.body()
+        return resp.runs
+    }
+
+    /** 查询某次运行详情（`GET /api/intel/runs/{runId}`，响应体直接是 run + results）。 */
+    suspend fun intelRunDetail(backendUrl: String, token: String, runId: Long): IntelRunDetailResponse =
+        httpClient.get("${backendUrl.trimEnd('/')}/api/intel/runs/$runId") {
+            header("Authorization", "Bearer $token")
+        }.body()
+
+    /** 查询某次运行的用例结果列表（`GET /api/intel/runs/{runId}/results`）。 */
+    suspend fun intelRunResults(backendUrl: String, token: String, runId: Long): List<IntelTestResult> {
+        val resp: IntelResultsResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/runs/$runId/results") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.results
+    }
+
+    /** 发起一次测试运行（`POST /api/intel/run`，返回新建的 IntelTestRun）。 */
+    suspend fun startIntelRun(backendUrl: String, token: String, projectId: Long, moduleId: Long): IntelTestRun {
+        val resp: IntelRunResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/intel/run") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(IntelRunRequest(projectId, moduleId))
+        }.body()
+        return resp.run
+    }
+
+    /** 对单个功能点跑测试（`POST /api/intel/features/test`，projectId 在 body）。 */
+    suspend fun featureRunTest(
+        backendUrl: String,
+        token: String,
+        projectId: Long,
+        featureId: Long,
+    ): IntelFeatureRunResponse =
+        httpClient.post("${backendUrl.trimEnd('/')}/api/intel/features/test") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(IntelFeatureRunTestRequest(projectId, featureId))
+        }.body()
+
+    /** 列出某项目的问题清单（`GET /api/intel/issues?projectId=&status=`，status 非空才拼）。 */
+    suspend fun intelIssues(
+        backendUrl: String,
+        token: String,
+        projectId: Long,
+        status: String? = null,
+    ): List<IntelIssue> {
+        val resp: IntelIssuesResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/issues") {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+            if (!status.isNullOrBlank()) parameter("status", status)
+        }.body()
+        return resp.issues
+    }
+
+    /** 确认问题（`POST /api/intel/issues/{issueId}/ack`，无 body）。 */
+    suspend fun ackIntelIssue(backendUrl: String, token: String, issueId: Long): Boolean {
+        val resp: IntelOkResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/intel/issues/$issueId/ack") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.ok
+    }
+
+    /** 把问题关联到功能点（`POST /api/intel/issues/{issueId}/link-feature`）。 */
+    suspend fun linkIssueToFeature(backendUrl: String, token: String, issueId: Long, featureId: Long): Boolean {
+        val url = "${backendUrl.trimEnd('/')}/api/intel/issues/$issueId/link-feature"
+        val resp: IntelOkResponse = httpClient.post(url) {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(IntelLinkFeatureRequest(featureId))
+        }.body()
+        return resp.ok
+    }
+
+    /** 列出某项目的修复方案（`GET /api/intel/fixes?projectId=&status=`，status 非空才拼）。 */
+    suspend fun intelFixes(backendUrl: String, token: String, projectId: Long, status: String? = null): List<IntelFix> {
+        val resp: IntelFixesResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/intel/fixes") {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+            if (!status.isNullOrBlank()) parameter("status", status)
+        }.body()
+        return resp.fixes
+    }
+
+    /** 应用修复（`POST /api/intel/fixes/{fixId}/apply`，writeMode 默认 file）。 */
+    suspend fun applyIntelFix(backendUrl: String, token: String, fixId: Long, writeMode: String = "file"): Boolean {
+        val resp: IntelOkResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/intel/fixes/$fixId/apply") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(IntelFixApplyRequest(writeMode))
+        }.body()
+        return resp.ok
+    }
+
+    /** 回滚已应用的修复（`POST /api/intel/fixes/{fixId}/rollback`，无 body）。 */
+    suspend fun rollbackIntelFix(backendUrl: String, token: String, fixId: Long): Boolean {
+        val resp: IntelOkResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/intel/fixes/$fixId/rollback") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.ok
+    }
+
+    /** 拒绝修复（`POST /api/intel/fixes/{fixId}/reject`，无 body）。 */
+    suspend fun rejectIntelFix(backendUrl: String, token: String, fixId: Long): Boolean {
+        val resp: IntelOkResponse = httpClient.post("${backendUrl.trimEnd('/')}/api/intel/fixes/$fixId/reject") {
+            header("Authorization", "Bearer $token")
+        }.body()
+        return resp.ok
+    }
+
+    /** 列出功能点的问答记录（`GET /api/intel/features/{featureId}/chats?projectId=`）。 */
+    suspend fun intelFeatureChats(
+        backendUrl: String,
+        token: String,
+        featureId: Long,
+        projectId: Long,
+    ): List<IntelFeatureChat> {
+        val url = "${backendUrl.trimEnd('/')}/api/intel/features/$featureId/chats"
+        val resp: IntelChatsResponse = httpClient.get(url) {
+            header("Authorization", "Bearer $token")
+            parameter("projectId", projectId)
+        }.body()
+        return resp.chats
+    }
+
+    /** 向功能点提问（`POST /api/intel/features/{featureId}/chat`）。 */
+    suspend fun askIntelFeature(
+        backendUrl: String,
+        token: String,
+        featureId: Long,
+        projectId: Long,
+        question: String,
+    ): IntelChatResponse =
+        httpClient.post("${backendUrl.trimEnd('/')}/api/intel/features/$featureId/chat") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(IntelFeatureChatRequest(projectId, question))
+        }.body()
+
+    /** 读取硬件告警快照（`GET /api/alerts`，响应体直接是快照）。 */
+    suspend fun alertsSnapshot(backendUrl: String, token: String): AlertsSnapshot =
+        httpClient.get("${backendUrl.trimEnd('/')}/api/alerts") {
+            header("Authorization", "Bearer $token")
+        }.body()
+
+    /** 更新告警配置并返回最新快照（`POST /api/alerts`）。 */
+    suspend fun updateAlerts(backendUrl: String, token: String, request: AlertsUpdateRequest): AlertsSnapshot =
+        httpClient.post("${backendUrl.trimEnd('/')}/api/alerts") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(request)
+        }.body()
+
+    /** 拉取同步包（`GET /api/sync?key=`）；后端 404 表示键不存在，返回 null。 */
+    suspend fun syncGetBundle(backendUrl: String, token: String, key: String): BackendSyncBundle? {
+        val url = "${backendUrl.trimEnd('/')}/api/sync"
+        return try {
+            httpClient.get(url) {
+                header("Authorization", "Bearer $token")
+                parameter("key", key)
+            }.body()
+        } catch (e: ClientRequestException) {
+            if (e.response.status.value == 404) null else throw e
+        }
+    }
+
+    /** 写入同步包（`PUT /api/sync`），返回新 revision。 */
+    suspend fun syncPutBundle(backendUrl: String, token: String, key: String, payload: String): Long {
+        val resp: BackendSyncPutResponse = httpClient.put("${backendUrl.trimEnd('/')}/api/sync") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(BackendSyncPutRequest(key, payload))
+        }.body()
+        return resp.revision
     }
 }
 
