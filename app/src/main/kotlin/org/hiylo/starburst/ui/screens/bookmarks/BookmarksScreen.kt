@@ -37,7 +37,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -72,6 +71,8 @@ import java.util.Locale
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.MessageBookmark
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.AppDialog
+import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
@@ -368,72 +369,74 @@ private fun ManageTagsDialog(
     var tags by remember(bookmark.id) { mutableStateOf(bookmark.tags) }
     var newTag by remember(bookmark.id) { mutableStateOf("") }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.bookmarktags_manage_tags)) },
-        text = {
-            Column {
-                if (tags.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.bookmarktags_no_tags),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        tags.forEach { tag ->
-                            InputChip(
-                                selected = false,
-                                onClick = {},
-                                label = { Text(tag) },
-                                trailingIcon = {
-                                    Icon(
-                                        Icons.Filled.Close,
-                                        contentDescription = stringResource(R.string.bookmarktags_remove_tag),
-                                        modifier = Modifier
-                                            .size(16.dp)
-                                            .clickable { tags = tags - tag },
-                                    )
-                                },
-                            )
-                        }
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.bookmarktags_manage_tags),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            if (tags.isEmpty()) {
+                Text(
+                    text = stringResource(R.string.bookmarktags_no_tags),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    tags.forEach { tag ->
+                        InputChip(
+                            selected = false,
+                            onClick = {},
+                            label = { Text(tag) },
+                            trailingIcon = {
+                                Icon(
+                                    Icons.Filled.Close,
+                                    contentDescription = stringResource(R.string.bookmarktags_remove_tag),
+                                    modifier = Modifier
+                                        .size(16.dp)
+                                        .clickable { tags = tags - tag },
+                                )
+                            },
+                        )
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                OutlinedTextField(
-                    value = newTag,
-                    onValueChange = { newTag = it },
-                    label = { Text(stringResource(R.string.bookmarktags_tag_hint)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = {
-                        val trimmed = newTag.trim()
-                        if (trimmed.isNotEmpty() && trimmed !in tags) {
-                            tags = tags + trimmed
-                        }
-                        newTag = ""
-                    },
-                ) {
-                    Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(stringResource(R.string.bookmarktags_add_tag))
-                }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(tags) }) {
-                Text(stringResource(R.string.bookmarktags_save))
+            OutlinedTextField(
+                value = newTag,
+                onValueChange = { newTag = it },
+                label = { Text(stringResource(R.string.bookmarktags_tag_hint)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(
+                onClick = {
+                    val trimmed = newTag.trim()
+                    if (trimmed.isNotEmpty() && trimmed !in tags) {
+                        tags = tags + trimmed
+                    }
+                    newTag = ""
+                },
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(stringResource(R.string.bookmarktags_add_tag))
             }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.bookmarktags_cancel))
-            }
-        },
-    )
+        }
+        AppDialogActions(
+            dismissText = stringResource(R.string.bookmarktags_cancel),
+            confirmText = stringResource(R.string.bookmarktags_save),
+            onDismiss = onDismiss,
+            onConfirm = { onSave(tags) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
