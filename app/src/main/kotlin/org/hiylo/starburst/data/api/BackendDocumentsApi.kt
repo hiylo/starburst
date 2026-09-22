@@ -21,6 +21,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -107,10 +108,24 @@ class BackendDocumentsApi @Inject constructor(
 }
 
 /**
- * 把后端返回的下载地址解析为完整 URL：已是绝对地址原样返回，
+ * 把后端返回的下载地址解析为完整 URL：已是绝对地址且与 [backendUrl] 同源时原样返回，
  * 相对路径（如 `/api/documents/5/download`）拼接上 [backendUrl]。
+ * 绝对地址若 scheme/host/port 与 [backendUrl] 不一致直接抛异常，避免把 Bearer token 发给第三方。
  */
 internal fun resolveDocumentUrl(backendUrl: String, downloadUrl: String): String {
-    if (downloadUrl.startsWith("http://") || downloadUrl.startsWith("https://")) return downloadUrl
-    return "${backendUrl.trimEnd('/')}/${downloadUrl.trimStart('/')}"
+    val trimmed = downloadUrl.trim()
+    if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+        require(isSameOrigin(backendUrl, trimmed)) {
+            "Refusing cross-origin document URL: $trimmed"
+        }
+        return trimmed
+    }
+    return "${backendUrl.trimEnd('/')}/${trimmed.trimStart('/')}"
 }
+
+/** 判断两个 URL 是否同源（scheme、host、port 完全一致）；解析失败视为不同源。 */
+internal fun isSameOrigin(left: String, right: String): Boolean = runCatching {
+    val a = URL(left)
+    val b = URL(right)
+    a.protocol == b.protocol && a.host == b.host && a.port == b.port
+}.getOrDefault(false)

@@ -10,6 +10,7 @@ package org.hiylo.starburst.ui.screens.kb
 
 import android.content.Context
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -29,6 +30,7 @@ import org.hiylo.starburst.data.api.KbCollection
 import org.hiylo.starburst.data.api.KbDocument
 import org.hiylo.starburst.data.api.KbSearchResult
 import org.hiylo.starburst.data.repository.ServerRepository
+import java.io.ByteArrayOutputStream
 import javax.inject.Inject
 
 /** 知识库集合详情页的 UI 状态。 */
@@ -190,14 +192,40 @@ class KbCollectionDetailViewModel @Inject constructor(
     /** 读取 content Uri 的文本内容；非 content 协议、读取失败或超过大小上限返回 null。 */
     private fun readTextFile(uri: Uri): String? {
         if (uri.scheme != "content") return null
-        val bytes = try {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+        // 先查元数据大小预检，超大文件直接拒绝，避免全量读入内存。
+        if (contentSize(uri)?.let { it > KB_FILE_SIZE_LIMIT_BYTES } == true) return null
+        return try {
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                val output = ByteArrayOutputStream()
+                val buffer = ByteArray(8192)
+                var total = 0
+                while (true) {
+                    val read = input.read(buffer)
+                    if (read < 0) break
+                    total += read
+                    if (total > KB_FILE_SIZE_LIMIT_BYTES) return null
+                    output.write(buffer, 0, read)
+                }
+                String(output.toByteArray(), Charsets.UTF_8)
+            }
         } catch (e: Exception) {
             null
-        } ?: return null
-        if (bytes.size > KB_FILE_SIZE_LIMIT_BYTES) return null
-        return runCatching { String(bytes, Charsets.UTF_8) }.getOrNull()
+        }
     }
+
+    /** 查询 content Uri 的文件大小（字节）；无法获取时返回 null。 */
+    private fun contentSize(uri: Uri): Long? = runCatching {
+        val cursor = context.contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+            ?: return@runCatching null
+        cursor.use {
+            if (!it.moveToFirst()) {
+                null
+            } else {
+                val index = it.getColumnIndex(OpenableColumns.SIZE)
+                if (index >= 0 && !it.isNull(index)) it.getLong(index) else null
+            }
+        }
+    }.getOrNull()
 
     /** 更新搜索输入框内容。 */
     fun setQuery(text: String) {

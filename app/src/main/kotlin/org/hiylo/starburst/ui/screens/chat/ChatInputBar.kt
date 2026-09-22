@@ -67,7 +67,6 @@ import org.hiylo.starburst.data.api.CommandInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.filter
 import android.graphics.BitmapFactory
-import android.os.Build
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.CartoonInkIcon

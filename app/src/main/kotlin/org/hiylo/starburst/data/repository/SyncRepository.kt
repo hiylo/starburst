@@ -386,7 +386,7 @@ class SyncRepository @Inject constructor(
 
     suspend fun disconnect() = syncMutex.withLock {
         val documentUri = state.first().config.document.endpoint.takeIf(String::isNotBlank)?.let(Uri::parse)
-        secretStore.clearAll()
+        secretStore.clearSyncSecrets()
         dataStore.edit { preferences ->
             preferences.remove(PRIMARY_BACKEND)
             preferences.remove(AUTO_SYNC)

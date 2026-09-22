@@ -36,7 +36,16 @@ class LocalSyncSecretStore @Inject constructor(
         }.apply()
     }
 
+    /** 清空全部凭据（含 LLM/SFTP）；断开同步应改用 [clearSyncSecrets]，避免误删无关凭据。 */
     fun clearAll() = preferences.edit().clear().apply()
+
+    /** 仅清除同步相关凭据，保留 LLM_PROVIDER_API_KEY 与 SFTP_PASSWORD（LlmProvider/备份在用）。 */
+    fun clearSyncSecrets() {
+        put(SecretKey.GITHUB_TOKEN, null)
+        put(SecretKey.WEBDAV_PASSWORD, null)
+        put(SecretKey.SYNC_PASSPHRASE, null)
+        put(SecretKey.BACKEND_TOKEN, null)
+    }
 
     /** 用 Android Keystore AES-GCM 加密任意字符串（返回 iv+密文的 Base64）。供 [org.hiylo.starburst.data.repository.ServerRepository] 加密整个服务器列表。 */
     fun encrypt(value: String): String {

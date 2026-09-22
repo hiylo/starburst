@@ -36,7 +36,6 @@ import org.hiylo.starburst.data.repository.AlertHistoryEntry
 import org.hiylo.starburst.data.repository.AlertHistoryRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
-import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionStatus
 import org.hiylo.starburst.service.StarBurstConnectionService
 import org.hiylo.starburst.service.ServerConnectionMetrics
@@ -44,7 +43,6 @@ import org.hiylo.starburst.service.ServerConnectionStatus
 import org.hiylo.starburst.service.SshRunner
 import org.hiylo.starburst.ui.gate.BackendGate
 import org.hiylo.starburst.R
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -54,7 +52,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
 private const val TAG = "ServerManagementViewModel"
@@ -344,17 +341,26 @@ class ServerManagementViewModel @Inject constructor(
             val previous = _alertsUiState.value.snapshot?.alerts.orEmpty()
             val current = snapshot.alerts
             if (current != previous) {
+                val recent = alertHistoryRepository.latest(serverId, limit = 200)
+                val now = System.currentTimeMillis()
                 (current.keys + previous.keys).forEach { metric ->
                     val wasAlert = previous[metric] == true
                     val isAlert = current[metric] == true
                     if (wasAlert != isAlert) {
-                        alertHistoryRepository.record(
-                            serverId = serverId,
-                            metric = metric,
-                            value = metricValue(snapshot, metric),
-                            threshold = metricThreshold(snapshot, metric),
-                            state = if (isAlert) "alert" else "ok",
-                        )
+                        val state = if (isAlert) "alert" else "ok"
+                        // 去重：时间窗内同 metric + 同 state 已有记录（推送路径已落库）则跳过，避免双路重复。
+                        val duplicate = recent.any {
+                            it.metric == metric && it.state == state && now - it.timestamp < ALERT_DEDUP_WINDOW_MS
+                        }
+                        if (!duplicate) {
+                            alertHistoryRepository.record(
+                                serverId = serverId,
+                                metric = metric,
+                                value = metricValue(snapshot, metric),
+                                threshold = metricThreshold(snapshot, metric),
+                                state = state,
+                            )
+                        }
                     }
                 }
             }
@@ -567,5 +573,8 @@ class ServerManagementViewModel @Inject constructor(
 
         /** 硬件告警快照兜底轮询间隔（毫秒）；与后端采样间隔（60s）对齐，补偿 WS 丢帧。 */
         const val ALERT_POLL_INTERVAL_MS = 60_000L
+
+        /** 告警去重时间窗（毫秒）：窗内同 metric + 同 state 已有记录则跳过落库。 */
+        const val ALERT_DEDUP_WINDOW_MS = 5L * 60L * 1000L
     }
 }

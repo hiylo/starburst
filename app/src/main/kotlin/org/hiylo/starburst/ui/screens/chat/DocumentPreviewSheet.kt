@@ -26,6 +26,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import org.hiylo.starburst.data.api.isSameOrigin
 import org.hiylo.starburst.logging.AppLogger as Log
 
 private const val PREVIEW_TAG = "DocumentPreviewSheet"
@@ -61,6 +62,14 @@ internal fun DocumentPreviewSheet(
     var webView by remember { mutableStateOf<WebView?>(null) }
     var isLoading by remember { mutableStateOf(true) }
     var loadError by remember { mutableStateOf<String?>(null) }
+
+    // 弹层关闭时停止加载并销毁 WebView，避免后台继续拉取与内存泄漏（destroy 后不可再用）。
+    DisposableEffect(Unit) {
+        onDispose {
+            webView?.stopLoading()
+            webView?.destroy()
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -117,8 +126,6 @@ internal fun DocumentPreviewSheet(
                                 settings.apply {
                                     javaScriptEnabled = true
                                     domStorageEnabled = true
-                                    databaseEnabled = true
-                                    allowContentAccess = true
                                     allowFileAccess = false
                                     mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                                     useWideViewPort = true
@@ -153,7 +160,7 @@ internal fun DocumentPreviewSheet(
                                         request: WebResourceRequest?,
                                     ): Boolean {
                                         val requestUrl = request?.url?.toString() ?: return false
-                                        if (requestUrl.startsWith(backendUrl)) return false
+                                        if (isSameOrigin(requestUrl, backendUrl)) return false
                                         runCatching {
                                             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(requestUrl)))
                                         }
