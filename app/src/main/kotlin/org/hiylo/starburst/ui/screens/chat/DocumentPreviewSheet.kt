@@ -14,9 +14,14 @@ import android.content.Intent
 import android.net.Uri
 import android.view.ViewGroup
 import android.webkit.WebResourceRequest
+import android.webkit.JavascriptInterface
 import android.webkit.WebResourceError
+import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import java.util.concurrent.TimeUnit
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -30,6 +35,17 @@ import org.hiylo.starburst.data.api.isSameOrigin
 import org.hiylo.starburst.logging.AppLogger as Log
 
 private const val PREVIEW_TAG = "DocumentPreviewSheet"
+
+/**
+ * 注入到预览页的脚本：在捕获阶段接管页内「← 关闭」「下载」两个按钮（后端按钮在 App
+ * WebView 内分别走 history.back()/`<a download>`，均不可用），改为调用 Android bridge。
+ */
+private const val BRIDGE_INJECT_JS =
+    "document.addEventListener('click',function(e){" +
+        "var t=e.target&&e.target.closest?e.target.closest('#btn-back,#btn-dl'):null;" +
+        "if(!t)return;e.preventDefault();e.stopImmediatePropagation();" +
+        "if(t.id==='btn-back'){window.AndroidPreview.close()}" +
+        "else{window.AndroidPreview.download(t.getAttribute('href')||'')}},true);"
 
 /**
  * 组装后端文档预览页地址：`{backendUrl}/doc/preview.html?src=<urlencoded 文件URL>`。
@@ -47,6 +63,8 @@ internal fun documentPreviewUrl(backendUrl: String, fileUrl: String): String =
  * @param backendUrl 后端地址（如 http://192.0.2.150:18090）
  * @param fileUrl 待预览文件的完整下载地址（如 http://192.0.2.150:18090/api/documents/5/download）
  * @param onDismiss 关闭回调
+ * @param token 后端 Bearer token（预览页主文档与内部 fetch 经 shouldInterceptRequest 注入鉴权头）
+ * @param onDownload 页内「下载」按钮回调（url 为文件完整下载地址；为 null 时按钮静默关闭，不跳转）
  *
  * @author Hsi Chu
  * @since 3.1.0
@@ -57,7 +75,15 @@ internal fun DocumentPreviewSheet(
     backendUrl: String,
     fileUrl: String,
     onDismiss: () -> Unit,
+    token: String,
+    onDownload: ((url: String) -> Unit)? = null,
 ) {
+    val previewClient = remember {
+        OkHttpClient.Builder()
+            .connectTimeout(15, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .build()
+    }
     val previewUrl = remember(backendUrl, fileUrl) { documentPreviewUrl(backendUrl, fileUrl) }
     var webView by remember { mutableStateOf<WebView?>(null) }
     var isLoading by remember { mutableStateOf(true) }
@@ -135,12 +161,37 @@ internal fun DocumentPreviewSheet(
                                     displayZoomControls = false
                                 }
                                 webViewClient = object : WebViewClient() {
+                                    override fun shouldInterceptRequest(
+                                        view: WebView?,
+                                        request: WebResourceRequest?,
+                                    ): WebResourceResponse? {
+                                        val url = request?.url?.toString() ?: return null
+                                        if (token.isBlank() || !isSameOrigin(url, backendUrl)) return null
+                                        return runCatching {
+                                            val response = previewClient.newCall(
+                                                Request.Builder()
+                                                    .url(url)
+                                                    .header("Authorization", "Bearer $token")
+                                                    .build()
+                                            ).execute()
+                                            val body = response.body ?: return null
+                                            val mediaType = body.contentType()
+                                            val mime = mediaType?.let { "${it.type}/${it.subtype}" } ?: "application/octet-stream"
+                                            WebResourceResponse(
+                                                mime,
+                                                "UTF-8",
+                                                body.byteStream(),
+                                            )
+                                        }.getOrNull()
+                                    }
+
                                     override fun onPageStarted(view: WebView?, url: String?, favicon: android.graphics.Bitmap?) {
                                         isLoading = true
                                     }
 
                                     override fun onPageFinished(view: WebView?, url: String?) {
                                         isLoading = false
+                                        view?.evaluateJavascript(BRIDGE_INJECT_JS, null)
                                     }
 
                                     override fun onReceivedError(
@@ -167,6 +218,21 @@ internal fun DocumentPreviewSheet(
                                         return true
                                     }
                                 }
+                                // 页内「关闭/下载」按钮 bridge：接管后端按钮的无效行为。
+                                addJavascriptInterface(
+                                    object {
+                                        @JavascriptInterface
+                                        fun close() {
+                                            webView?.post { onDismiss() }
+                                        }
+
+                                        @JavascriptInterface
+                                        fun download(url: String) {
+                                            webView?.post { onDownload?.invoke(url) }
+                                        }
+                                    },
+                                    "AndroidPreview",
+                                )
                                 loadUrl(previewUrl)
                             }
                             Log.d(PREVIEW_TAG, "Preview WebView loaded: $previewUrl")

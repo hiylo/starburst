@@ -3,6 +3,7 @@
     <!-- 文档生成（3.1.0） -->
     <string name="document_generate">生成文档</string>
     <string name="document_generate_title">生成文档</string>
+    <string name="document_generate_subtitle">选择类型并描述要生成的内容</string>
     <string name="document_generate_type_label">类型</string>
     <string name="document_generate_prompt_label">内容</string>
     <string name="document_generate_prompt_hint">描述文档需要包含的内容</string>

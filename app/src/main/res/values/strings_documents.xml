@@ -3,6 +3,7 @@
     <!-- Document generation (3.1.0) -->
     <string name="document_generate">Generate document</string>
     <string name="document_generate_title">Generate document</string>
+    <string name="document_generate_subtitle">Choose a type and describe the content</string>
     <string name="document_generate_type_label">Type</string>
     <string name="document_generate_prompt_label">Content</string>
     <string name="document_generate_prompt_hint">Describe what the document should contain</string>

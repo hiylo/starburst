@@ -9,10 +9,22 @@
  */
 package org.hiylo.starburst.ui.screens.chat
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +45,13 @@ internal val documentTypeOptions = listOf(
 /** 把后端 docType（pptx/docx/xlsx）映射为界面展示名，未识别时原样返回。 */
 internal fun documentTypeDisplay(type: String): String =
     documentTypeOptions.firstOrNull { it.type == type }?.label ?: type
+
+/** 各文档类型的展示图标：PPT / Word / Excel。 */
+private fun documentTypeIcon(type: String): ImageVector = when (type) {
+    "pptx" -> Icons.Default.Slideshow
+    "docx" -> Icons.Default.Article
+    else -> Icons.Default.TableChart
+}
 
 /**
  * 「生成文档」对话框：类型选择（PPT/Word/Excel）+ 内容描述，点击生成。
@@ -56,10 +75,33 @@ internal fun DocumentGenerateDialog(
     var prompt by remember { mutableStateOf(initialPrompt) }
 
     ChatDialog(onDismiss = onDismiss) {
-        Text(
-            text = stringResource(R.string.document_generate_title),
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(42.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Default.Description,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column {
+                Text(
+                    text = stringResource(R.string.document_generate_title),
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                )
+                Text(
+                    text = stringResource(R.string.document_generate_subtitle),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
 
         Text(
@@ -69,12 +111,41 @@ internal fun DocumentGenerateDialog(
         Spacer(Modifier.height(8.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             documentTypeOptions.forEach { option ->
-                FilterChip(
-                    selected = selectedType == option.type,
-                    onClick = { selectedType = option.type },
-                    label = { Text(option.label) },
-                    enabled = !isGenerating,
-                )
+                val selected = selectedType == option.type
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (selected) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        )
+                        .border(
+                            width = if (selected) 1.5.dp else 1.dp,
+                            color = if (selected) MaterialTheme.colorScheme.primary
+                            else MaterialTheme.colorScheme.outlineVariant,
+                            shape = RoundedCornerShape(12.dp),
+                        )
+                        .clickable(enabled = !isGenerating) { selectedType = option.type }
+                        .padding(vertical = 14.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Icon(
+                        documentTypeIcon(option.type),
+                        contentDescription = option.label,
+                        tint = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(28.dp),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        text = option.label,
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                        color = if (selected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurface,
+                    )
+                }
             }
         }
 

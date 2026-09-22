@@ -119,6 +119,7 @@ internal fun ChatScreenMessageBody(
     val isGeneratingDocument by viewModel.isGeneratingDocument.collectAsState()
     val isRevisingDocument by viewModel.isRevisingDocument.collectAsState()
     val documentBackendUrl by viewModel.documentBackendUrl.collectAsState()
+    val documentBackendToken by viewModel._documentBackendToken.collectAsState()
     var previewDocument by remember { mutableStateOf<GeneratedDocument?>(null) }
     var reviseDocument by remember { mutableStateOf<GeneratedDocument?>(null) }
     var downloadingDocId by remember { mutableStateOf<Long?>(null) }
@@ -655,6 +656,8 @@ internal fun ChatScreenMessageBody(
                 backendUrl = documentBackendUrl,
                 fileUrl = resolveDocumentUrl(documentBackendUrl, document.downloadUrl),
                 onDismiss = { previewDocument = null },
+                token = documentBackendToken,
+                onDownload = { requestDownloadDocument(document) },
             )
         }
     }
