@@ -1,8 +1,8 @@
 {
-  "versionName": "2.0.0",
-  "versionCode": 7,
-  "releaseUrl": "https://github.com/hiylo/starburst/releases/tag/v2.0.0",
+  "versionName": "3.0.0",
+  "versionCode": 8,
+  "releaseUrl": "https://github.com/hiylo/starburst/releases/tag/v3.0.0",
   "packageName": "org.hiylo.starburst",
-  "apkUrl": "https://github.com/hiylo/starburst/releases/download/v2.0.0/starburst-2.0.0.apk",
-  "sha256": "b32e7c005730dab1e6d53cb47b0056ff38bd6ca15d4e86c00e93ee2a36507b76"
+  "apkUrl": "https://github.com/hiylo/starburst/releases/download/v3.0.0/app-release-v3.0.0.apk",
+  "sha256": "9c99e4ecca34c2eb1f11647f21d6bb62513d562dae6a1959ee0a4b0e08b145e9"
 }

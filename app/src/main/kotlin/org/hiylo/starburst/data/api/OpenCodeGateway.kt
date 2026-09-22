@@ -51,8 +51,8 @@ object OpenCodeGateway {
     const val BACKEND_API_PREFIX = "/api/opencode"
 
     /**
-     * App 要求的最低 starburst-backend 版本（镜像 ServerSettingsViewModel 顶层的
-     * `REQUIRED_BACKEND_VERSION`，低于该版本时后端可能缺 /api/opencode 端点）。
+     * App 要求的最低 starburst-backend 版本（后端/镜像能力的最低下限，
+     * 与该镜像接口自身的可用性判定一致；整体功能门槛使用 `BackendGate.MIN_BACKEND_VERSION`）。
      */
     const val BACKEND_MIN_VERSION = "1.0.0"
 

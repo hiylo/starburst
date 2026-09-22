@@ -27,7 +27,7 @@ data class BackendProbeResult(
 /**
  * starburst-backend 可用性门控的统一判定。
  *
- * 「后端正常可用」= 健康探测通过（/api/health OK）且后端自身版本不低于 [REQUIRED_BACKEND_VERSION]。
+ * 「后端正常可用」= 健康探测通过（/api/health OK）且后端自身版本不低于 [MIN_BACKEND_VERSION]。
  * 各页面统一复用本文件的判定与探测逻辑，避免重复实现版本比较与地址推导。
  *
  * @author Hsi Chu
@@ -35,8 +35,11 @@ data class BackendProbeResult(
  */
 object BackendGate {
 
-    /** App 要求的最低的 starburst-backend 版本。低于该版本时视为后端状态异常（需要升级）。 */
-    const val REQUIRED_BACKEND_VERSION: String = "2.0.1"
+    /** App 要求的最低 starburst-backend 版本，低于该版本时视为后端状态异常（需要升级）。 */
+    const val MIN_BACKEND_VERSION: String = "2.1.0"
+
+    /** 一键安装 starburst-backend 时钉死的目标版本（install.sh + 二进制版本）。可高于 [MIN_BACKEND_VERSION]。 */
+    const val INSTALL_BACKEND_VERSION: String = "2.1.0"
 
     /**
      * 后端是否「正常可用」（健康且版本达标）。后端相关功能入口的显隐统一使用该判定。
@@ -49,13 +52,13 @@ object BackendGate {
         available == true && !needsUpgrade(version)
 
     /**
-     * 后端版本是否需要升级（低于 [REQUIRED_BACKEND_VERSION]）。
+     * 后端版本是否需要升级（低于 [MIN_BACKEND_VERSION]）。
      * 版本未知（null/空）时视为无需升级，由 [isReady] 的 available 条件兜底。
      */
     fun needsUpgrade(version: String?): Boolean {
         val v = version?.trim().orEmpty()
         if (v.isEmpty()) return false
-        return compareVersions(v, REQUIRED_BACKEND_VERSION) < 0
+        return compareVersions(v, MIN_BACKEND_VERSION) < 0
     }
 
     /**

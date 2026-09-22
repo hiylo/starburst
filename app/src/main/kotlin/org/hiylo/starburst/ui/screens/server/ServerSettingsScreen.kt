@@ -596,7 +596,7 @@ private fun BackendStatusCard(
                                     text = stringResource(
                                         R.string.backend_needs_upgrade_desc,
                                         backendVersion.orEmpty(),
-                                        BackendGate.REQUIRED_BACKEND_VERSION,
+                                        BackendGate.MIN_BACKEND_VERSION,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),

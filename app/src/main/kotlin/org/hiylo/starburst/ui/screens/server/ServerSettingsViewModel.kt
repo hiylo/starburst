@@ -254,12 +254,12 @@ class ServerSettingsViewModel @Inject constructor(
                 // 随机生成一次性后端 APP token，安装后持久化到服务器配置，替换默认 token ocb_default。
                 val token = randomBackendToken()
                 val scriptUrl =
-                    "https://raw.githubusercontent.com/hiylo/starburst-backend/v${BackendGate.REQUIRED_BACKEND_VERSION}/scripts/install.sh"
+                    "https://raw.githubusercontent.com/hiylo/starburst-backend/v${BackendGate.INSTALL_BACKEND_VERSION}/scripts/install.sh"
                 // 远端以 sudo 执行安装脚本（install.sh 内部需要 root 写 /usr/local/bin、systemd）。
                 // sudo 需可免密（或 SSH 用户本身是 root），否则会返回提示后失败。
                 // token 经环境变量注入，避免出现在远端进程参数与 shell history；--version 让脚本下载的二进制也钉死在同一版本。
                 val command =
-                    "curl -fsSL $scriptUrl | sudo env STARBURST_DEFAULT_TOKEN=$token bash -- --port 18880 --version ${BackendGate.REQUIRED_BACKEND_VERSION}"
+                    "curl -fsSL $scriptUrl | sudo env STARBURST_DEFAULT_TOKEN=$token bash -- --port 18880 --version ${BackendGate.INSTALL_BACKEND_VERSION}"
                 val output = SshRunner.runCommand(server, command, timeoutMs = 300_000)
                 // 持久化随机 token，使后续后端连接使用同一 token（而非默认 ocb_default）。
                 val updatedServer = server.copy(backendToken = token)
