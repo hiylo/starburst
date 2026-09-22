@@ -49,9 +49,11 @@ internal fun DocumentGenerateDialog(
     isGenerating: Boolean,
     onGenerate: (type: String, prompt: String) -> Unit,
     onDismiss: () -> Unit,
+    initialType: String? = null,
+    initialPrompt: String = "",
 ) {
-    var selectedType by remember { mutableStateOf(documentTypeOptions.first().type) }
-    var prompt by remember { mutableStateOf("") }
+    var selectedType by remember { mutableStateOf(initialType ?: documentTypeOptions.first().type) }
+    var prompt by remember { mutableStateOf(initialPrompt) }
 
     ChatDialog(onDismiss = onDismiss) {
         Text(

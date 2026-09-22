@@ -95,6 +95,8 @@ internal fun ChatScreenMessageBody(
     hasUnreadMessagesState: MutableState<Boolean>,
     isAtBottom: Boolean,
     showDocumentGenerateDialogState: MutableState<Boolean>,
+    documentGenerateInitialType: String? = null,
+    documentGenerateInitialPrompt: String = "",
     pendingInteractions: List<PendingInteraction>,
     isBusy: Boolean,
     onNavigateToChildSession: (String) -> Unit,
@@ -628,6 +630,8 @@ internal fun ChatScreenMessageBody(
                     }
                 },
                 onDismiss = { showGenerateDocumentDialog = false },
+                initialType = documentGenerateInitialType,
+                initialPrompt = documentGenerateInitialPrompt,
             )
         }
 

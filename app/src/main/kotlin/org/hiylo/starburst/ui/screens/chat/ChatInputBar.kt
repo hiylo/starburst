@@ -86,6 +86,31 @@ private val placeholderHintResIds = listOf(
     R.string.chat_hint_help,
 )
 
+/** 对话式文档生成意图：[type] 为后端 docType（pptx/docx/xlsx），[prompt] 为原始描述文本。 */
+internal data class DocumentIntent(val type: String, val prompt: String)
+
+/**
+ * 从输入文本识别「生成文档」意图：需**同时**命中「生成动作词」与「文档类型词」才触发，
+ * 避免误伤普通消息（如「生成一段代码」不含类型词 → 不触发）。命中返回 [DocumentIntent]，
+ * 否则返回 null，由调用方按普通消息发送。
+ */
+internal fun detectDocumentIntent(text: String): DocumentIntent? {
+    val trimmed = text.trim()
+    if (trimmed.isEmpty()) return null
+    val actionRegex = Regex(
+        "生成|制作|创建|写一份|写个|做个|做一个|来个|出个|帮我做|generate|create|make",
+        RegexOption.IGNORE_CASE,
+    )
+    if (!actionRegex.containsMatchIn(trimmed)) return null
+    val type = when {
+        Regex("ppt|幻灯片|演示文稿|powerpoint", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "pptx"
+        Regex("excel|电子表格|表格|xlsx", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "xlsx"
+        Regex("word|文档|docx|document|报告|周报|月报", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "docx"
+        else -> return null
+    }
+    return DocumentIntent(type, trimmed)
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatInputBar(
@@ -101,6 +126,7 @@ internal fun ChatInputBar(
     onAttach: () -> Unit = {},
     onTemplateClick: () -> Unit = {},
     onDocumentGenerateClick: () -> Unit = {},
+    onDocumentIntentDetected: (type: String, prompt: String) -> Unit = { _, _ -> },
     isListening: Boolean = false,
     voiceLevel: Float = 0f,
     onMicPress: () -> Unit = {},
@@ -1006,7 +1032,14 @@ internal fun ChatInputBar(
                         .combinedClickable(
                             onClick = {
                                 when (action) {
-                                    ComposerAction.SEND -> onSend()
+                                    ComposerAction.SEND -> {
+                                        val intent = detectDocumentIntent(textFieldValue.text)
+                                        if (intent != null) {
+                                            onDocumentIntentDetected(intent.type, intent.prompt)
+                                        } else {
+                                            onSend()
+                                        }
+                                    }
                                     ComposerAction.STOP -> onStop()
                                     ComposerAction.DISABLED -> Unit
                                 }
