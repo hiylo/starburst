@@ -38,9 +38,10 @@ class ComposerActionTest {
     }
 
     @Test
-    fun activeRequestDisablesButton() {
+    fun sendingWhileBusyWithNoDraftShowsStop() {
+        // STOP 优先：会话进入 Busy 即可中止（无论是否在发送中），避免整个生成期间无法打断。
         assertEquals(
-            ComposerAction.DISABLED,
+            ComposerAction.STOP,
             composerAction(isBusy = true, isSending = true, hasDraft = false, isShellMode = false),
         )
     }
