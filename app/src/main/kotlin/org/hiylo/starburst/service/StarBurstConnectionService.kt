@@ -477,6 +477,7 @@ class StarBurstConnectionService : Service() {
 
     override fun onDestroy() {
         serverConnectionStateRepository.updateConnectedServerIds(emptySet())
+        serverConnectionStateRepository.updateResolvedDirectConnections(emptyMap())
         unregisterReceiver(wakeReceiver)
         connectivityManager.unregisterNetworkCallback(networkCallback)
         super.onDestroy()
@@ -584,6 +585,17 @@ class StarBurstConnectionService : Service() {
             return
         }
         state.sseJob.start()
+        publishResolvedConnections()
+    }
+
+    /**
+     * 把每台服务器解析后的「直连 opencode」连接发布到 [ServerConnectionStateRepository]，
+     * 供 Git 页 / 终端等 shell 消费者复用（SSH 隧道模式下是 `127.0.0.1:localPort`，
+     * 手机蜂窝/VPN 下才连得上）。任何时候连接状态变化后都应调用一次以保持同步。
+     */
+    internal fun publishResolvedConnections() {
+        val resolved = connections.mapValues { (_, state) -> state.directConn ?: state.conn }
+        serverConnectionStateRepository.updateResolvedDirectConnections(resolved)
     }
 
     /**
@@ -608,6 +620,8 @@ class StarBurstConnectionService : Service() {
         clearServerMetrics(serverId)
 
         eventReducer.clearForServer(serverId)
+
+        publishResolvedConnections()
 
         if (connections.isEmpty()) {
             stopServiceIfIdle()
@@ -676,6 +690,7 @@ class StarBurstConnectionService : Service() {
             eventReducer.clearForServer(serverId)
         }
 
+        publishResolvedConnections()
         releaseWakeLock()
 
         if (stopService) {
@@ -817,6 +832,7 @@ class StarBurstConnectionService : Service() {
         )
         oldState.pushJob?.cancel()
         closeSshSession(oldSsh)
+        publishResolvedConnections()
     }
 
     // ============ WakeLock ============
@@ -1019,6 +1035,7 @@ class StarBurstConnectionService : Service() {
             job.start()
             updatePersistentNotification()
         }
+        publishResolvedConnections()
     }
 
     /** 强制重建某个 server 的 SSE 连接（用于假死恢复）。 */

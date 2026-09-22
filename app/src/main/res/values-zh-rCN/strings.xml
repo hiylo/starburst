@@ -6,6 +6,7 @@
     <string name="home_add_server">添加服务器</string>
     <string name="home_no_servers">未配置服务器</string>
     <string name="home_server_health_good">已连接</string>
+    <string name="home_not_connected">未连接</string>
     <!-- Server Management -->
     <string name="server_username">用户名</string>
     <string name="server_username_hint">opencode</string>
@@ -370,6 +371,12 @@
     <string name="notification_group_summary">StarBurst 通知</string>
     <string name="notification_export_progress">会话导出进度</string>
     <string name="notify_intel_run_body">%1$s · 进度 %2$s</string>
+    <string name="notify_intel_gate_blocked">测试门禁阻断</string>
+    <string name="notify_intel_gate_blocked_body">%1$s · 缺失：%2$s</string>
+    <string name="notify_intel_fix_suggested">新的修复建议</string>
+    <string name="notify_intel_fix_applied">修复已应用</string>
+    <string name="notify_intel_chat_answer">功能点问答已完成</string>
+    <string name="notify_intel_env_ready">项目环境已就绪</string>
     <string name="notify_alert_hardware">服务器资源告警</string>
     <string name="notify_alert_hardware_threshold">%1$s %2$s 超过阈值 %3$s</string>
     <string name="notify_audit_finding">安全/合规审计发现</string>
@@ -480,6 +487,10 @@
     <string name="settings_compress_images_max_side_keep_original">保持原始分辨率</string>
     <string name="chat_send_shell">发送 Shell 命令</string>
     <string name="chat_shell_mode_hold_send_hint">Shell 模式已激活。长按发送可切换回原模式。</string>
+    <string name="chat_voice_hold_to_talk">按住说话，松手上屏，上滑取消</string>
+    <string name="chat_voice_switch_to_text">切换到文本输入</string>
+    <string name="chat_voice_release_to_send">松开 发送</string>
+    <string name="chat_voice_slide_up_cancel">上滑 取消</string>
     <string name="menu_review_changes">执行代码审查</string>
     <string name="pending_request_position">%1$d / %2$d</string>
     <string name="permission_always_confirm_title">始终允许此权限？</string>
@@ -975,6 +986,8 @@
     <string name="server_settings_tokens_desc">管理此后端的访问令牌</string>
     <string name="server_settings_audit">审计日志</string>
     <string name="server_settings_audit_desc">最近的鉴权 API 操作记录</string>
+    <string name="server_settings_test_intel_desc">运行代码分析、单测并查看问题</string>
+    <string name="server_settings_kb_desc">管理用于 RAG 检索的文档集合</string>
     <string name="server_rules_title">自动化规则</string>
     <string name="server_rules_empty">暂无规则</string>
     <string name="server_rules_add">新建规则</string>
@@ -1080,6 +1093,7 @@
     <string name="test_intel_run_status_failed">已失败</string>
     <string name="test_intel_run_results">用例结果</string>
     <string name="test_intel_run_results_failed">结果加载失败</string>
+    <string name="test_intel_run_results_retry">加载失败，点击重试</string>
     <string name="test_intel_run_no_results">该次运行无结果</string>
     <string name="test_intel_result_passed">通过</string>
     <string name="test_intel_result_failed">失败</string>
@@ -1223,4 +1237,5 @@
     <string name="kb_search_failed">搜索失败</string>
     <string name="kb_score">得分 %1$.2f</string>
     <string name="kb_search_source_unknown">文档</string>
+    <string name="chat_rag_context_attached">已带入知识库资料（%1$d 条）</string>
 </resources>

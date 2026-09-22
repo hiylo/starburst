@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.ui.theme.StatusError
@@ -131,7 +132,9 @@ internal fun TestIntelSectionCard(content: @Composable ColumnScope.() -> Unit) {
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .cartoonChrome(AppCardShape),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -149,7 +152,7 @@ internal fun StatusBadge(
     modifier: Modifier = Modifier,
 ) {
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(50),
         color = color.copy(alpha = 0.14f),
         modifier = modifier,
     ) {

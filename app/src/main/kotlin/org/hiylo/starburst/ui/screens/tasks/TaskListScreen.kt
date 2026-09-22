@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.HourglassEmpty
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Lock
@@ -91,6 +92,10 @@ import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusError
+import org.hiylo.starburst.ui.theme.StatusProcessing
+import org.hiylo.starburst.ui.theme.StatusWarning
 
 private data class TaskStatusStyle(
     val label: String,
@@ -100,7 +105,6 @@ private data class TaskStatusStyle(
 
 @Composable
 private fun taskStatusStyle(status: BackendTaskStatus): TaskStatusStyle {
-    val amoled = isAmoledTheme()
     return when (status) {
         BackendTaskStatus.Queued -> TaskStatusStyle(
             stringResource(R.string.task_status_queued), MaterialTheme.colorScheme.onSurfaceVariant, Icons.Default.Schedule,
@@ -110,7 +114,7 @@ private fun taskStatusStyle(status: BackendTaskStatus): TaskStatusStyle {
         )
         BackendTaskStatus.Succeeded -> TaskStatusStyle(
             stringResource(R.string.task_status_succeeded),
-            if (amoled) Color(0xFF4CAF50) else Color(0xFF2E7D32), Icons.Default.CheckCircle,
+            StatusConnected, Icons.Default.CheckCircle,
         )
         BackendTaskStatus.Failed -> TaskStatusStyle(
             stringResource(R.string.task_status_failed), MaterialTheme.colorScheme.error, Icons.Default.Error,
@@ -119,16 +123,16 @@ private fun taskStatusStyle(status: BackendTaskStatus): TaskStatusStyle {
             stringResource(R.string.task_status_canceled), MaterialTheme.colorScheme.onSurfaceVariant, Icons.Default.Cancel,
         )
         BackendTaskStatus.Retrying -> TaskStatusStyle(
-            stringResource(R.string.task_status_retrying), Color(0xFFF57C00), Icons.Default.Refresh,
+            stringResource(R.string.task_status_retrying), StatusWarning, Icons.Default.Refresh,
         )
         BackendTaskStatus.Pending -> TaskStatusStyle(
             stringResource(R.string.task_status_pending), MaterialTheme.colorScheme.onSurfaceVariant, Icons.Default.HourglassEmpty,
         )
         BackendTaskStatus.Blocked -> TaskStatusStyle(
-            stringResource(R.string.task_status_blocked), Color(0xFFD32F2F), Icons.Default.Lock,
+            stringResource(R.string.task_status_blocked), StatusError, Icons.Default.Lock,
         )
         BackendTaskStatus.Scheduled -> TaskStatusStyle(
-            stringResource(R.string.task_status_scheduled), Color(0xFF1976D2), Icons.Default.Schedule,
+            stringResource(R.string.task_status_scheduled), StatusProcessing, Icons.Default.EventNote,
         )
     }
 }
@@ -534,8 +538,8 @@ private fun TaskStatsCard(tasks: BackendTaskStats) {
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
-                StatCell(stringResource(R.string.tasks_stat_succeeded), tasks.succeeded, MaterialTheme.colorScheme.primary)
-                StatCell(stringResource(R.string.tasks_stat_running), tasks.running, Color(0xFF0288D1))
+                StatCell(stringResource(R.string.tasks_stat_succeeded), tasks.succeeded, StatusConnected)
+                StatCell(stringResource(R.string.tasks_stat_running), tasks.running, StatusProcessing)
                 StatCell(stringResource(R.string.tasks_stat_failed), tasks.failed, MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(8.dp))
@@ -544,8 +548,8 @@ private fun TaskStatsCard(tasks: BackendTaskStats) {
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 StatCell(stringResource(R.string.tasks_stat_queued), tasks.queued, MaterialTheme.colorScheme.onSurfaceVariant)
-                StatCell(stringResource(R.string.tasks_stat_pending), tasks.pending, Color(0xFFF9A825))
-                StatCell(stringResource(R.string.tasks_stat_blocked), tasks.blocked, Color(0xFF8D6E63))
+                StatCell(stringResource(R.string.tasks_stat_pending), tasks.pending, StatusWarning)
+                StatCell(stringResource(R.string.tasks_stat_blocked), tasks.blocked, StatusError)
             }
             Spacer(Modifier.height(8.dp))
             Row(
@@ -553,7 +557,7 @@ private fun TaskStatsCard(tasks: BackendTaskStats) {
                 horizontalArrangement = Arrangement.SpaceEvenly,
             ) {
                 StatCell(stringResource(R.string.tasks_stat_canceled), tasks.canceled, MaterialTheme.colorScheme.onSurfaceVariant)
-                StatCell(stringResource(R.string.tasks_stat_retried), tasks.retried, Color(0xFF7B1FA2))
+                StatCell(stringResource(R.string.tasks_stat_retried), tasks.retried, MaterialTheme.colorScheme.secondary)
             }
         }
     }
@@ -757,7 +761,7 @@ private fun TaskCard(
                 Text(
                     text = if (recurring) stringResource(R.string.task_status_recurring) else style.label,
                     style = MaterialTheme.typography.labelMedium,
-                    color = if (recurring) Color(0xFF00897B) else style.color,
+                    color = if (recurring) MaterialTheme.colorScheme.tertiary else style.color,
                     fontWeight = FontWeight.SemiBold,
                 )
                 Spacer(Modifier.width(8.dp))

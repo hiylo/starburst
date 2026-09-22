@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -31,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.role
@@ -52,9 +52,11 @@ import org.hiylo.starburst.ui.theme.isCartoonStyle
 
 @Composable
 internal fun toolOutputContainerColor(isAmoled: Boolean): Color {
+    // 判定跟随应用主题（而非系统主题）：Dim/AMOLED 等自定义方案不会把「深色用户*/面板」渲染错层。
+    val isDark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     return when {
         isAmoled -> Color.Black
-        isSystemInDarkTheme() -> MaterialTheme.colorScheme.secondaryContainer
+        isDark -> MaterialTheme.colorScheme.secondaryContainer
         else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.82f)
     }
 }
@@ -161,7 +163,7 @@ internal fun ChatMessageBubble(
     } else if (isUser) {
         MaterialTheme.colorScheme.primaryContainer
     } else {
-        MaterialTheme.colorScheme.surfaceVariant
+        MaterialTheme.colorScheme.surfaceContainer
     }
     val textColor = if (isAmoled) {
         MaterialTheme.colorScheme.onSurface
@@ -740,11 +742,20 @@ private fun PartContent(
         is Part.Text -> {
             // Hide synthetic/ignored text parts (internal system content)
             if (part.text.isNotBlank() && part.synthetic != true && part.ignored != true) {
-                MarkdownContent(
-                    markdown = part.text,
-                    textColor = textColor,
-                    isUser = isUser
-                )
+                if (isRagContextBlock(part.text)) {
+                    // 后端注入的 RAG 上下文：折叠为紧凑纸条，点击展开原文。
+                    RagContextChip(
+                        text = part.text,
+                        textColor = textColor,
+                        isUser = isUser,
+                    )
+                } else {
+                    MarkdownContent(
+                        markdown = part.text,
+                        textColor = textColor,
+                        isUser = isUser
+                    )
+                }
             }
         }
         is Part.Reasoning -> {

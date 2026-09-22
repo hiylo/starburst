@@ -89,6 +89,7 @@ fun TestIntelProjectScreen(
     val issues by viewModel.issues.collectAsState()
     val fixes by viewModel.fixes.collectAsState()
     val runResults by viewModel.runResults.collectAsState()
+    val runResultsFailed by viewModel.runResultsFailed.collectAsState()
     val startingRun by viewModel.startingRun.collectAsState()
     val featureChat by viewModel.featureChat.collectAsState()
     val oneShot by viewModel.oneShot.collectAsState(null)
@@ -147,6 +148,7 @@ fun TestIntelProjectScreen(
             TestsSection(
                 state = runs,
                 runResults = runResults,
+                runResultsFailed = runResultsFailed,
                 startingRun = startingRun,
                 onStartRun = viewModel::startRun,
                 onRefresh = viewModel::refreshRuns,
@@ -329,6 +331,7 @@ private fun IntelFeature.sourceLabel(): String = when (source.lowercase()) {
 private fun TestsSection(
     state: ProjectBlockState<IntelTestRun>,
     runResults: Map<Long, List<IntelTestResult>>,
+    runResultsFailed: Set<Long>,
     startingRun: Boolean,
     onStartRun: () -> Unit,
     onRefresh: () -> Unit,
@@ -374,6 +377,7 @@ private fun TestsSection(
                         run = run,
                         results = runResults[run.id].orEmpty(),
                         resultsLoaded = runResults.containsKey(run.id),
+                        resultsFailed = run.id in runResultsFailed,
                         onLoadResults = { onLoadResults(run.id) },
                     )
                 }
@@ -387,6 +391,7 @@ private fun TestRunItem(
     run: IntelTestRun,
     results: List<IntelTestResult>,
     resultsLoaded: Boolean,
+    resultsFailed: Boolean,
     onLoadResults: () -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -434,33 +439,58 @@ private fun TestRunItem(
             }
             if (expanded) {
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                if (!resultsLoaded) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                when {
+                    resultsFailed -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(onClick = onLoadResults),
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(14.dp),
+                                tint = MaterialTheme.colorScheme.error,
+                            )
+                            Text(
+                                text = stringResource(R.string.test_intel_run_results_retry),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                    !resultsLoaded -> {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            Text(
+                                text = stringResource(R.string.test_intel_loading),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    results.isEmpty() -> {
                         Text(
-                            text = stringResource(R.string.test_intel_loading),
+                            text = stringResource(R.string.test_intel_run_no_results),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
-                } else if (results.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.test_intel_run_no_results),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            text = stringResource(R.string.test_intel_run_results),
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        results.forEach { result ->
-                            TestResultRow(result)
+                    else -> {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = stringResource(R.string.test_intel_run_results),
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            results.forEach { result ->
+                                TestResultRow(result)
+                            }
                         }
                     }
                 }

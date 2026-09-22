@@ -16,6 +16,9 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import org.hiylo.starburst.data.api.HardwareAlertEvent
 import org.hiylo.starburst.data.api.IntelTestRun
 
@@ -93,6 +96,23 @@ data class TaskParsedEvent(
     val status: String,
     val reason: String? = null,
 ) : IntelParsedEvent
+
+/**
+ * 全局 Intel 测试运行事件总线：推送层 [org.hiylo.starburst.service.StarBurstConnectionServiceGatewayExt.handleIntelPushEvent]
+ * 把 `intel.run.event` 快照发布进来，项目详情页 [org.hiylo.starburst.ui.screens.testintel.TestIntelProjectViewModel]
+ * 订阅后按 projectId 实时更新 run 列表（发起/运行中/终态均即时反映，无需手动刷新）。
+ *
+ * 缓冲满时丢弃而非挂起——推送层是网络协程，不能被 UI 消费慢阻塞。
+ */
+object IntelRunEventBus {
+    private val _runs = MutableSharedFlow<IntelTestRun>(extraBufferCapacity = 32)
+    val runs: SharedFlow<IntelTestRun> = _runs.asSharedFlow()
+
+    /** 发布一次测试运行快照。 */
+    fun publish(run: IntelTestRun) {
+        _runs.tryEmit(run)
+    }
+}
 
 /**
  * Intel 推送解析器：按 type 把信封 payload 解析为目标事件对象。

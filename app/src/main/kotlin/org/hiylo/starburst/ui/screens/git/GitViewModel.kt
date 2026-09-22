@@ -23,6 +23,7 @@ import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.getCurrentProject
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.repository.SettingsRepository
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.data.shell.ShellCommandTimeoutException
 import org.hiylo.starburst.data.sync.LocalSyncSecretStore
@@ -131,6 +132,7 @@ class GitViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val secretStore: LocalSyncSecretStore,
     private val shellRegistry: ServerShellRegistry,
+    private val connectionStateRepository: ServerConnectionStateRepository,
 ) : ViewModel() {
 
     private val conn = ServerConnection.from(
@@ -140,6 +142,14 @@ class GitViewModel @Inject constructor(
     )
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
     private val directory = savedStateHandle.get<String>("directory").orEmpty()
+
+    /**
+     * 实际用于 PTY/只读查询的连接：优先复用连接服务解析后的直连地址（SSH 隧道
+     * `127.0.0.1:localPort`），否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸
+     * `serverUrl`（配置地址）往往不可达，会导致 Git 页请求到不了服务器而空白无数据。
+     */
+    private val effectiveConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
 
     private val _uiState = MutableStateFlow(GitUiState(directory = directory))
     val uiState: StateFlow<GitUiState> = _uiState.asStateFlow()
@@ -157,7 +167,7 @@ class GitViewModel @Inject constructor(
     private var ptySessionAcquired = false
     private val ptySession by lazy {
         ptySessionAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, directory)
+        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, effectiveConn, directory)
     }
 
     /** 已加载的提交数量，用于「加载更多」时计算 `--skip`。 */
@@ -287,9 +297,9 @@ class GitViewModel @Inject constructor(
         if (configured.isNotBlank()) return configured
         // 回退到服务器当前项目；首次进入可能存在网络/时序竞争，重试几次。
         repeat(3) { attempt ->
-            val current = runCatching { api.getCurrentProject(conn).worktree.ifBlank { null } }.getOrNull()
+            val current = runCatching { api.getCurrentProject(effectiveConn).worktree.ifBlank { null } }.getOrNull()
             if (!current.isNullOrBlank()) return current
-            val first = runCatching { api.listProjects(conn).firstOrNull()?.worktree.orEmpty() }.getOrNull()
+            val first = runCatching { api.listProjects(effectiveConn).firstOrNull()?.worktree.orEmpty() }.getOrNull()
             if (!first.isNullOrBlank()) return first
             if (attempt < 2) delay(300)
         }

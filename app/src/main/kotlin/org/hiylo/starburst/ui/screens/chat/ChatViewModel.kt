@@ -40,6 +40,7 @@ import org.hiylo.starburst.data.repository.PromptDeliveryState
 import org.hiylo.starburst.data.repository.PendingPromptRepository
 import org.hiylo.starburst.data.repository.BookmarkRepository
 import org.hiylo.starburst.data.repository.BackendRepository
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.domain.model.*
@@ -79,6 +80,7 @@ class ChatViewModel @Inject constructor(
     internal val serverAsrApi: ServerAsrApi,
     internal val shellRegistry: ServerShellRegistry,
     internal val documentsApi: BackendDocumentsApi,
+    internal val connectionStateRepository: ServerConnectionStateRepository,
 ) : ViewModel() {
 
     @Volatile
@@ -93,6 +95,14 @@ class ChatViewModel @Inject constructor(
     private val retryOnOpen: Boolean = savedStateHandle.get<Boolean>("retry") ?: false
 
     internal val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
+
+    /**
+     * 实际用于 shell/PTY 的连接：优先复用连接服务解析后的直连地址（SSH 隧道
+     * `127.0.0.1:localPort`），否则回退到连接配置地址 `serverUrl`。蜂窝/VPN 下
+     * 裸 `serverUrl` 常不可达，会导致项目概览/终端等 PTY 操作请求到不了服务器。
+     */
+    internal val shellConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
 
     internal val _isLoading = MutableStateFlow(true)
     internal val _error = MutableStateFlow<String?>(null)
@@ -121,7 +131,7 @@ class ChatViewModel @Inject constructor(
     private var overviewShellAcquired = false
     internal val overviewShell: ServerShellSession by lazy {
         overviewShellAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, sessionDirectory.orEmpty())
+        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, shellConn, sessionDirectory.orEmpty())
     }
     // ============ Conversation summary ============
     /** True while a message/conversation summary is being generated. */
@@ -176,7 +186,7 @@ class ChatViewModel @Inject constructor(
     internal val _selectedAgent = MutableStateFlow("build" to false)
     internal val _selectedVariant = MutableStateFlow<String?>(null)
     internal val _commands = MutableStateFlow<List<CommandInfo>>(emptyList())
-    internal val terminalWorkspace = ServerTerminalRegistry.workspaceFor(serverId, api, conn)
+    internal val terminalWorkspace = ServerTerminalRegistry.workspaceFor(serverId, api, shellConn)
     val terminalTabs: StateFlow<List<TerminalTabUi>> = terminalWorkspace.tabList
     val activeTerminalTabId: StateFlow<String?> = terminalWorkspace.activeTabId
     /** Incremented on active terminal tab updates — observe to trigger recomposition. */

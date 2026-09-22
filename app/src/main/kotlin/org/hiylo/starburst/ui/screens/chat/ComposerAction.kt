@@ -21,8 +21,9 @@ internal fun composerAction(
     hasDraft: Boolean,
     isShellMode: Boolean,
 ): ComposerAction {
-    if (isSending) return ComposerAction.DISABLED
+    // STOP 优先：会话一旦进入 Busy 即可中止，避免 isSending 覆盖整个 prompt 流程期间无法打断。
     if (isBusy && !hasDraft) return ComposerAction.STOP
+    if (isSending) return ComposerAction.DISABLED
     if (hasDraft && (!isShellMode || !isBusy)) return ComposerAction.SEND
     return ComposerAction.DISABLED
 }

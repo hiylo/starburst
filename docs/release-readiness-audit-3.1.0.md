@@ -8,10 +8,10 @@
 ## 一、测试智能 M9 —— ✅ 可上线
 
 - **完备**：会话列表入口（backendReady 门控）→ 项目列表 → 详情四区块（功能点 + 单测 + 问题 + 修复）→ AI 对话，三层接线全通、与后端契约逐字段一致；问题 ack/挂功能点、修复 apply(file/patch/branch)/回滚/驳回、diff 预览、失败/空/加载态齐全。
-- **⚠️ 缺口（不阻塞）**：
-  - `intel.gate.blocked`/`fix.suggested`/`fix.applied`/`chat.answer`/`env.ready` 事件被解析但无通知/UI 出口（落 `Unit`）；门禁失败仅 Toast「运行失败」无原因。
-  - 发起单测后 run 状态**不自动更新**（不消费 `intel.run.event` 刷新列表，需手动刷新）。
-  - `loadRunResults` 失败会被**永久缓存为空**（幂等守卫使本页无法重试）。
+- **⚠️ 缺口（不阻塞，已完善 2026-09-22）**：
+  - `intel.gate.blocked`/`fix.suggested`/`fix.applied`/`chat.answer`/`env.ready` 事件被解析但无通知/UI 出口（落 `Unit`）；门禁失败仅 Toast「运行失败」无原因 → **已修**：五类事件接入通知（`showGateBlockedNotification` 等），`startRun` 失败展示后端原因。
+  - 发起单测后 run 状态**不自动更新**（不消费 `intel.run.event` 刷新列表，需手动刷新）→ **已修**：新增全局 `IntelRunEventBus`，推送层发布 `intel.run.event`，项目详情页订阅后按 projectId 实时合并 run 列表；run 终态顺带刷新问题/修复分块。
+  - `loadRunResults` 失败会被**永久缓存为空**（幂等守卫使本页无法重试）→ **已修**：失败不再写空缓存，改为 `runResultsFailed` 集合标记，UI 显示「加载失败，点击重试」。
   - **SECURITY_WARNING 高亮是死代码**：后端 `recordRunIssues` 把 issue severity 硬编码 `"medium"` 且 `featureId=0`，App 红「!」徽标**永不触发**；真正的 security finding（`/api/intel/findings`）无客户端。
   - 项目列表缺「模块」展示（`BackendApi.intelModules` 零调用方）；功能点 `anchor` 未渲染。
   - 死代码：`intelRunDetail`/`featureRunTest` 无调用方（且后端仅 admin scope 可用，无碍）。
@@ -63,5 +63,5 @@
 1. **文档预览按钮 401** —— 隐藏预览入口，或给 `DocumentPreviewSheet` 注入鉴权头（优先，功能价值高）。
 2. **KB 删除集合/文档 UI** —— 补 UI（约 1 屏 + 2 弹窗），或撤回 ROADMAP「删除」勾选改标「Web 管理」。
 3. **SECURITY_WARNING 高亮死代码** —— 后端修正 issue severity/featureId，或 App 接 `/api/intel/findings`（跨后端 v2.1.0 契约，属下一迭代）。
-4. 测试智能实时性（run 状态自动更新、失败可重试）、gate/fix/chat 通知出口 —— 体验优化，随 3.1.1。
+4. ~~测试智能实时性（run 状态自动更新、失败可重试）、gate/fix/chat 通知出口~~ —— **已完善（2026-09-22）**：`IntelRunEventBus` 实时合并 run + `runResultsFailed` 可重试 + 五类事件通知出口 + `startRun` 失败原因，单测覆盖（`TestIntelRunEventsTest`）。
 5. 告警 severity 分级、历史自动刷新、阈值 0 语义、删服务器清理 —— 体验优化。

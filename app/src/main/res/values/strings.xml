@@ -7,6 +7,7 @@
     <string name="home_add_server">Add Server</string>
     <string name="home_no_servers">No servers configured</string>
     <string name="home_server_health_good">Connected</string>
+    <string name="home_not_connected">Not connected</string>
     <string name="home_connect">Connect</string>
     <string name="home_connecting">Connecting…</string>
     <string name="home_disconnect">Disconnect</string>
@@ -145,6 +146,10 @@
     <string name="chat_send">Send</string>
     <string name="chat_send_shell">Send shell command</string>
     <string name="chat_shell_mode_hold_send_hint">Shell mode active. Hold Send to switch back.</string>
+    <string name="chat_voice_hold_to_talk">Hold to talk — release to send, slide up to cancel</string>
+    <string name="chat_voice_switch_to_text">Switch to text input</string>
+    <string name="chat_voice_release_to_send">Release to send</string>
+    <string name="chat_voice_slide_up_cancel">Slide up to cancel</string>
     <string name="chat_stop">Stop</string>
     <string name="chat_empty">Start a conversation with OpenCode</string>
     <string name="chat_server_disconnected">Server disconnected</string>
@@ -601,6 +606,12 @@
     <string name="notification_group_summary">StarBurst notifications</string>
     <string name="notification_export_progress">Session export progress</string>
     <string name="notify_intel_run_body">%1$s · Progress %2$s</string>
+    <string name="notify_intel_gate_blocked">Test gate blocked</string>
+    <string name="notify_intel_gate_blocked_body">%1$s · Missing: %2$s</string>
+    <string name="notify_intel_fix_suggested">Fix suggested</string>
+    <string name="notify_intel_fix_applied">Fix applied</string>
+    <string name="notify_intel_chat_answer">Feature Q&amp;A answered</string>
+    <string name="notify_intel_env_ready">Project environment ready</string>
     <string name="notify_alert_hardware">Server resource alert</string>
     <string name="notify_alert_hardware_threshold">%1$s %2$s exceeded threshold %3$s</string>
     <string name="notify_audit_finding">Security / compliance finding</string>
@@ -1007,6 +1018,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="server_settings_tokens_desc">Manage access tokens for this backend</string>
     <string name="server_settings_audit">Audit log</string>
     <string name="server_settings_audit_desc">Recent authenticated API actions</string>
+    <string name="server_settings_test_intel_desc">Run code analysis, unit tests, and review issues</string>
+    <string name="server_settings_kb_desc">Manage document collections for RAG retrieval</string>
     <string name="server_rules_title">Automation rules</string>
     <string name="server_rules_empty">No rules yet</string>
     <string name="server_rules_add">Add rule</string>
@@ -1112,6 +1125,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="test_intel_run_status_failed">Failed</string>
     <string name="test_intel_run_results">Test results</string>
     <string name="test_intel_run_results_failed">Failed to load results</string>
+    <string name="test_intel_run_results_retry">Load failed, tap to retry</string>
     <string name="test_intel_run_no_results">No results for this run</string>
     <string name="test_intel_result_passed">Passed</string>
     <string name="test_intel_result_failed">Failed</string>
@@ -1255,4 +1269,5 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_search_failed">Search failed</string>
     <string name="kb_score">Score %1$.2f</string>
     <string name="kb_search_source_unknown">Document</string>
+    <string name="chat_rag_context_attached">Knowledge base context loaded (%1$d sources)</string>
 </resources>

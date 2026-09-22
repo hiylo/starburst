@@ -193,7 +193,7 @@ internal fun MarkdownContent(
         bullet = bodyStyle,
         list = bodyStyle,
         link = bodyStyle.copy(
-            color = MaterialTheme.colorScheme.primary,
+            color = linkText,
             fontWeight = FontWeight.Medium
         )
     )

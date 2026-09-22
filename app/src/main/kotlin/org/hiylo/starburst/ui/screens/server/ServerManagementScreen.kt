@@ -28,11 +28,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.MenuBook
-import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.SystemUpdate
-import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -92,8 +90,6 @@ import kotlinx.coroutines.delay
 @Composable
 fun ServerManagementScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToTestIntel: (serverUrl: String, username: String, password: String, serverName: String, serverId: String) -> Unit = { _, _, _, _, _ -> },
-    onNavigateToKb: (serverUrl: String, username: String, password: String, serverName: String, serverId: String) -> Unit = { _, _, _, _, _ -> },
     viewModel: ServerManagementViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -173,38 +169,6 @@ fun ServerManagementScreen(
                 probing = uiState.backendAvailable == null,
                 ready = viewModel.isBackendReady,
             )
-
-            // 测试智能（后端就绪才展示）
-            if (viewModel.isBackendReady) {
-                TestIntelEntrySection(
-                    isAmoled = isAmoled,
-                    onClick = {
-                        onNavigateToTestIntel(
-                            viewModel.serverUrl,
-                            viewModel.username,
-                            viewModel.password,
-                            viewModel.serverName,
-                            viewModel.serverId,
-                        )
-                    },
-                )
-            }
-
-            // 知识库（后端就绪才展示）
-            if (viewModel.isBackendReady) {
-                KbEntrySection(
-                    isAmoled = isAmoled,
-                    onClick = {
-                        onNavigateToKb(
-                            viewModel.serverUrl,
-                            viewModel.username,
-                            viewModel.password,
-                            viewModel.serverName,
-                            viewModel.serverId,
-                        )
-                    },
-                )
-            }
 
             // 监控告警（后端就绪才展示）
             if (viewModel.isBackendReady) {
@@ -497,31 +461,6 @@ private fun BackendStatusSection(
             value = statusText,
             valueColor = statusColor,
         )
-    }
-}
-
-/** 知识库入口卡片：后端就绪时跳转到集合列表页。 */
-@Composable
-private fun TestIntelEntrySection(isAmoled: Boolean, onClick: () -> Unit) {
-    SectionCard(isAmoled = isAmoled) {
-        SectionHeader(stringResource(R.string.test_intel))
-        AppPrimaryButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.Science, contentDescription = null, modifier = Modifier.width(18.dp).height(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.test_intel_enter))
-        }
-    }
-}
-
-@Composable
-private fun KbEntrySection(isAmoled: Boolean, onClick: () -> Unit) {
-    SectionCard(isAmoled = isAmoled) {
-        SectionHeader(stringResource(R.string.kb_title))
-        AppPrimaryButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
-            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.width(18.dp).height(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(stringResource(R.string.kb_enter))
-        }
     }
 }
 

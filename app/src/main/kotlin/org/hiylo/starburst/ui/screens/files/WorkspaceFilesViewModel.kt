@@ -25,6 +25,7 @@ import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.readFile
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.data.shell.ShellCommandResult
@@ -197,6 +198,7 @@ class WorkspaceFilesViewModel @Inject constructor(
     private val shellRegistry: ServerShellRegistry,
     private val suggestionProvider: SuggestionProvider,
     private val secretStore: LocalSyncSecretStore,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val connection = ServerConnection.from(
@@ -206,6 +208,14 @@ class WorkspaceFilesViewModel @Inject constructor(
     )
     private val directory = savedStateHandle.get<String>("directory").orEmpty()
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty().ifBlank { connection.baseUrl }
+
+    /**
+     * 实际用于 PTY/文件操作的连接：优先复用连接服务解析后的直连地址（SSH 隧道
+     * `127.0.0.1:localPort`），否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl`
+     * 常不可达，会导致文件列表/编辑请求到不了服务器。
+     */
+    private val effectiveConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: connection
     private val _uiState = MutableStateFlow(WorkspaceFilesUiState(directory = directory))
     val uiState = _uiState.asStateFlow()
     private val _saveResults = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
@@ -237,7 +247,7 @@ class WorkspaceFilesViewModel @Inject constructor(
     private var ptySessionAcquired = false
     private val ptySession by lazy {
         ptySessionAcquired = true
-        shellRegistry.acquire(serverId, api, connection, directory)
+        shellRegistry.acquire(serverId, api, effectiveConn, directory)
     }
 
     override fun onCleared() {
@@ -258,7 +268,7 @@ class WorkspaceFilesViewModel @Inject constructor(
                 it.copy(currentPath = path, preview = null, isLoading = true, error = null)
             }
             try {
-                val entries = api.listDirectory(connection, path = path, directory = directory)
+                val entries = api.listDirectory(effectiveConn, path = path, directory = directory)
                 _uiState.update { it.copy(entries = entries, isLoading = false) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to list workspace directory", e)
@@ -276,7 +286,7 @@ class WorkspaceFilesViewModel @Inject constructor(
         loadJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
-                val content = api.readFile(connection, node.path, directory)
+                val content = api.readFile(effectiveConn, node.path, directory)
                 _uiState.update {
                     it.copy(preview = WorkspaceFilePreview(node, content), isLoading = false)
                 }

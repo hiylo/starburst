@@ -28,6 +28,7 @@ import org.hiylo.starburst.data.backend.FixAppliedParsedEvent
 import org.hiylo.starburst.data.backend.FixSuggestedParsedEvent
 import org.hiylo.starburst.data.backend.GateBlockedParsedEvent
 import org.hiylo.starburst.data.backend.IntelParsedEvent
+import org.hiylo.starburst.data.backend.IntelRunEventBus
 import org.hiylo.starburst.data.backend.IntelRunParsedEvent
 import org.hiylo.starburst.data.backend.TaskParsedEvent
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
@@ -181,6 +182,7 @@ internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfi
         _serverMetrics.update { it - server.id }
         job.start()
         if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct opencode")
+        publishResolvedConnections()
     } finally {
         fallbackInFlight.remove(server.id)
     }
@@ -291,6 +293,7 @@ internal fun StarBurstConnectionService.startIntelPushJob(server: ServerConfig, 
 internal suspend fun StarBurstConnectionService.handleIntelPushEvent(server: ServerConfig, event: IntelParsedEvent) {
     when (event) {
         is IntelRunParsedEvent -> {
+            IntelRunEventBus.publish(event.run)
             if (event.run.status == "passed" || event.run.status == "failed") {
                 showIntelRunNotification(server, event.run)
             }
@@ -313,11 +316,11 @@ internal suspend fun StarBurstConnectionService.handleIntelPushEvent(server: Ser
                 showAuditFindingNotification(server, event.summary, event.severity)
             }
         }
-        is FixSuggestedParsedEvent -> Unit
-        is FixAppliedParsedEvent -> Unit
-        is GateBlockedParsedEvent -> Unit
-        is EnvReadyParsedEvent -> Unit
-        is ChatAnswerParsedEvent -> Unit
+        is FixSuggestedParsedEvent -> showFixSuggestedNotification(server, event.title)
+        is FixAppliedParsedEvent -> showFixAppliedNotification(server, event.writeMode)
+        is GateBlockedParsedEvent -> showGateBlockedNotification(server, event.reason, event.detail, event.missing)
+        is EnvReadyParsedEvent -> showEnvReadyNotification(server, event.projectId)
+        is ChatAnswerParsedEvent -> showChatAnswerNotification(server, event.mode)
         is TaskParsedEvent -> Unit
     }
 }

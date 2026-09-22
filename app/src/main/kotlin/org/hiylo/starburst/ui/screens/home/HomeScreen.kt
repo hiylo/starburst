@@ -51,6 +51,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusWarning
 import org.hiylo.starburst.data.update.UpdateState
 import org.hiylo.starburst.data.update.UpdatePolicy
 import org.hiylo.starburst.ui.components.AppCardShape
@@ -78,6 +79,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import org.hiylo.starburst.ui.components.AppDialogActions
 
 /** Legacy local server URL reserved by the previous Termux runtime feature; kept filtered out of the remote list. */
 private const val LEGACY_LOCAL_SERVER_URL = "http://127.0.0.1:4096"
@@ -242,7 +244,7 @@ fun HomeScreen(
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         // Battery optimization warning banner
                         if (isBatteryOptimized) {
@@ -445,7 +447,16 @@ private fun UpdateAvailableCard(
                         else -> stringResource(R.string.update_available_message, requireNotNull(release).versionName)
                     },
                     style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
+                if (updateState is UpdateState.Downloading && updateState.progressPercent != null) {
+                    Spacer(Modifier.height(6.dp))
+                    LinearProgressIndicator(
+                        progress = { updateState.progressPercent / 100f },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
             when (updateState) {
                 is UpdateState.Downloading -> TextButton(
@@ -523,7 +534,7 @@ private fun EmptyServersView(
             Text(
                 text = stringResource(R.string.home_no_servers),
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             AppPrimaryButton(onClick = onAddServer) {
@@ -561,11 +572,7 @@ private fun ServerCard(
     } else {
         MaterialTheme.colorScheme.surfaceContainer
     }
-    val cardContentColor = if (isConnected && !isAmoled) {
-        MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
+    val cardContentColor = MaterialTheme.colorScheme.onSurface
 
     Card(
         modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
@@ -573,11 +580,7 @@ private fun ServerCard(
         colors = CardDefaults.cardColors(
             containerColor = cardContainerColor
         ),
-        border = if (isAmoled) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
-        } else {
-            null
-        }
+        border = appAmoledBorder(0.6f),
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -593,24 +596,31 @@ private fun ServerCard(
                     Text(
                         text = server.displayName,
                         style = MaterialTheme.typography.titleMedium,
-                        color = cardContentColor
+                        color = cardContentColor,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = server.url,
                         style = MaterialTheme.typography.bodyMedium,
-                        color = cardContentColor.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     if (isConnected) {
-                        Text(
+                        ServerStatusDot(
                             text = stringResource(R.string.home_server_health_good),
-                            style = MaterialTheme.typography.labelSmall,
                             color = StatusConnected
                         )
                     } else if (isConnecting) {
-                        Text(
+                        ServerStatusDot(
                             text = stringResource(R.string.home_connecting),
-                            style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.tertiary
+                        )
+                    } else {
+                        ServerStatusDot(
+                            text = stringResource(R.string.home_not_connected),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -640,6 +650,27 @@ private fun ServerCard(
                                     },
                                     leadingIcon = {
                                         Icon(Icons.Default.Settings, contentDescription = null)
+                                    }
+                                )
+                            }
+                            if (isConnected) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            stringResource(R.string.home_disconnect),
+                                            color = MaterialTheme.colorScheme.error,
+                                        )
+                                    },
+                                    onClick = {
+                                        showMenu = false
+                                        onDisconnect()
+                                    },
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.LinkOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
                                     }
                                 )
                             }
@@ -677,21 +708,22 @@ private fun ServerCard(
                 }
             }
 
-            // Connection error
+            // Connection error banner
             if (connectionError != null) {
-                Text(
-                    text = connectionError,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall
+                ConnectionErrorBanner(
+                    error = connectionError,
+                    showSshRestart = server.useSsh,
+                    isRestartingViaSsh = isRestartingViaSsh,
+                    onRestartViaSsh = onRestartViaSsh,
                 )
             }
 
             // Action buttons row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                if (isConnected) {
+            if (isConnected) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
                     AppPrimaryButton(
                         onClick = onOpenSessions,
                         modifier = Modifier.weight(1f),
@@ -700,80 +732,45 @@ private fun ServerCard(
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.sessions_title), maxLines = 1)
                     }
-                }
-            }
-            if (isConnected) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
                     AppSecondaryButton(
                         onClick = onDisconnect,
-                        modifier = Modifier.fillMaxWidth(),
-                        destructive = true,
                         outlined = true,
                     ) {
-                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Icon(Icons.Default.LinkOff, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
                         Text(stringResource(R.string.home_disconnect), maxLines = 1)
                     }
                 }
             }
             if (!isConnected) {
-                Column(
+                AppPrimaryButton(
+                    onClick = onConnect,
                     modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    enabled = !isConnecting,
                 ) {
-                    AppPrimaryButton(
-                        onClick = onConnect,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = !isConnecting,
-                    ) {
-                        if (isConnecting) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                                color = if (isAmoled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                            )
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.home_connecting))
-                        } else {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.home_connect))
-                        }
-                    }
                     if (isConnecting) {
-                        AppSecondaryButton(
-                            onClick = onDisconnect,
-                            modifier = Modifier.fillMaxWidth(),
-                            destructive = true,
-                            outlined = true,
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.home_cancel_connect), maxLines = 1)
-                        }
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = if (isAmoled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.home_connecting))
+                    } else {
+                        Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.home_connect))
                     }
-                    if (connectionError != null && server.useSsh) {
-                        AppSecondaryButton(
-                            onClick = onRestartViaSsh,
-                            modifier = Modifier.fillMaxWidth(),
-                            outlined = true,
-                            enabled = !isRestartingViaSsh,
-                        ) {
-                            if (isRestartingViaSsh) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                )
-                                Spacer(Modifier.width(6.dp))
-                            } else {
-                                Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                            }
-                            Text(stringResource(R.string.home_ssh_restart), maxLines = 1)
-                        }
+                }
+                if (isConnecting) {
+                    AppSecondaryButton(
+                        onClick = onDisconnect,
+                        modifier = Modifier.fillMaxWidth(),
+                        outlined = true,
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.home_cancel_connect), maxLines = 1)
                     }
                 }
             }
@@ -792,24 +789,102 @@ private fun ServerCard(
                 style = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
             )
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.End,
-            ) {
-                AppSecondaryButton(
-                    onClick = { showDeleteConfirmation = false },
-                    outlined = true,
+            AppDialogActions(
+                dismissText = stringResource(R.string.cancel),
+                confirmText = stringResource(R.string.server_delete),
+                onDismiss = { showDeleteConfirmation = false },
+                onConfirm = {
+                    showDeleteConfirmation = false
+                    onDelete()
+                },
+                destructiveConfirm = true,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
+    }
+}
+
+/** 服务器连接状态小徽标：状态色圆点 + 文案。 */
+@Composable
+private fun ServerStatusDot(
+    text: String,
+    color: Color,
+) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Box(
+            modifier = Modifier
+                .size(8.dp)
+                .background(color, CircleShape)
+        )
+        Spacer(Modifier.width(6.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = color
+        )
+    }
+}
+
+/** 连接错误横幅：errorContainer 小条，可内联「SSH 重启」操作。 */
+@Composable
+private fun ConnectionErrorBanner(
+    error: String,
+    showSshRestart: Boolean,
+    isRestartingViaSsh: Boolean,
+    onRestartViaSsh: () -> Unit,
+) {
+    val isAmoled = isAmoledTheme()
+    Surface(
+        shape = RoundedCornerShape(8.dp),
+        color = if (isAmoled) {
+            Color.Black
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        },
+        border = if (isAmoled) {
+            BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+        } else {
+            null
+        },
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                imageVector = Icons.Default.Error,
+                contentDescription = null,
+                tint = if (isAmoled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onErrorContainer,
+                modifier = Modifier.size(18.dp),
+            )
+            Text(
+                text = error,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (isAmoled) {
+                    MaterialTheme.colorScheme.error
+                } else {
+                    MaterialTheme.colorScheme.onErrorContainer
+                },
+                modifier = Modifier.weight(1f),
+            )
+            if (showSshRestart) {
+                TextButton(
+                    onClick = onRestartViaSsh,
+                    enabled = !isRestartingViaSsh,
                 ) {
-                    Text(stringResource(R.string.cancel))
-                }
-                AppPrimaryButton(
-                    onClick = {
-                        showDeleteConfirmation = false
-                        onDelete()
-                    },
-                    destructive = true,
-                ) {
-                    Text(stringResource(R.string.server_delete))
+                    if (isRestartingViaSsh) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                        )
+                        Spacer(Modifier.width(6.dp))
+                    } else {
+                        Icon(Icons.Default.RestartAlt, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(stringResource(R.string.home_ssh_restart), maxLines = 1)
                 }
             }
         }
@@ -823,10 +898,10 @@ private fun BatteryOptimizationBanner(
     val isAmoled = isAmoledTheme()
     Card(
         colors = CardDefaults.cardColors(
-            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.errorContainer,
+            containerColor = if (isAmoled) Color.Black else StatusWarning.copy(alpha = 0.12f),
         ),
         border = if (isAmoled) {
-            BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.6f))
+            BorderStroke(1.dp, StatusWarning.copy(alpha = 0.7f))
         } else null,
         shape = AppCardShape,
         modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
@@ -841,23 +916,19 @@ private fun BatteryOptimizationBanner(
             Icon(
                 imageVector = Icons.Default.BatteryAlert,
                 contentDescription = null,
-                tint = if (isAmoled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onErrorContainer,
+                tint = StatusWarning,
                 modifier = Modifier.size(24.dp)
             )
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.home_battery_title),
                     style = MaterialTheme.typography.titleSmall,
-                    color = if (isAmoled) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onErrorContainer,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
                 Text(
                     text = stringResource(R.string.home_battery_message),
                     style = MaterialTheme.typography.bodySmall,
-                    color = if (isAmoled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.8f)
-                    },
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             AppPrimaryButton(onClick = onDisable) {

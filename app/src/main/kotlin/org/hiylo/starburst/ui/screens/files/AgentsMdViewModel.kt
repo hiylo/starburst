@@ -28,6 +28,7 @@ import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.readFile
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.data.shell.ShellCommandResult
@@ -83,6 +84,7 @@ class AgentsMdViewModel @Inject constructor(
     private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
     private val shellRegistry: ServerShellRegistry,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
     private val connection = ServerConnection.from(
@@ -93,6 +95,14 @@ class AgentsMdViewModel @Inject constructor(
     private val directory = savedStateHandle.get<String>("directory").orEmpty()
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty().ifBlank { connection.baseUrl }
 
+    /**
+     * 实际用于 PTY/文件操作的连接：优先复用连接服务解析后的直连地址（SSH 隧道
+     * `127.0.0.1:localPort`），否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl`
+     * 常不可达，会导致 AGENTS.md 读写请求到不了服务器。
+     */
+    private val effectiveConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: connection
+
     private val _uiState = MutableStateFlow(AgentsMdUiState(directory = directory))
     val uiState: StateFlow<AgentsMdUiState> = _uiState.asStateFlow()
 
@@ -102,7 +112,7 @@ class AgentsMdViewModel @Inject constructor(
     private var ptySessionAcquired = false
     private val ptySession by lazy {
         ptySessionAcquired = true
-        shellRegistry.acquire(serverId, api, connection, directory)
+        shellRegistry.acquire(serverId, api, effectiveConn, directory)
     }
 
     override fun onCleared() {
@@ -126,7 +136,7 @@ class AgentsMdViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(exists = null, detectError = null) }
             try {
-                val content = api.readFile(connection, AGENTS_FILE, directory)
+                val content = api.readFile(effectiveConn, AGENTS_FILE, directory)
                 // opencode 对不存在的文件返回 200 + 空 content（而非 404），
                 // 因此必须以内容是否为空来判断文件是否存在，否则空文件会被误判为「已存在」而卡在空预览。
                 val hasContent = content.content.isNotBlank()
@@ -256,7 +266,7 @@ class AgentsMdViewModel @Inject constructor(
         val sb = StringBuilder()
         suspend fun scan(relPath: String, depth: Int) {
             if (depth > MAX_SCAN_DEPTH) return
-            val nodes = runCatching { api.listDirectory(connection, relPath, directory) }.getOrNull() ?: return
+            val nodes = runCatching { api.listDirectory(effectiveConn, relPath, directory) }.getOrNull() ?: return
             val dirs = nodes.filter {
                 it.type == "directory" && it.name !in SKIP_DIRS && !it.name.startsWith('.')
             }

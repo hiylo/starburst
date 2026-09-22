@@ -197,6 +197,8 @@ internal fun StarBurstConnectionService.cleanupTerminatedConnection(serverId: St
         eventReducer.clearTransientForServer(serverId)
         clearServerMetrics(serverId)
 
+        publishResolvedConnections()
+
         if (connections.isEmpty()) {
             stopServiceIfIdle()
         } else {

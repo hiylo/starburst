@@ -34,6 +34,7 @@ import org.hiylo.starburst.data.api.IntelFix
 import org.hiylo.starburst.data.api.IntelIssue
 import org.hiylo.starburst.data.api.IntelTestResult
 import org.hiylo.starburst.data.api.IntelTestRun
+import org.hiylo.starburst.data.backend.IntelRunEventBus
 import org.hiylo.starburst.data.repository.ServerRepository
 import javax.inject.Inject
 
@@ -43,6 +44,17 @@ data class ProjectBlockState<T>(
     val error: String? = null,
     val items: List<T> = emptyList(),
 )
+
+/**
+ * 把一条新 run 快照合并进现有 run 列表：同 id 整体替换，否则前插到顶部。
+ * 推送驱动的 run 列表增量更新用，纯函数便于单测。
+ */
+internal fun mergeRunSnapshot(items: List<IntelTestRun>, run: IntelTestRun): List<IntelTestRun> =
+    if (items.any { it.id == run.id }) {
+        items.map { if (it.id == run.id) run else it }
+    } else {
+        listOf(run) + items
+    }
 
 /** 功能点 AI 对话弹窗状态。 */
 data class FeatureChatState(
@@ -92,6 +104,10 @@ class TestIntelProjectViewModel @Inject constructor(
     private val _runResults = MutableStateFlow<Map<Long, List<IntelTestResult>>>(emptyMap())
     val runResults: StateFlow<Map<Long, List<IntelTestResult>>> = _runResults.asStateFlow()
 
+    /** 用例结果加载失败的 runId 集合（可重试，不写空缓存）。 */
+    private val _runResultsFailed = MutableStateFlow<Set<Long>>(emptySet())
+    val runResultsFailed: StateFlow<Set<Long>> = _runResultsFailed.asStateFlow()
+
     private val _startingRun = MutableStateFlow(false)
     val startingRun: StateFlow<Boolean> = _startingRun.asStateFlow()
 
@@ -121,6 +137,31 @@ class TestIntelProjectViewModel @Inject constructor(
                 return@launch
             }
             loadAll()
+        }
+        observeRunEvents()
+    }
+
+    /**
+     * 订阅全局 Intel 运行事件总线：`intel.run.event` 推送到达时按 projectId 实时更新
+     * run 列表（新增前插 / 同 id 替换），run 进入终态后顺带刷新问题与修复分块，
+     * 免去手动下拉刷新。
+     */
+    private fun observeRunEvents() {
+        viewModelScope.launch {
+            IntelRunEventBus.runs.collect { run ->
+                if (run.projectId != projectId) return@collect
+                _runs.update { state ->
+                    state.copy(
+                        loading = false,
+                        error = null,
+                        items = mergeRunSnapshot(state.items, run),
+                    )
+                }
+                if (run.status == "passed" || run.status == "failed") {
+                    refreshIssues()
+                    refreshFixes()
+                }
+            }
         }
     }
 
@@ -221,25 +262,29 @@ class TestIntelProjectViewModel @Inject constructor(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                emitOneShot(context.getString(R.string.test_intel_run_failed))
+                // 门禁失败等场景给原因：后端错误信息优先，回落通用文案。
+                val reason = e.message?.takeIf { it.isNotBlank() }
+                    ?: context.getString(R.string.test_intel_run_failed)
+                emitOneShot(reason)
             } finally {
                 _startingRun.value = false
             }
         }
     }
 
-    /** 拉取某次运行的逐用例结果（幂等，重复调用直接返回已缓存结果）。 */
+    /** 拉取某次运行的逐用例结果（幂等：已有结果直接返回；失败标记为可重试，不写空缓存）。 */
     fun loadRunResults(runId: Long) {
         if (_runResults.value.containsKey(runId)) return
         viewModelScope.launch {
             try {
                 val results = backendApi.intelRunResults(backendUrl, backendToken, runId)
                 _runResults.update { it + (runId to results) }
+                _runResultsFailed.update { it - runId }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 emitOneShot(context.getString(R.string.test_intel_run_results_failed))
-                _runResults.update { it + (runId to emptyList()) }
+                _runResultsFailed.update { it + runId }
             }
         }
     }

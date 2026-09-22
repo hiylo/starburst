@@ -34,6 +34,7 @@ import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.updateConfig
 import org.hiylo.starburst.data.repository.AlertHistoryEntry
 import org.hiylo.starburst.data.repository.AlertHistoryRepository
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -116,6 +117,7 @@ class ServerManagementViewModel @Inject constructor(
     private val shellRegistry: ServerShellRegistry,
     private val serverRepository: ServerRepository,
     private val alertHistoryRepository: AlertHistoryRepository,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -128,11 +130,18 @@ class ServerManagementViewModel @Inject constructor(
 
     private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
+    /**
+     * 实际用于 PTY 的连接：优先复用连接服务解析后的直连地址（SSH 隧道 `127.0.0.1:localPort`），
+     * 否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl` 常不可达，会导致终端空白。
+     */
+    private val effectiveConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+
     /** 连接级共享 PTY 会话：与 Git 页按 server 复用同一条 PTY。 */
     private var shellAcquired = false
     private val shell by lazy {
         shellAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, directory)
+        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, effectiveConn, directory)
     }
 
     private val _uiState = MutableStateFlow(ServerManagementUiState(serverName = serverName, isLoading = true))
@@ -400,13 +409,13 @@ class ServerManagementViewModel @Inject constructor(
 
     /** 加载服务版本号与活跃会话数。 */
     private suspend fun loadServiceInfo() {
-        runCatching { api.getHealth(conn) }
+        runCatching { api.getHealth(effectiveConn) }
             .onSuccess { health ->
                 _uiState.update { it.copy(version = health.version) }
             }
             .onFailure { e -> Log.w(TAG, "Failed to load health", e) }
 
-        runCatching { api.listSessionStatuses(conn, directory.takeIf { it.isNotBlank() }) }
+        runCatching { api.listSessionStatuses(effectiveConn, directory.takeIf { it.isNotBlank() }) }
             .onSuccess { statuses ->
                 val busy = statuses.values.count { it !is SessionStatus.Idle }
                 _uiState.update { it.copy(activeSessions = statuses.size, busySessions = busy) }
@@ -453,7 +462,7 @@ class ServerManagementViewModel @Inject constructor(
 
     /** 加载服务配置（GET /config）。 */
     private suspend fun loadConfig() {
-        runCatching { api.getConfig(conn) }
+        runCatching { api.getConfig(effectiveConn) }
             .onSuccess { config -> _uiState.update { it.copy(config = config) } }
             .onFailure { e -> Log.w(TAG, "Failed to load config", e) }
     }
@@ -473,8 +482,8 @@ class ServerManagementViewModel @Inject constructor(
             _uiState.update { it.copy(isSavingConfig = true, message = null, error = null) }
             val before = _uiState.value.config
             try {
-                api.updateConfig(conn, patch)
-                _uiState.update { it.copy(config = api.getConfig(conn)) }
+                api.updateConfig(effectiveConn, patch)
+                _uiState.update { it.copy(config = api.getConfig(effectiveConn)) }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update config", e)
                 _uiState.update { it.copy(config = before, error = e.message) }

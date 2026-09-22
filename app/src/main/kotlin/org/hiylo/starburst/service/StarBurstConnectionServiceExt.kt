@@ -215,14 +215,15 @@ internal fun StarBurstConnectionService.isChildSession(sessionId: String): Boole
 }
 
 /**
- * 解析后端镜像地址：SSH 隧道模式下用隧道内后端本地端口（否则 127.0.0.1:18880 不可达），
- * 非 SSH 模式优先显式 [server.backendUrl]，否则推导为 opencode 同主机 18880。
+ * 解析后端镜像地址：
+ * - SSH 隧道且隧道映射了后端端口 → 用隧道内本地端口（127.0.0.1:端口）；
+ * - SSH 隧道未映射后端端口但仍能直连后端主机（如 VPN 同网段）→ 退回显式或
+ *   推断地址（http://<opencode主机>:18880）；探测失败仍由 buildGatewayConn 弹回直连；
+ * - 非 SSH 模式 → 显式 [server.backendUrl]，否则推断为 opencode 同主机 18880。
  */
 internal fun StarBurstConnectionService.resolveBackendUrl(server: ServerConfig, backendLocalPort: Int?): String {
     if (server.useSsh) {
         backendLocalPort?.let { return "http://127.0.0.1:$it" }
-        // 没有显式 backendUrl 时不推导（隧道未转发后端端口，18880 不可达）。
-        if (server.backendUrl.isNullOrBlank()) return ""
     }
     return server.backendResolvedUrl
 }
@@ -884,6 +885,104 @@ internal suspend fun StarBurstConnectionService.showAuditFindingNotification(ser
         .setContentTitle(title)
         .setContentText(body)
         .setSubText("$severity · ${server.displayName}")
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setGroup("server_${server.id}")
+    if (!silent) {
+        builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+    }
+    postEventNotification(server, null, notifId, builder.build())
+}
+
+/** 测试门禁阻断通知（`intel.gate.blocked`）：展示阻断原因与缺失前置。 */
+internal suspend fun StarBurstConnectionService.showGateBlockedNotification(
+    server: ServerConfig,
+    reason: String,
+    detail: String?,
+    missing: List<String>,
+) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    val missingText = missing.joinToString(", ").ifBlank { "-" }
+    val body = getString(R.string.notify_intel_gate_blocked_body, reason, missingText)
+        .let { if (detail.isNullOrBlank()) it else "$it\n$detail" }
+    postIntelEventNotification(
+        server = server,
+        title = getString(R.string.notify_intel_gate_blocked),
+        body = body,
+        notifId = stableNotifId(("gate" + reason).hashCode(), "intel_evt_${server.id}"),
+    )
+}
+
+/** 自动修复建议通知（`intel.fix.suggested`）。 */
+internal suspend fun StarBurstConnectionService.showFixSuggestedNotification(server: ServerConfig, title: String) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    postIntelEventNotification(
+        server = server,
+        title = getString(R.string.notify_intel_fix_suggested),
+        body = title.ifBlank { server.displayName },
+        notifId = stableNotifId(("fix" + title).hashCode(), "intel_evt_${server.id}"),
+    )
+}
+
+/** 自动修复已应用通知（`intel.fix.applied`）。 */
+internal suspend fun StarBurstConnectionService.showFixAppliedNotification(server: ServerConfig, writeMode: String) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    postIntelEventNotification(
+        server = server,
+        title = getString(R.string.notify_intel_fix_applied),
+        body = writeMode,
+        notifId = stableNotifId(("fix_applied" + writeMode).hashCode(), "intel_evt_${server.id}"),
+    )
+}
+
+/** 功能点问答完成通知（`intel.feature.chat.answer`）。 */
+internal suspend fun StarBurstConnectionService.showChatAnswerNotification(server: ServerConfig, mode: String) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    postIntelEventNotification(
+        server = server,
+        title = getString(R.string.notify_intel_chat_answer),
+        body = mode,
+        notifId = stableNotifId(("chat" + mode).hashCode(), "intel_evt_${server.id}"),
+    )
+}
+
+/** 项目环境就绪通知（`intel.env.ready`）。 */
+internal suspend fun StarBurstConnectionService.showEnvReadyNotification(server: ServerConfig, projectId: Long) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    postIntelEventNotification(
+        server = server,
+        title = getString(R.string.notify_intel_env_ready),
+        body = projectId.toString(),
+        notifId = stableNotifId(("env" + projectId).hashCode(), "intel_evt_${server.id}"),
+    )
+}
+
+/** 通用 Intel 事件通知：与 run 终态通知同款样式（分组 / DND / 静默渠道一致）。 */
+private suspend fun StarBurstConnectionService.postIntelEventNotification(
+    server: ServerConfig,
+    title: String,
+    body: String,
+    notifId: Int,
+) {
+    val silent = settingsRepository.silentNotifications.first()
+    val channelId = if (silent) NOTIFICATION_CHANNEL_TASKS_SILENT_ID else NOTIFICATION_CHANNEL_TASKS_ID
+    val pendingIntent = PendingIntent.getActivity(
+        this,
+        notifId,
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val builder = NotificationCompat.Builder(this, channelId)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setSubText(server.displayName)
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)

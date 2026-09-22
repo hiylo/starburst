@@ -18,15 +18,22 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
 import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.Schema
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
@@ -66,6 +73,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.gate.BackendGate
 
@@ -82,9 +90,10 @@ fun ServerSettingsScreen(
     onOpenRules: () -> Unit,
     onOpenTokens: () -> Unit,
     onOpenAudit: () -> Unit,
+    onOpenTestIntel: () -> Unit = {},
+    onOpenKb: () -> Unit = {},
     viewModel: ServerSettingsViewModel = hiltViewModel(),
 ) {
-    val isAmoled = isAmoledTheme()
     val uiState by viewModel.uiState.collectAsState()
     val systemPrompt by viewModel.systemPrompt.collectAsState()
     val contextLimit by viewModel.contextLimit.collectAsState()
@@ -114,337 +123,94 @@ fun ServerSettingsScreen(
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.surface)
                 .padding(padding)
-                .padding(16.dp),
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenProviders)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Hub, contentDescription = null)
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_providers),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_providers_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            ServerNavCard(
+                icon = Icons.Default.Hub,
+                title = stringResource(R.string.server_settings_providers),
+                subtitle = stringResource(R.string.server_settings_providers_desc),
+                onClick = onOpenProviders,
+            )
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenModels)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Tune, contentDescription = null)
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_models),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_models_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            ServerNavCard(
+                icon = Icons.Default.Tune,
+                title = stringResource(R.string.server_settings_models),
+                subtitle = stringResource(R.string.server_settings_models_desc),
+                onClick = onOpenModels,
+            )
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenMcp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.DeviceHub, contentDescription = null)
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_mcp),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_mcp_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+                        ServerNavCard(
+                icon = Icons.Default.DeviceHub,
+                title = stringResource(R.string.server_settings_mcp),
+                subtitle = stringResource(R.string.server_settings_mcp_desc),
+                onClick = onOpenMcp,
+            )
 
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onOpenSkills)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.DeviceHub, contentDescription = null)
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_skills),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_skills_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            ServerNavCard(
+                icon = Icons.Default.Schema,
+                title = stringResource(R.string.server_settings_skills),
+                subtitle = stringResource(R.string.server_settings_skills_desc),
+                onClick = onOpenSkills,
+            )
 
             // 系统提示词与上下文限制：本地每服务器配置，无后端依赖。
-            Card(
-                shape = AppCardShape,
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                ),
-                border = appAmoledBorder(0.65f),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable { showSysPromptDialog = true }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Default.Tune, contentDescription = null)
-                    Column(
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 12.dp)
-                    ) {
-                        Text(
-                            text = stringResource(R.string.server_settings_sysprompt),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = stringResource(R.string.server_settings_sysprompt_desc),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                        )
-                    }
-                    Icon(
-                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
+            ServerNavCard(
+                icon = Icons.Default.FormatAlignLeft,
+                title = stringResource(R.string.server_settings_sysprompt),
+                subtitle = stringResource(R.string.server_settings_sysprompt_desc),
+                onClick = { showSysPromptDialog = true },
+            )
 
             // 自动化规则：强依赖后端，仅在「后端正常可用」时显示。
             if (backendReady) {
-                Card(
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    border = appAmoledBorder(0.65f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onOpenRules)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.server_settings_rules),
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = stringResource(R.string.server_settings_rules_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                            )
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                ServerNavCard(
+                    icon = Icons.Default.AutoAwesome,
+                    title = stringResource(R.string.server_settings_rules),
+                    subtitle = stringResource(R.string.server_settings_rules_desc),
+                    onClick = onOpenRules,
+                )
             }
 
             // API 令牌：强依赖后端，仅在「后端正常可用」时显示。
             if (backendReady) {
-                Card(
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    border = appAmoledBorder(0.65f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onOpenTokens)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Lock, contentDescription = null)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.server_settings_tokens),
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = stringResource(R.string.server_settings_tokens_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                            )
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                ServerNavCard(
+                    icon = Icons.Default.Lock,
+                    title = stringResource(R.string.server_settings_tokens),
+                    subtitle = stringResource(R.string.server_settings_tokens_desc),
+                    onClick = onOpenTokens,
+                )
             }
 
             // 审计日志：强依赖后端，仅在「后端正常可用」时显示。
             if (backendReady) {
-                Card(
-                    shape = AppCardShape,
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-                    ),
-                    border = appAmoledBorder(0.65f),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable(onClick = onOpenAudit)
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.History, contentDescription = null)
-                        Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .padding(horizontal = 12.dp)
-                        ) {
-                            Text(
-                                text = stringResource(R.string.server_settings_audit),
-                                style = MaterialTheme.typography.titleSmall
-                            )
-                            Text(
-                                text = stringResource(R.string.server_settings_audit_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
-                            )
-                        }
-                        Icon(
-                            Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+                ServerNavCard(
+                    icon = Icons.Default.History,
+                    title = stringResource(R.string.server_settings_audit),
+                    subtitle = stringResource(R.string.server_settings_audit_desc),
+                    onClick = onOpenAudit,
+                )
+            }
+
+            // 测试智能：强依赖后端，仅在「后端正常可用」时显示。
+            if (backendReady) {
+                ServerNavCard(
+                    icon = Icons.Default.Science,
+                    title = stringResource(R.string.test_intel),
+                    subtitle = stringResource(R.string.server_settings_test_intel_desc),
+                    onClick = onOpenTestIntel,
+                )
+            }
+
+            // 知识库：强依赖后端，仅在「后端正常可用」时显示。
+            if (backendReady) {
+                ServerNavCard(
+                    icon = Icons.Default.MenuBook,
+                    title = stringResource(R.string.kb_title),
+                    subtitle = stringResource(R.string.server_settings_kb_desc),
+                    onClick = onOpenKb,
+                )
             }
 
             // 后端可用 → 任务中心；不可用 + SSH → 一键安装；探测中 → loading。
@@ -473,6 +239,60 @@ fun ServerSettingsScreen(
                 showSysPromptDialog = false
             },
         )
+    }
+}
+
+/**
+ * 服务器设置导航入口卡片：图标 + 标题 + 副标题 + 右箭头。
+ * 统一承载 AMOLED 描边与卡通 chrome，避免各入口重复手写卡片外壳。
+ */
+@Composable
+private fun ServerNavCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    title: String,
+    subtitle: String,
+    onClick: () -> Unit,
+) {
+    val isAmoled = isAmoledTheme()
+    Card(
+        shape = AppCardShape,
+        colors = CardDefaults.cardColors(
+            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+        ),
+        border = appAmoledBorder(0.65f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .cartoonChrome(AppCardShape),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 12.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
@@ -548,22 +368,22 @@ private fun BackendStatusCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 14.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Icon(Icons.Default.DeviceHub, contentDescription = null)
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(horizontal = 12.dp),
-                ) {
-                    Text(
-                        text = stringResource(R.string.server_settings_tasks),
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Text(
-                        text = stringResource(R.string.backend_checking),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Icon(Icons.Default.Checklist, contentDescription = null)
+                        Column(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 12.dp),
+                        ) {
+                            Text(
+                                text = stringResource(R.string.server_settings_tasks),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                text = stringResource(R.string.backend_checking),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
                 CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -590,7 +410,7 @@ private fun BackendStatusCard(
                             ) {
                                 Text(
                                     text = stringResource(R.string.backend_needs_upgrade),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
                                     text = stringResource(
@@ -599,7 +419,7 @@ private fun BackendStatusCard(
                                         BackendGate.MIN_BACKEND_VERSION,
                                     ),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -635,7 +455,7 @@ private fun BackendStatusCard(
                             .padding(horizontal = 14.dp, vertical = 12.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Icon(Icons.Default.DeviceHub, contentDescription = null)
+                        Icon(Icons.Default.Checklist, contentDescription = null)
                         Column(
                             modifier = Modifier
                                 .weight(1f)
@@ -643,12 +463,12 @@ private fun BackendStatusCard(
                         ) {
                             Text(
                                 text = stringResource(R.string.server_settings_tasks),
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
                                 text = stringResource(R.string.server_settings_tasks_desc),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         Icon(
@@ -678,12 +498,12 @@ private fun BackendStatusCard(
                         ) {
                             Text(
                                 text = stringResource(R.string.backend_installing),
-                                style = MaterialTheme.typography.titleSmall,
+                                style = MaterialTheme.typography.titleMedium,
                             )
                             Text(
                                 text = stringResource(R.string.backend_installing_desc),
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -708,12 +528,12 @@ private fun BackendStatusCard(
                             ) {
                                 Text(
                                     text = stringResource(R.string.backend_token_invalid),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
                                     text = stringResource(R.string.backend_token_invalid_desc),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -738,12 +558,12 @@ private fun BackendStatusCard(
                             ) {
                                 Text(
                                     text = stringResource(R.string.backend_not_installed),
-                                    style = MaterialTheme.typography.titleSmall,
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
                                 Text(
                                     text = stringResource(R.string.backend_not_installed_desc),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -791,6 +611,7 @@ private fun BackendCard(
         border = appAmoledBorder(0.65f),
         modifier = Modifier
             .fillMaxWidth()
+            .cartoonChrome(AppCardShape)
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
     ) {
         Column(content = content)

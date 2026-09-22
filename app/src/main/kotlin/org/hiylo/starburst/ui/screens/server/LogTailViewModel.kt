@@ -21,6 +21,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ServerConnection
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -71,6 +72,7 @@ class LogTailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val api: OpenCodeApi,
     private val shellRegistry: ServerShellRegistry,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -82,11 +84,18 @@ class LogTailViewModel @Inject constructor(
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
     private val directory = savedStateHandle.get<String>("directory").orEmpty()
 
+    /**
+     * 实际用于 PTY 的连接：优先复用连接服务解析后的直连地址（SSH 隧道 `127.0.0.1:localPort`），
+     * 否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl` 常不可达。
+     */
+    private val effectiveConn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+
     /** 连接级共享 PTY 会话：与服务器管理页、Git 页按 server 复用同一条 PTY。 */
     private var shellAcquired = false
     private val shell by lazy {
         shellAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, directory)
+        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, effectiveConn, directory)
     }
 
     private val _uiState = MutableStateFlow(LogTailUiState())

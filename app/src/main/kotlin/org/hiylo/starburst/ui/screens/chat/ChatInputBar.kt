@@ -15,6 +15,14 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -44,13 +52,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.semantics.text
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.VisualTransformation
@@ -74,6 +84,8 @@ import org.hiylo.starburst.ui.components.ProviderIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.theme.StatusError
+import org.hiylo.starburst.ui.theme.StatusWarning
 
 
 
@@ -196,6 +208,16 @@ internal fun ChatInputBar(
     var showContextDetails by remember { mutableStateOf(false) }
     var previewAttachmentIndex by remember { mutableStateOf(-1) }
     var showVariantMenu by remember { mutableStateOf(false) }
+    // 语音模式：输入框区域整体替换为「按住说话」条。点击麦克风按钮进入，键盘按钮退出。
+    var voiceMode by remember { mutableStateOf(false) }
+    val keyboardController = LocalSoftwareKeyboardController.current
+    // 进入语音模式收起软键盘；ASR 模型不可用（voiceEnabled=false）时自动退回文本输入。
+    LaunchedEffect(voiceMode) {
+        if (voiceMode) keyboardController?.hide()
+    }
+    LaunchedEffect(voiceEnabled) {
+        if (!voiceEnabled) voiceMode = false
+    }
 
     // Build merged slash commands: client commands + custom commands + server commands (deduplicated)
     val clientCmds = clientCommands()
@@ -380,9 +402,9 @@ internal fun ChatInputBar(
         // 上下文预算指示器：估算用量 vs 有效窗口，与下方预算文字同源同门槛，>80% 告警色。
         val budgetRatio = contextBudgetRatio(estimatedContextTokens, effectiveContextWindow)
         val budgetColor = when (contextBudgetLevel(budgetRatio)) {
-            ContextBudgetLevel.CRITICAL -> MaterialTheme.colorScheme.error
-            ContextBudgetLevel.WARNING -> MaterialTheme.colorScheme.tertiary
-            else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+            ContextBudgetLevel.CRITICAL -> StatusError
+            ContextBudgetLevel.WARNING -> StatusWarning
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
         val budgetPercentage = contextBudgetPercentage(budgetRatio)
         if (isBusy && retryStatus == null) {
@@ -830,20 +852,8 @@ internal fun ChatInputBar(
                         )
                     }
                 }
-                // Document generation entry — opens the generate-document dialog.
-                if (!isShellMode) {
-                    IconButton(
-                        onClick = onDocumentGenerateClick,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = stringResource(R.string.document_generate),
-                            modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                        )
-                    }
-                }
+                // Document generation entry — temporarily hidden (2026-09-22).
+                // if (!isShellMode) { IconButton(onClick = onDocumentGenerateClick, modifier = Modifier.size(44.dp)) { Icon(...) } }
                 // Text field — minimal style, no heavy outline
                 val mentionHighlightColor = MaterialTheme.colorScheme.primary
                 val mentionBgColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -855,142 +865,127 @@ internal fun ChatInputBar(
                     }
                 }
 
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(22.dp))
-                        .background(
-                            if (isAmoled) {
-                                Color.Black
-                            } else {
-                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                            }
-                        )
-                        .then(
-                            when {
-                                isShellMode -> Modifier.border(
-                                    width = if (isAmoled) 1.5.dp else 1.dp,
-                                    color = if (isAmoled) {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
-                                    } else {
-                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                                    },
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                isAmoled -> Modifier.border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
-                                    shape = RoundedCornerShape(22.dp)
-                                )
-                                else -> Modifier
-                            }
-                        )
-                ) {
-                    BasicTextField(
-                        value = textFieldValue,
-                        onValueChange = onTextFieldValueChange,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start = 16.dp,
-                                end = if (showInlineAttach) 48.dp else 16.dp,
-                                top = 10.dp,
-                                bottom = 10.dp,
-                            ),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(
-                            color = MaterialTheme.colorScheme.onSurface,
-                            fontFamily = if (isShellMode) FontFamily.Monospace else FontFamily.Default
-                        ),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
-                        maxLines = 5,
-                        cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                        visualTransformation = visualTransformation,
-                        decorationBox = { innerTextField ->
-                            if (text.isEmpty()) {
-                                Text(
-                                    text = placeholder,
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                )
-                            }
-                            innerTextField()
-                        }
+                if (voiceMode) {
+                    // 语音模式：输入框区域整体替换为更高的「按住说话」大胶囊（下游 VoiceHoldToTalkCapsule）。
+                    VoiceHoldToTalkCapsule(
+                        listening = isListening,
+                        voiceLevel = voiceLevel,
+                        onPress = onMicPress,
+                        onRelease = {
+                            onMicRelease()
+                            voiceMode = false // 松手文字上屏后自动回到文本输入
+                        },
+                        onCancel = onMicCancel,
+                        onSwitchToText = { voiceMode = false },
+                        modifier = Modifier.weight(1f),
                     )
-                    if (showInlineAttach) {
-                        Box(
-                            modifier = Modifier.matchParentSize(),
-                            contentAlignment = Alignment.CenterEnd,
-                        ) {
-                            IconButton(
-                                onClick = onAttach,
-                                modifier = Modifier.size(48.dp),
-                            ) {
-                                CartoonInkIcon(
-                                    Icons.Default.AttachFile,
-                                    contentDescription = stringResource(R.string.chat_attach),
-                                    modifier = Modifier.size(24.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Voice input button — hold to talk, release to fill, slide up to cancel.
-                // Only shown when the on-device ASR model has been downloaded in Settings.
-                if (!isShellMode && voiceEnabled) {
-                    var cancelThresholdPx by remember { mutableStateOf(0f) }
-                    val density = LocalDensity.current
+                } else {
+                    // 文本模式：输入框容器内部最右端放一个小麦克风图标，点它进入语音模式。
+                    val showInlineMic = !isShellMode && voiceEnabled
                     Box(
                         modifier = Modifier
-                            .size(44.dp)
-                            .pointerInput(Unit) {
-                                awaitEachGesture {
-                                    val down = awaitFirstDown()
-                                    down.consume()
-                                    onMicPress()
-                                    var cancelled = false
-                                    while (true) {
-                                        val event = awaitPointerEvent()
-                                        val change = event.changes.firstOrNull { it.id == down.id }
-                                        if (change == null) break
-                                        if (!change.pressed) {
-                                            if (cancelled) onMicCancel() else onMicRelease()
-                                            change.consume()
-                                            break
-                                        }
-                                        // Slide-up cancel: finger moves significantly above the button.
-                                        if (change.position.y < -cancelThresholdPx) {
-                                            cancelled = true
+                            .weight(1f)
+                            .clip(RoundedCornerShape(22.dp))
+                            .background(
+                                if (isAmoled) {
+                                    Color.Black
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                }
+                            )
+                            .then(
+                                when {
+                                    isShellMode -> Modifier.border(
+                                        width = if (isAmoled) 1.5.dp else 1.dp,
+                                        color = if (isAmoled) {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
                                         } else {
-                                            change.consume()
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                                        },
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    isAmoled -> Modifier.border(
+                                        width = 1.dp,
+                                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                                        shape = RoundedCornerShape(22.dp)
+                                    )
+                                    else -> Modifier
+                                }
+                            )
+                    ) {
+                        BasicTextField(
+                            value = textFieldValue,
+                            onValueChange = onTextFieldValueChange,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 16.dp,
+                                    end = when {
+                                        showInlineAttach && showInlineMic -> 96.dp
+                                        showInlineAttach || showInlineMic -> 48.dp
+                                        else -> 16.dp
+                                    },
+                                    top = 10.dp,
+                                    bottom = 10.dp,
+                                ),
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(
+                                color = MaterialTheme.colorScheme.onSurface,
+                                fontFamily = if (isShellMode) FontFamily.Monospace else FontFamily.Default
+                            ),
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                            maxLines = 5,
+                            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                            visualTransformation = visualTransformation,
+                            decorationBox = { innerTextField ->
+                                if (text.isEmpty()) {
+                                    Text(
+                                        text = placeholder,
+                                        style = MaterialTheme.typography.bodyLarge,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    )
+                                }
+                                innerTextField()
+                            }
+                        )
+                        if (showInlineAttach || showInlineMic) {
+                            Box(
+                                modifier = Modifier.matchParentSize(),
+                                contentAlignment = Alignment.CenterEnd,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                ) {
+                                    if (showInlineAttach) {
+                                        IconButton(
+                                            onClick = onAttach,
+                                            modifier = Modifier.size(44.dp),
+                                        ) {
+                                            CartoonInkIcon(
+                                                Icons.Default.AttachFile,
+                                                contentDescription = stringResource(R.string.chat_attach),
+                                                modifier = Modifier.size(24.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                            )
+                                        }
+                                    }
+                                    if (showInlineMic) {
+                                        // 点麦克风进入语音模式；与行内附件图标并列，麦克风最靠右。
+                                        IconButton(
+                                            onClick = { voiceMode = true },
+                                            modifier = Modifier.size(40.dp),
+                                        ) {
+                                            CartoonInkIcon(
+                                                Icons.Default.Mic,
+                                                contentDescription = stringResource(R.string.chat_voice_input),
+                                                modifier = Modifier.size(22.dp),
+                                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                                            )
                                         }
                                     }
                                 }
                             }
-                            .background(
-                                color = if (isListening) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)
-                                } else {
-                                    Color.Transparent
-                                },
-                                shape = RoundedCornerShape(22.dp),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        cancelThresholdPx = with(density) { 44.dp.toPx() }
-                        CartoonInkIcon(
-                            imageVector = if (isListening) Icons.Default.MicOff else Icons.Default.Mic,
-                            contentDescription = stringResource(
-                                if (isListening) R.string.chat_voice_input_stop else R.string.chat_voice_input
-                            ),
-                            modifier = Modifier.size(22.dp),
-                            tint = if (isListening) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-                            },
-                        )
+                        }
                     }
                 }
 
@@ -1052,22 +1047,22 @@ internal fun ChatInputBar(
                         ),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (isSending) {
-                        BreathingCircleIndicator(
-                            size = 14.dp,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    } else if (action == ComposerAction.STOP) {
+                    if (action == ComposerAction.STOP) {
                         CartoonInkIcon(
                             Icons.Default.Stop,
                             contentDescription = stringResource(R.string.chat_stop),
                             modifier = Modifier.size(14.dp),
                             inkWidth = 0.9.dp,
                             tint = if (isAmoled) {
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.88f)
+                                StatusError
                             } else {
                                 MaterialTheme.colorScheme.onErrorContainer
                             },
+                        )
+                    } else if (isSending) {
+                        BreathingCircleIndicator(
+                            size = 14.dp,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     } else {
                         CartoonInkIcon(
@@ -1101,5 +1096,218 @@ internal fun ChatInputBar(
             estimatedContextTokens = estimatedContextTokens,
             onDismiss = { showContextDetails = false },
         )
+    }
+}
+
+/**
+ * 语音模式「按住说话」大胶囊：替换输入框占据整条宽度，更高更圆润更抢眼。
+ *
+ * 空闲时居中显示提示文字，右侧小键盘按钮退出语音模式；按下时轻微缩小（按压反馈）；
+ * 录音中（[listening]）主色系高亮 + 音浪动效，并显示「松开 发送」与「上滑 取消」提示。
+ * 手势委托给 [Modifier.holdToTalk]：按下 [onPress]、松手 [onRelease]、上滑 [onCancel]。
+ *
+ * @param listening 是否正在录音
+ * @param voiceLevel 录音音量（0..10，与 VoiceListeningBanner 同口径，内部归一化到 0..1）
+ */
+@Composable
+private fun VoiceHoldToTalkCapsule(
+    listening: Boolean,
+    voiceLevel: Float,
+    onPress: () -> Unit,
+    onRelease: () -> Unit,
+    onCancel: () -> Unit,
+    onSwitchToText: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val isAmoled = isAmoledTheme()
+    // 按压反馈：按下微缩，松手回弹。
+    var held by remember { mutableStateOf(false) }
+    val pressScale by animateFloatAsState(
+        targetValue = if (held) 0.95f else 1f,
+        animationSpec = spring(dampingRatio = 0.6f, stiffness = Spring.StiffnessMediumLow),
+        label = "voiceCapsulePressScale",
+    )
+    val capsuleShape = RoundedCornerShape(28.dp)
+    Row(
+        modifier = modifier
+            .height(54.dp)
+            .graphicsLayer { scaleX = pressScale; scaleY = pressScale }
+            .clip(capsuleShape)
+            .background(
+                when {
+                    listening -> MaterialTheme.colorScheme.primary.copy(alpha = 0.22f)
+                    isAmoled -> Color.Black
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                }
+            )
+            .then(
+                when {
+                    listening -> Modifier.border(
+                        width = 1.5.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                        shape = capsuleShape,
+                    )
+                    isAmoled -> Modifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.7f),
+                        shape = capsuleShape,
+                    )
+                    else -> Modifier.border(
+                        width = 1.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                        shape = capsuleShape,
+                    )
+                }
+            )
+            .padding(start = 12.dp, end = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .holdToTalk(
+                    enabled = true,
+                    onPress = {
+                        held = true
+                        onPress()
+                    },
+                    onRelease = {
+                        held = false
+                        onRelease()
+                    },
+                    onCancel = {
+                        held = false
+                        onCancel()
+                    },
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (listening) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                ) {
+                    Text(
+                        text = stringResource(R.string.chat_voice_slide_up_cancel),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        maxLines = 1,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        VoiceWaveform(voiceLevel = voiceLevel)
+                        Text(
+                            text = stringResource(R.string.chat_voice_release_to_send),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary,
+                            maxLines = 1,
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text = stringResource(R.string.chat_voice_hold_to_talk),
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = if (isAmoled) {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f)
+                    },
+                )
+            }
+        }
+        // 胶囊内返回键盘小按钮：不受 holdToTalk 手势影响，点它退回文本输入。
+        IconButton(
+            onClick = onSwitchToText,
+            modifier = Modifier.size(40.dp),
+        ) {
+            CartoonInkIcon(
+                Icons.Default.Keyboard,
+                contentDescription = stringResource(R.string.chat_voice_switch_to_text),
+                modifier = Modifier.size(22.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+            )
+        }
+    }
+}
+
+/**
+ * 录音音浪动效：5 根动态高度的竖条，振幅随 [voiceLevel]（0..10）缩放，
+ * 并在相位循环动画下保持跳动（voiceLevel 恒为 0 时仍有基础律动）。
+ */
+@Composable
+private fun VoiceWaveform(voiceLevel: Float) {
+    val level = (voiceLevel / 10f).coerceIn(0f, 1f).coerceAtLeast(0.2f)
+    val barCount = 5
+    val minHeight = 10.dp
+    val maxHeight = 32.dp
+    val wave = rememberInfiniteTransition(label = "voiceWaveform")
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        repeat(barCount) { index ->
+            val phase by wave.animateFloat(
+                initialValue = -index.toFloat(),
+                targetValue = 5f + (barCount - index).toFloat(),
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 700, delayMillis = index * 90),
+                    repeatMode = RepeatMode.Reverse,
+                ),
+                label = "voiceWaveformBar$index",
+            )
+            val barLevel = (phase + 1f).coerceIn(0f, 1f) * level
+            val barHeight = minHeight + (maxHeight - minHeight) * barLevel
+            Box(
+                modifier = Modifier
+                    .width(4.dp)
+                    .height(barHeight)
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)),
+            )
+        }
+    }
+}
+
+/**
+ * 「按住说话」手势：按下立即开始录音（[onPress]），松手提交（[onRelease]），
+ * 手指上滑取消（[onCancel]）。用于语音模式的按住说话条，按下即讲、无需等待长按时长。
+ */
+private fun Modifier.holdToTalk(
+    enabled: Boolean,
+    onPress: () -> Unit,
+    onRelease: () -> Unit,
+    onCancel: () -> Unit,
+): Modifier {
+    if (!enabled) return this
+    return this.pointerInput(enabled) {
+        val cancelPx = with(density) { 44.dp.toPx() }
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            down.consume()
+            onPress()
+            var cancelled = false
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == down.id }
+                if (change == null || !change.pressed) {
+                    if (cancelled) onCancel() else onRelease()
+                    change?.consume()
+                    return@awaitEachGesture
+                }
+                // 上滑取消：手指移动明显高于语音条。
+                if (change.position.y < -cancelPx) {
+                    cancelled = true
+                } else {
+                    change.consume()
+                }
+            }
+        }
     }
 }
