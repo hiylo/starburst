@@ -763,14 +763,14 @@ class BackendApi @Inject constructor(
     /** 拉取同步包（`GET /api/sync?key=`）；后端 404 表示键不存在，返回 null。 */
     suspend fun syncGetBundle(backendUrl: String, token: String, key: String): BackendSyncBundle? {
         val url = "${backendUrl.trimEnd('/')}/api/sync"
-        return try {
-            httpClient.get(url) {
-                header("Authorization", "Bearer $token")
-                parameter("key", key)
-            }.body()
-        } catch (e: ClientRequestException) {
-            if (e.response.status.value == 404) null else throw e
+        val response = httpClient.get(url) {
+            header("Authorization", "Bearer $token")
+            parameter("key", key)
         }
+        // 本项目 HttpClient 未开启 expectSuccess：4xx/5xx 不会抛 ClientRequestException，
+        // 必须按状态码显式判定「远端无 bundle」→ null，否则 404 的 {"error":...} 会被
+        // 反序列化成空 Bundle，首次同步误判为 CONFLICT。
+        return if (response.status.value == 404) null else response.body()
     }
 
     /** 写入同步包（`PUT /api/sync`），返回新 revision。 */
