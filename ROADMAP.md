@@ -134,7 +134,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [ ] M6 Android validation — required-display field list; contract↔UI diff; null-value check → `CLIENT_MISSING_FIELD`.
 - [ ] M7 Security & compliance audit — dependency vulns (Trivy/OSV/govulncheck/npm audit, dedup + snapshot cache), static/lint, AGENTS.md compliance rules, LLM review → findings; false-positive/waive; SBOM export (CycloneDX).
 - [ ] M8 Features + AI — feature-point clustering, drag-sort, involved-ends; feature single-test (connectivity + expected data); issue↔feature linkage; AI chat with measured context; smart severity (SECURITY_WARNING for plaintext secrets); AI suggestion rules (configurable prompts, AI polish, per-rule scan).
-- [ ] M9 StarBurst APP — Test Intelligence entry + feature list/detail + single-test + AI chat + push (parity, §6.1). APP is a **lightweight client**: key operations (single-test, AI chat root-cause, issue→feature linkage/tracking, view/apply fix suggestions, waive/false-positive) + key info preview (feature list/detail, single-test results, issue summary, SECURITY_WARNING highlight); heavy config (env, command allowlist, global settings, rule editing) stays on Web.
+- [ ] M9 StarBurst APP — Test Intelligence entry + feature list/detail + single-test + AI chat + push (parity, §6.1). APP is a **lightweight client**: key operations (single-test, AI chat root-cause, issue→feature linkage/tracking, view/apply fix suggestions, waive/false-positive) + key info preview (feature list/detail, single-test results, issue summary, SECURITY_WARNING highlight); heavy config (env, command allowlist, global settings, rule editing) stays on Web. *(client work moved to 3.1.0, next section)*
 
 #### Recognition & correction (overrides)
 - Confidence tiers (high/medium/low); inline table edit + prompt-assisted batch overrides; override layer (`auto_value`/`manual_value`) with provenance; anchor-change → re-review queue, never silently overwrite manual fixes.
@@ -152,14 +152,14 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Cartoon style: rounded display font (Baloo 2, OFL) + inked/sticker icon wrappers +
   `MaterialTheme.shapes` ramp
 - [x] Session list multi-select Compress (batch compact)
-- [ ] Server monitoring alerts (CPU/memory/disk thresholds → push)
+- [ ] Server monitoring alerts (CPU/memory/disk thresholds → push) →3.1.0
 - [x] Notification quick actions (RemoteInput reply to launch a task)
-- [ ] Material You dynamic color theme
+- [x] Material You dynamic color theme (Theme.kt `dynamicColor`, API 31+, with preference + tests)
 - [x] On-device code completion/rewrite model (MNN, offline)
 - [x] In-editor AI actions (select code → explain/refactor/write tests → diff preview then apply)
 - [x] Session timeline replay (agent decision-process visualization)
 - [x] Custom system prompt + context-budget management (per server)
-- [ ] Multi-device/team sync (backend sync of config/templates/bookmarks/archives)
+- [ ] Multi-device/team sync (backend sync of config/templates/bookmarks/archives) →3.1.0 (backend channel)
 - [x] Encrypted backup & restore (Keystore backup bundle, cross-device restore)
 
 ### Engineering quality
@@ -168,7 +168,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
   `EventReducer` is already covered by `EventReducerTest` (33 cases), as is the encrypted backup
   envelope (`PasswordCrypto` round-trip and wrong-passphrase rejection in `BackupPayloadTest`).
   2026-09-21: 261 JVM unit tests + 2 Compose instrumentation + 5 Maestro E2E flows all green.
-- [ ] Startup time / memory / jank performance baseline
+- [ ] Startup time / memory / jank performance baseline →3.1.0
 
 ### Removed (product decision)
 
@@ -268,6 +268,93 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] Removed unconditional MNN model preload (native heap ~790MB → ~21MB)
 - [x] SSE stall self-healing (busy-period REST fallback polling)
 - [x] ~~Accessibility (TalkBack)~~ — dropped by product decision (3.0.0)
+
+## 3.1.0 (In progress 🚧)
+
+> Theme: Test Intelligence lands on the APP (M9 wrap-up) + backend monitoring/sync capabilities surfaced
+> to the APP + knowledge-base & document capabilities (backend v2.1.0 pairing), plus small fixes and
+> cleanup. Backend M1–M8 are largely landed (`/api/intel/*` registered, `intel.*` WS pushes emitted;
+> see starburst-backend `docs/TEST_INTELLIGENCE.md`). The APP is a **lightweight client** — heavy
+> config (project creation / command allowlist / rule editing) stays on Web.
+
+### Test Intelligence M9 — StarBurst APP side (main track)
+
+- [x] Network layer: `/api/intel/*` endpoints + data models (project/module/feature/run/result/issue/fix/chat)
+- [x] Push: consume `intel.*` events (run status, gate block, audit finding, fix suggest/apply, chat answer) + notifications
+- [x] Entry: "Test Intelligence" icon in session list / workbench (backendReady-gated)
+- [x] Project list screen: intel projects + modules + analysis status
+- [x] Project detail screen: feature list/detail (ends, source, anchor)
+- [x] Single tests: start a run (project/module) + run list (status badge/progress) + per-case results (passed/failed)
+- [x] Issue loop: issue list (severity/location) + ack to resolved + link to feature
+- [x] Fix suggestions: list + diff preview + apply (file/patch/branch) + rollback/reject
+- [x] Feature AI chat: question history + context-bundled attribution answers
+- [x] SECURITY_WARNING highlight; friendly empty/error states
+
+### Server monitoring alerts → APP
+
+- [x] Network layer: GET/POST `/api/alerts` (snapshot + threshold config)
+- [x] Server management screen: monitoring-alert card (enable + CPU/mem/disk thresholds)
+- [x] Push: consume `alert.hardware` → notifications (warning/info tier)
+- [x] Local alert history (AlertHistoryRepository SQLite) + periodic `GET /api/alerts` reconciliation (WS drops frames)
+
+### Knowledge base (KB) client
+
+- [x] Entry: server-management (when backend ready) → Knowledge Base
+- [x] Collection list / create / delete + document list
+- [x] Ingest: text / file (`POST /api/kb/ingest`)
+- [x] Semantic search (`/api/kb/search`, scored snippets)
+- [x] `/api/documents/*` generated-document API client (BackendDocumentsApi; preview waits for a download endpoint)
+
+### Multi-device/team sync (backend channel)
+
+- [x] Network layer: GET/PUT `/api/sync` (per-key namespaces + revision drift detection)
+- [x] New `SyncTransport` impl: BackendSyncTransport (starburst-backend `sync_bundle`)
+- [x] SyncSettingsScreen gains a "starburst-backend" storage option
+
+### Engineering fixes & cleanup
+
+- [x] `update.json` stale (2.0.0 → 3.0.0)
+- [x] Split `BackendGate.REQUIRED_BACKEND_VERSION` into "minimum gate" vs "install target" (MIN / INSTALL = 2.1.0)
+- [x] ROADMAP stale checkboxes (Material You dynamic color / full-text search already implemented)
+
+### Performance baseline + Baseline Profile
+
+- [x] Startup/memory measurement script `scripts/measure-startup.sh` + baseline doc `docs/performance-baseline.md` (debug + soft render: cold-start median 1054ms, PSS ~50MB)
+- [x] Baseline Profile: `profileinstaller` dep + `:baselineprofile` module + generated `app/src/main/baseline-prof.txt` (12,423 lines; release merged ART profile 10,596 → 17,908)
+
+### Knowledge base & document capabilities (backend v2.1.0 pairing)
+
+> Adopt the backend v2.1.0 document subsystem (knowledge base / document parsing /
+> RAG-in-Prompt / document generation / in-session preview / chat-context-driven iteration).
+> Backend design lives in starburst-backend `docs/RAG_PROMPT.md` and `docs/DOCUMENTS.md`;
+> the APP stays a **lightweight client** — heavy management (ingest, templates, collection
+> config) stays on Web. Prerequisite: raise `BackendGate.REQUIRED_BACKEND_VERSION` to **2.1.0**.
+
+#### Knowledge-base references (RAG-in-Prompt passthrough)
+
+- [ ] Session sends carry knowledge-base context automatically (spliced in the backend
+      `prompt_async` mirror-proxy layer; zero APP changes)
+- [ ] Optional: consume `X-Rag-Spliced` response header → "N sources brought in" / "no
+      relevant material found" hint
+- [ ] Source display for KB citations (doc / section, tap-through to preview)
+
+#### Document generation & iteration
+
+- [ ] Network layer: `/api/documents/*` (generate / regenerate) + `doc.event` WS consumption
+- [ ] Entry points: workbench / chat action "Generate PPT / Word / Excel" (backendReady +
+      version gate)
+- [ ] Generation task card (progress + completion push) + product attached back into the
+      session (`-@doc-{id}` filename convention)
+- [ ] Attachment-card actions: "Regenerate" / "Revise per instruction" → regenerate (with
+      recent session context)
+
+#### In-session document preview
+
+- [ ] Network layer: document-attachment URL resolution + preview-page address composition
+- [ ] Document attachment card → WebView sheet loading the backend
+      `webui/static/doc/preview.html` (pdf.js / mammoth / SheetJS / pptxjs; one renderer
+      page shared by both clients)
+- [ ] In-preview paging / zoom / download; full coverage of `.docx/.xlsx/.pptx/.pdf`
 
 ## Later — Backlog
 

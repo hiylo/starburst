@@ -9,6 +9,59 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased] - 3.1.0
+
+### Added
+- **Test Intelligence M9 (client)** — the Test Intelligence subsystem lands on the APP. A new entry
+  in the session-list top bar (shown when a capable backend is present) opens a project list
+  (`/api/intel/projects`) with analysis status and modules, then a per-project screen with four
+  sections:
+  - **Features** — feature list with source (auto/manual) badge, involved-end chips, summary, and a
+    detail dialog with the feature's AI chat (question history, context bundle, streaming answer via
+    `/api/intel/features/{id}/chat`).
+  - **Single tests** — start a run (`POST /api/intel/run`, root module by default), a run list with
+    status badges (queued/running/passed/failed) and progress, expandable per-case results.
+  - **Issues** — severity-badged issue list, one-tap mark-resolved (ack) and link-to-feature.
+  - **Fix suggestions** — list with status, diff preview (`file`/`line`/`newText`), apply with
+    write-mode choice (file/patch/branch), rollback and reject.
+  - SECURITY_WARNING-style highlighting on high-severity issues; friendly empty/error states.
+- **Backend push for Test Intelligence** — a second `/api/ws` subscription consumes `intel.*` events
+  (run finish, gate block, audit finding, fix suggest/apply, feature-chat answer) and turns the
+  actionable ones into notifications (run passed/failed, audit findings on warning/critical).
+- **Server monitoring alerts** — a monitoring card in server management shows live CPU/memory/disk
+  usage, current thresholds and an enable switch, all editable through `GET/POST /api/alerts`.
+  `alert.hardware` push events surface as notifications when a metric crosses its threshold and
+  again when it recovers (values are sampled every 60s; alerts fire only on state transitions).
+- **Multi-device/team sync via starburst-backend** — a fourth sync storage option. `BackendSyncTransport`
+  mirrors the local sync payload to the backend's `sync_bundle` KV table through `GET/PUT /api/sync`
+  (key `global`, revision-based drift detection on top of last-write-wins). Backend URL + token are
+  configured on the sync settings screen.
+- **Backend API surface** — 23 new `BackendApi` methods (intel projects/modules/features/runs/
+  results/issues/fixes/feature-chat + alerts snapshot/config + sync get/put) with `IntelModels`,
+  `BackendAlerts` and `BackendSync` DTOs.
+- **Knowledge base (KB) client** — a server-management entry opens the knowledge base: collection
+  list/create/delete, document list, text/file ingestion (`POST /api/kb/ingest`), and semantic
+  search (`/api/kb/search`) with scored snippet results. `BackendKbApi`, `KbModels` and
+  `/api/documents/*` (`BackendDocumentsApi`) surface the backend KB and generated-document API.
+
+### Changed
+- **`BackendGate.REQUIRED_BACKEND_VERSION` split** — the single constant became `MIN_BACKEND_VERSION`
+  (the gate used by `needsUpgrade`, now **2.1.0**) and `INSTALL_BACKEND_VERSION` (the version the
+  one-click installer pins). The two can now diverge (install latest while gating at a floor).
+- **Sync backend token encrypted at rest** — the starburst-backend sync token moved out of DataStore
+  plaintext into `LocalSyncSecretStore` (Android Keystore AES-GCM), matching GitHub/WebDAV handling.
+
+### Fixed
+- **Stale in-app update manifest** — `update.json` still advertised v2.0.0 (versionCode 7); it now
+  points at the shipped v3.0.0 release so the updater reports the correct latest version.
+- **ROADMAP stale checkboxes** — Material You dynamic color and full-text search were already
+  implemented but still marked as open; corrected.
+
+### Backend (starburst-backend, non-intel)
+- **Required backend bumped 2.0.1 → 2.1.0** (`BackendGate.MIN_BACKEND_VERSION`). The Test
+  Intelligence client, alerts card and sync channel assume starburst-backend **≥ 2.1.0**; the
+  one-click installer also pins v2.1.0 (`INSTALL_BACKEND_VERSION`).
+
 ## [3.0.0] - 2026-09-21
 
 ### Added

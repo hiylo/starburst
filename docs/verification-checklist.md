@@ -114,3 +114,37 @@ OTHER 兜底），其余 Compose 渲染路径已在专属 AVD `starburst_test` �
 - **一键安装**：真实 SSH 远端按 `v{REQUIRED_BACKEND_VERSION}` 下载对应二进制；token 经环境变量注入生效、health 探测通过、持久化正确；非 18880 端口场景 App 提示显式填 backendUrl。
 - **加密备份全链路**：导出 → 换设备导入，服务器/模板/收藏恢复正确；错误口令被拒。
 - **其余真机视觉尾项**：图片卡片、@ 提及弹层、Git 五个对话框、设置页其余弹窗、后台连接通知、背景唤醒策略在真实耗电曲线上的表现。
+
+---
+
+# 3.1.0 验证清单（测试智能 M9 客户端 + 硬件告警 + 后端同步）
+
+> 更新：2026-09-22 —— 代码已实现（未提交），`compileDebugKotlin` + `testDebugUnitTest`
+> **272 例全绿**（新增 `IntelModelsTest` / `TestIntelUiTest` / `BackendSyncTransportTest`）；
+> `check-secrets.sh --all` 干净。后端配套版本升至 **v2.1.0**（`BackendGate.MIN_BACKEND_VERSION`）。
+> 本文档只记录本次 3.1.0 功能的**验证结论**，3.0.0 及之前的行在上一节已完结。
+
+## 已验证通过（编译 / JVM 单测 / 源码同源）
+
+- 网络层：`BackendApi` +23 方法（`/api/intel/*` 19 + `/api/alerts` 2 + `/api/sync` 2）URL/请求体/鉴权与后端契约一致（`/api/intel/features` 的 projectId 在 query、`features/test` 在 body、`run` 无 scope/command 参数、endsJson/diffJson 字符串包裹需二次解析）——单测 `IntelModelsTest` 覆盖 `parseStringListJson`/`parseDiffJson`/`IntelFeature.ends()`。
+- 推送层：`BackendPushListener.intelEventFlow` 白名单 + `IntelPushParser` 对 9 类事件（`intel.run.event`、`alert.hardware`、`intel.gate.blocked`、`intel.env.ready`、`intel.audit.finding`、`intel.fix.suggested`、`intel.fix.applied`、`intel.feature.chat.answer`、`task.event`）严格字段名解析、失败返回 null——解析逻辑为纯函数，可单测。
+- 通知克制性：仅 run 终态（passed/failed）、硬件越线/恢复、审计发现（warning/critical）发通知；queued/running 静默。
+- 硬件告警 UI：服务器管理页监控卡片（启用 + CPU/内存/磁盘当前值 + 阈值 0-100 编辑 + 越线红点）——后端语义已对齐（阈值仅状态迁移推送、无历史端点、severity/payload omitempty、value>threshold 严格大于、阈值 0 静默回退 90）。
+- 多设备同步：`BackendSyncTransport.read/write`（404→null、失败抛 `SyncHttpException`、key=`global`、base revision 漂移检测）；`SyncConfig.backendToken` 已从 DataStore 迁入 `LocalSyncSecretStore`（Keystore AES-GCM）。单测 `BackendSyncTransportTest` 覆盖 enabled 迁移与唯一存储约束。
+- 版本门控：`BackendGate` 拆 `MIN_BACKEND_VERSION`/`INSTALL_BACKEND_VERSION`（均 2.1.0），升级提示与一键安装分别读取；低版本后端（<2.1.0）入口隐藏。
+- 工程清理：`update.json` 指向 v3.0.0（versionCode 8 + sha256）；ROADMAP 过期勾选已修。
+
+## 待真机 / 真实后端验证（使用中观察项）
+
+- **测试智能端到端**：连 ≥2.1.0 后端 → 会话列表「测试智能」入口 → 项目列表 → 功能点 AI 对话返回带上下文归因答案、单测 run 完成推送通知、问题 ack / 挂功能点、修复建议 apply(file/patch/branch) 后 diff 可见。模拟器无真实后端项目实体，未跑通闭环。
+- **硬件告警真机**：后端 60s 采样的越线 → `alert.hardware` 推送通知（越线/恢复两条）；阈值编辑生效。
+- **后端同步真机**：设置页选 starburst-backend → 输入 URL+token → 同步成功、revision 漂移后他端 re-pull；换机恢复。
+- **`intelEventFlow` 与镜像通道共存**：后端镜像直连切换 / 裸直连模式下第二条 WS 订阅的连接与退避行为。
+
+### 知识库（KB）客户端（3.1.0 接线补齐）
+
+代码已接线（编译 + 单测全绿）：服务器管理页 → 知识库 → 集合列表/新建/删除 → 集合详情 →
+摄入（文本/文件 `ACTION_OPEN_DOCUMENT`）→ 语义搜索（得分 + 片段）。
+- 编译 + 全量 JVM 单测通过；入口仅后端就绪时显示（复用 `isBackendReady` 门控）。
+- **待真机/真实后端验证**：连 ≥2.1.0 后端摄入中英文档 → 搜索命中与得分合理性；大文件摄入（5MB 上限）与后端向量化的耗时交互；删除集合的级联确认。
+- 遗留重复套（`ui/screens/knowledge/` 5 文件 + `strings_knowledge.xml`）已删除——功能是当前实现子集且未接线；`/api/documents/*` 生成 API 客户端已就绪，文档预览（`DocumentPreviewSheet`）待后端提供下载端点后接入。
