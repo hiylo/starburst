@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Document generation (3.1.0) -->
+    <string name="document_generate">Generate document</string>
+    <string name="document_generate_title">Generate document</string>
+    <string name="document_generate_type_label">Type</string>
+    <string name="document_generate_prompt_label">Content</string>
+    <string name="document_generate_prompt_hint">Describe what the document should contain</string>
+    <string name="document_generate_button">Generate</string>
+    <string name="document_revise_title">Revise document</string>
+    <string name="document_revise_prompt_label">Revision feedback</string>
+    <string name="document_revise_prompt_hint">Describe what to change</string>
+    <string name="document_revise_button">Apply changes</string>
+    <string name="document_download">Download</string>
+    <string name="document_preview">Preview</string>
+    <string name="document_revise_action">Revise by feedback</string>
+    <string name="document_generated_notice">Generated document \"%1$s\" (docId=%2$s, %3$s)</string>
+    <string name="document_regenerated_notice">Regenerated document \"%1$s\" (docId=%2$s, %3$s)</string>
+    <string name="document_backend_unavailable">Document backend unavailable for this server</string>
+    <string name="document_generate_failed">Failed to generate document</string>
+    <string name="document_revise_failed">Failed to revise document</string>
+    <string name="document_download_failed">Failed to download document</string>
+    <string name="document_downloaded">Document downloaded</string>
+</resources>
