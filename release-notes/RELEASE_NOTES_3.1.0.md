@@ -54,6 +54,11 @@ starburst-backend sync channel.
 - `update.json` advertised v2.0.0; it now points at the shipped v3.0.0 release (correct in-app
   update detection).
 - ROADMAP checkboxes for Material You dynamic color and full-text search (already implemented).
+- **Audit fixes** — knowledge-base entry crash (unregistered route), Intel push surviving SSH tunnel
+  rebuilds, audit-finding `high` notifications, sync disconnect preserving unrelated credentials, KB
+  ingest OOM guard + streaming, alert-history de-duplication, same-origin document preview/download,
+  notifications honoring user enable/silent settings with localized per-server IDs, one-time channel
+  migration.
 
 ## Security
 

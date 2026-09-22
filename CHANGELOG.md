@@ -56,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   points at the shipped v3.0.0 release so the updater reports the correct latest version.
 - **ROADMAP stale checkboxes** — Material You dynamic color and full-text search were already
   implemented but still marked as open; corrected.
+- **Audit fixes (code audit 3.1.0)** — knowledge-base entry no longer crashes (session-list button
+  routed to the registered `kb` route); the Intel push subscription is restarted when the SSH tunnel
+  is rebuilt (was silently stuck on the old local port); audit-finding notifications now fire for
+  `high` severity (backend has no `warning`); sync `disconnect()` no longer wipes unrelated
+  credentials (LLM API key / SFTP password); KB file ingest size-checks before reading and streams
+  with a cap instead of loading whole files into memory; alert history is de-duplicated across the
+  push and poll paths; document preview/download enforce same-origin checks before attaching the
+  bearer token; the new intel/hardware/audit notifications honor the user's notification/silent
+  settings, use localized text and per-server notification IDs; notification channels are migrated
+  once (persisted marker) instead of being deleted/recreated on every process start.
 
 ### Backend (starburst-backend, non-intel)
 - **Required backend bumped 2.0.1 → 2.1.0** (`BackendGate.MIN_BACKEND_VERSION`). The Test
