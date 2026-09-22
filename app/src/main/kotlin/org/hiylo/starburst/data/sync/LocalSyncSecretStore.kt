@@ -74,6 +74,7 @@ class LocalSyncSecretStore @Inject constructor(
         SYNC_PASSPHRASE("sync_passphrase"),
         LLM_PROVIDER_API_KEY("llm_provider_api_key"),
         SFTP_PASSWORD("sftp_backup_password"),
+        BACKEND_TOKEN("sync_backend_token"),
     }
 
     companion object {

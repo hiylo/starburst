@@ -111,6 +111,9 @@ fun SyncSettingsScreen(
     var documentName by remember { mutableStateOf("") }
     var documentGrantFlags by remember { mutableStateOf(0) }
     var documentPickerError by remember { mutableStateOf<String?>(null) }
+    var backendUrl by remember { mutableStateOf("") }
+    var backendToken by remember { mutableStateOf("") }
+    var backendTokenFocused by remember { mutableStateOf(false) }
     var includePasswords by remember { mutableStateOf(false) }
     var passphrase by remember { mutableStateOf("") }
     var passphraseFocused by remember { mutableStateOf(false) }
@@ -162,6 +165,9 @@ fun SyncSettingsScreen(
         webDavPassword.isNotBlank() ||
         (selectedBackend == SyncBackend.DOCUMENT) != state.config.document.enabled ||
         documentUri != state.config.document.endpoint ||
+        (selectedBackend == SyncBackend.BACKEND) != state.config.target(SyncBackend.BACKEND).enabled ||
+        backendUrl.trim() != state.config.backendUrl ||
+        backendToken.isNotBlank() ||
         includePasswords != state.config.includeEncryptedPasswords ||
         passphrase.isNotBlank() ||
         autoSync != state.config.autoSync
@@ -170,6 +176,7 @@ fun SyncSettingsScreen(
         state.config,
         state.hasGithubToken,
         state.hasWebDavPassword,
+        state.hasBackendToken,
         state.hasSyncPassphrase,
     ) {
         selectedBackend = state.config.primaryBackend.takeIf { it != SyncBackend.NONE } ?: SyncBackend.GIST
@@ -181,10 +188,12 @@ fun SyncSettingsScreen(
             ?.let { documentDisplayName(context, Uri.parse(it)) }
             .orEmpty()
         documentGrantFlags = 0
+        backendUrl = state.config.backendUrl
         includePasswords = state.config.includeEncryptedPasswords
         autoSync = state.config.autoSync
         gistToken = ""
         webDavPassword = ""
+        backendToken = ""
         passphrase = ""
     }
 
@@ -277,6 +286,12 @@ fun SyncSettingsScreen(
                     selected = selectedBackend == SyncBackend.DOCUMENT,
                     onClick = { selectedBackend = SyncBackend.DOCUMENT },
                     label = stringResource(R.string.sync_backend_document),
+                    isAmoled = isAmoled,
+                )
+                SyncBackendChip(
+                    selected = selectedBackend == SyncBackend.BACKEND,
+                    onClick = { selectedBackend = SyncBackend.BACKEND },
+                    label = stringResource(R.string.sync_backend_backend),
                     isAmoled = isAmoled,
                 )
             }
@@ -416,6 +431,32 @@ fun SyncSettingsScreen(
                     }
                 }
                 SyncBackend.NONE -> Unit
+                SyncBackend.BACKEND -> {
+                    SyncBackendCard(
+                        title = stringResource(R.string.sync_backend_backend),
+                        state = state.backendState,
+                        configured = configured && state.config.primaryBackend == SyncBackend.BACKEND,
+                        isAmoled = isAmoled,
+                    ) {
+                        OutlinedTextField(
+                            value = backendUrl,
+                            onValueChange = { backendUrl = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text(stringResource(R.string.sync_backend_url)) },
+                            supportingText = { Text(stringResource(R.string.sync_backend_url_desc)) },
+                            singleLine = true,
+                        )
+                        SecretTextField(
+                            value = backendToken,
+                            onValueChange = { backendToken = it },
+                            focused = backendTokenFocused,
+                            onFocusChanged = { backendTokenFocused = it },
+                            stored = state.hasBackendToken,
+                            label = stringResource(R.string.sync_backend_token),
+                            supportingText = stringResource(R.string.sync_credential_saved_hint),
+                        )
+                    }
+                }
             }
 
             HorizontalDivider()
@@ -479,6 +520,8 @@ fun SyncSettingsScreen(
                         documentEnabled = selectedBackend == SyncBackend.DOCUMENT,
                         documentUri = documentUri,
                         documentGrantFlags = documentGrantFlags,
+                        backendUrl = backendUrl,
+                        backendToken = backendToken,
                         includePasswords = includePasswords,
                         passphrase = passphrase,
                         autoSync = autoSync,

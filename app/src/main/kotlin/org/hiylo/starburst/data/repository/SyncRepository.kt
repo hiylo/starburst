@@ -18,6 +18,8 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import org.hiylo.starburst.data.api.BackendApi
+import org.hiylo.starburst.data.sync.BackendSyncTransport
 import org.hiylo.starburst.data.sync.BackupSyncDecision
 import org.hiylo.starburst.data.sync.EncryptedSecrets
 import org.hiylo.starburst.data.sync.DocumentSyncTransport
@@ -52,7 +54,7 @@ import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
-enum class SyncBackend { NONE, GIST, WEBDAV, DOCUMENT }
+enum class SyncBackend { NONE, GIST, WEBDAV, DOCUMENT, BACKEND }
 enum class SyncStatus { DISCONNECTED, IDLE, SYNCING, CONFLICT, PARTIAL, ERROR }
 enum class BackendSyncStatus { DISABLED, IDLE, SYNCING, CONFLICT, DIVERGED, ERROR }
 
@@ -67,6 +69,8 @@ data class SyncConfig(
     val gist: SyncTargetConfig = SyncTargetConfig(),
     val webDav: SyncTargetConfig = SyncTargetConfig(),
     val document: SyncTargetConfig = SyncTargetConfig(),
+    val backendUrl: String = "",
+    val backendToken: String = "",
     val autoSync: Boolean = false,
     val includeEncryptedPasswords: Boolean = false,
 ) {
@@ -74,6 +78,11 @@ data class SyncConfig(
         SyncBackend.GIST -> gist
         SyncBackend.WEBDAV -> webDav
         SyncBackend.DOCUMENT -> document
+        SyncBackend.BACKEND -> SyncTargetConfig(
+            enabled = primaryBackend == SyncBackend.BACKEND && backendUrl.isNotBlank(),
+            endpoint = backendUrl,
+            username = backendToken,
+        )
         SyncBackend.NONE -> SyncTargetConfig()
     }
 
@@ -82,6 +91,7 @@ data class SyncConfig(
             if (gist.enabled) add(SyncBackend.GIST)
             if (webDav.enabled) add(SyncBackend.WEBDAV)
             if (document.enabled) add(SyncBackend.DOCUMENT)
+            if (primaryBackend == SyncBackend.BACKEND && backendUrl.isNotBlank()) add(SyncBackend.BACKEND)
         }
 }
 
@@ -98,9 +108,11 @@ data class SyncState(
     val hasGithubToken: Boolean = false,
     val hasWebDavPassword: Boolean = false,
     val hasSyncPassphrase: Boolean = false,
+    val hasBackendToken: Boolean = false,
     val gistState: BackendSyncState = BackendSyncState(),
     val webDavState: BackendSyncState = BackendSyncState(),
     val documentState: BackendSyncState = BackendSyncState(),
+    val backendState: BackendSyncState = BackendSyncState(),
     val lastLocalPayloadHash: String? = null,
     val generation: Long = 0,
     val lastSyncTimestamp: Long? = null,
@@ -111,6 +123,7 @@ data class SyncState(
         SyncBackend.GIST -> gistState
         SyncBackend.WEBDAV -> webDavState
         SyncBackend.DOCUMENT -> documentState
+        SyncBackend.BACKEND -> this.backendState
         SyncBackend.NONE -> BackendSyncState()
     }
 }
@@ -152,6 +165,7 @@ class SyncRepository @Inject constructor(
     private val secretStore: LocalSyncSecretStore,
     private val client: HttpClient,
     private val json: Json,
+    private val backendApi: BackendApi,
     @ApplicationContext private val context: Context,
 ) {
     private val syncMutex = Mutex()
@@ -195,6 +209,19 @@ class SyncRepository @Inject constructor(
                 DocumentSyncTransport.PERMISSION_ERROR
             }
         }
+        if (config.primaryBackend == SyncBackend.BACKEND) {
+            require(config.backendUrl.isNotBlank()) { "A starburst-backend URL is required" }
+            val backendUri = Uri.parse(config.backendUrl.trim())
+            // Bearer token 走明文 http 会泄露同步凭据：仅允许 https（或回环地址），与 WebDAV 策略一致。
+            val isLoopback = backendUri.host?.let { it == "127.0.0.1" || it == "localhost" || it == "::1" } == true
+            require(backendUri.scheme == "https" || isLoopback) {
+                "starburst-backend over plain HTTP exposes your sync token; use an https:// URL"
+            }
+            val storedBackendToken = secretStore.get(LocalSyncSecretStore.SecretKey.BACKEND_TOKEN)
+            require(config.backendToken.isNotBlank() || !storedBackendToken.isNullOrBlank()) {
+                "A starburst-backend token is required"
+            }
+        }
         val storedPassphrase = secretStore.get(LocalSyncSecretStore.SecretKey.SYNC_PASSPHRASE)
         if (config.includeEncryptedPasswords) {
             require(!syncPassphrase.isNullOrBlank() || !storedPassphrase.isNullOrBlank()) {
@@ -219,6 +246,7 @@ class SyncRepository @Inject constructor(
             val gistIdentityChanged = targetIdentityChanged(preferences, SyncBackend.GIST, config.gist)
             val webDavIdentityChanged = targetIdentityChanged(preferences, SyncBackend.WEBDAV, config.webDav)
             val documentIdentityChanged = targetIdentityChanged(preferences, SyncBackend.DOCUMENT, config.document)
+            val backendUrlChanged = preferences[BACKEND_URL].orEmpty() != config.backendUrl.trim()
             if (preferences[PRIMARY_BACKEND] == null) {
                 val legacyBackend = runCatching {
                     SyncBackend.valueOf(preferences[LEGACY_BACKEND] ?: SyncBackend.NONE.name)
@@ -238,11 +266,16 @@ class SyncRepository @Inject constructor(
             writeTargetConfig(preferences, SyncBackend.GIST, config.gist, gistIdentityChanged)
             writeTargetConfig(preferences, SyncBackend.WEBDAV, config.webDav, webDavIdentityChanged)
             writeTargetConfig(preferences, SyncBackend.DOCUMENT, config.document, documentIdentityChanged)
+            preferences[BACKEND_URL] = config.backendUrl.trim()
+            config.backendToken.takeIf(String::isNotBlank)?.let {
+                secretStore.put(LocalSyncSecretStore.SecretKey.BACKEND_TOKEN, it.trim())
+            }
             preferences[AUTO_SYNC] = config.autoSync
             preferences[INCLUDE_PASSWORDS] = config.includeEncryptedPasswords
             if (gistIdentityChanged) clearBackendMetadata(preferences, SyncBackend.GIST)
             if (webDavIdentityChanged) clearBackendMetadata(preferences, SyncBackend.WEBDAV)
             if (documentIdentityChanged) clearBackendMetadata(preferences, SyncBackend.DOCUMENT)
+            if (backendUrlChanged) clearBackendMetadata(preferences, SyncBackend.BACKEND)
             val overallStatus = configuredOverallStatus(preferences, config)
             preferences[STATUS] = overallStatus.name
             if (overallStatus == SyncStatus.IDLE) {
@@ -364,6 +397,8 @@ class SyncRepository @Inject constructor(
             preferences.remove(LAST_SYNC)
             preferences.remove(STATUS)
             preferences.remove(ERROR)
+            preferences.remove(BACKEND_URL)
+            secretStore.put(LocalSyncSecretStore.SecretKey.BACKEND_TOKEN, null)
             SyncBackend.entries.filterNot { it == SyncBackend.NONE }.forEach { backend ->
                 preferences.remove(targetEnabledKey(backend))
                 preferences.remove(targetEndpointKey(backend))
@@ -579,6 +614,13 @@ class SyncRepository @Inject constructor(
 
         SyncBackend.DOCUMENT -> DocumentSyncTransport(context.contentResolver, Uri.parse(target.endpoint))
 
+        SyncBackend.BACKEND -> BackendSyncTransport(
+            backendUrl = target.endpoint,
+            token = target.username,
+            key = BackendSyncTransport.DEFAULT_KEY,
+            api = backendApi,
+        )
+
         SyncBackend.NONE -> error("Sync is not configured")
     }
 
@@ -695,6 +737,8 @@ class SyncRepository @Inject constructor(
                 gist = storedGist.copy(enabled = primary == SyncBackend.GIST),
                 webDav = storedWebDav.copy(enabled = primary == SyncBackend.WEBDAV),
                 document = storedDocument.copy(enabled = primary == SyncBackend.DOCUMENT),
+                backendUrl = preferences[BACKEND_URL].orEmpty(),
+                backendToken = secretStore.get(LocalSyncSecretStore.SecretKey.BACKEND_TOKEN).orEmpty(),
                 autoSync = preferences[AUTO_SYNC] ?: false,
                 includeEncryptedPasswords = preferences[INCLUDE_PASSWORDS] ?: false,
             )
@@ -715,9 +759,11 @@ class SyncRepository @Inject constructor(
             hasGithubToken = hasSecret(LocalSyncSecretStore.SecretKey.GITHUB_TOKEN),
             hasWebDavPassword = hasSecret(LocalSyncSecretStore.SecretKey.WEBDAV_PASSWORD),
             hasSyncPassphrase = hasSecret(LocalSyncSecretStore.SecretKey.SYNC_PASSPHRASE),
+            hasBackendToken = config.backendToken.isNotBlank(),
             gistState = readBackendState(preferences, SyncBackend.GIST, gist.enabled, legacyBackend),
             webDavState = readBackendState(preferences, SyncBackend.WEBDAV, webDav.enabled, legacyBackend),
             documentState = readBackendState(preferences, SyncBackend.DOCUMENT, document.enabled, legacyBackend),
+            backendState = readBackendState(preferences, SyncBackend.BACKEND, primary == SyncBackend.BACKEND, legacyBackend),
             lastLocalPayloadHash = preferences[LOCAL_HASH] ?: preferences[LEGACY_LOCAL_HASH],
             generation = preferences[GENERATION] ?: 0,
             lastSyncTimestamp = preferences[LAST_SYNC] ?: preferences[LEGACY_LAST_SYNC],
@@ -844,6 +890,7 @@ class SyncRepository @Inject constructor(
         SyncBackend.GIST -> "sync_gist"
         SyncBackend.WEBDAV -> "sync_webdav"
         SyncBackend.DOCUMENT -> "sync_document"
+        SyncBackend.BACKEND -> "sync_backend_api"
         SyncBackend.NONE -> error("NONE has no sync metadata")
     }
 
@@ -874,6 +921,7 @@ class SyncRepository @Inject constructor(
         val LAST_SYNC = longPreferencesKey("sync_last_timestamp_v1")
         val STATUS = stringPreferencesKey("sync_status")
         val ERROR = stringPreferencesKey("sync_error")
+        val BACKEND_URL = stringPreferencesKey("sync_backend_url")
 
         val LEGACY_BACKEND = stringPreferencesKey("sync_backend")
         val LEGACY_ENDPOINT = stringPreferencesKey("sync_endpoint")
