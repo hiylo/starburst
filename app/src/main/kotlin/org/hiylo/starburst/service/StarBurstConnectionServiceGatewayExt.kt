@@ -20,6 +20,16 @@ import org.hiylo.starburst.data.api.BackendStatus
 import org.hiylo.starburst.data.api.OpenCodeGateway
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.backend.PushSessionEvent
+import org.hiylo.starburst.data.backend.AlertHardwareParsedEvent
+import org.hiylo.starburst.data.backend.AuditFindingParsedEvent
+import org.hiylo.starburst.data.backend.ChatAnswerParsedEvent
+import org.hiylo.starburst.data.backend.EnvReadyParsedEvent
+import org.hiylo.starburst.data.backend.FixAppliedParsedEvent
+import org.hiylo.starburst.data.backend.FixSuggestedParsedEvent
+import org.hiylo.starburst.data.backend.GateBlockedParsedEvent
+import org.hiylo.starburst.data.backend.IntelParsedEvent
+import org.hiylo.starburst.data.backend.IntelRunParsedEvent
+import org.hiylo.starburst.data.backend.TaskParsedEvent
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -163,6 +173,7 @@ internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfi
         // 回退到直连后不再走后端镜像：回收旧推送订阅，避免后端 WS 继续残留。
         state.sseJob.cancel()
         state.pushJob?.cancel()
+        intelPushJobs.remove(server.id)?.cancel()
         reconciliationJobs.remove(server.id)?.cancel()
         _connectedServerIds.update { it - server.id }
         _connectingServerIds.update { it + server.id }
@@ -244,6 +255,69 @@ internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerCon
                 ?: getString(R.string.error_unknown))
         }
         else -> {}
+    }
+}
+
+/**
+ * Intel 推送订阅：只要该 server 配置了后端（[backendUrl] 非空）即订阅 intelEventFlow，
+ * 生命周期独立于镜像判定。断线指数退避重连；server 断开后自动退出。
+ */
+internal fun StarBurstConnectionService.startIntelPushJob(server: ServerConfig, backendUrl: String, token: String) {
+    if (backendUrl.isBlank() || token.isBlank()) return
+    intelPushJobs[server.id]?.cancel()
+    val job = serviceScope.launch {
+        var backoffMs = 2_000L
+        while (isActive) {
+            if (!connections.containsKey(server.id)) return@launch
+            try {
+                backendPushListener.intelEventFlow(backendUrl, token).collect { event ->
+                    handleIntelPushEvent(server, event)
+                }
+                backoffMs = 2_000L
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.w(TAG, "[${server.displayName}] Intel push stream stopped: ${e.message}")
+            }
+            delay(backoffMs)
+            backoffMs = (backoffMs * 2).coerceAtMost(30_000L)
+        }
+    }
+    intelPushJobs.put(server.id, job)
+    job.invokeOnCompletion { intelPushJobs.remove(server.id, job) }
+}
+
+/** 派发 Intel 推送事件为通知；仅通知真正需要用户看的（run 终态、硬件告警/恢复、审计发现）。 */
+internal fun StarBurstConnectionService.handleIntelPushEvent(server: ServerConfig, event: IntelParsedEvent) {
+    when (event) {
+        is IntelRunParsedEvent -> {
+            if (event.run.status == "passed" || event.run.status == "failed") {
+                showIntelRunNotification(server, event.run)
+            }
+        }
+        is AlertHardwareParsedEvent -> {
+            showHardwareAlertNotification(server, event.event)
+            serviceScope.launch {
+                alertHistoryRepository.record(
+                    serverId = server.id,
+                    metric = event.event.metric,
+                    value = event.event.value,
+                    threshold = event.event.threshold,
+                    state = event.event.state,
+                )
+            }
+        }
+        is AuditFindingParsedEvent -> {
+            if (event.severity == "warning" || event.severity == "critical") {
+                showAuditFindingNotification(server, event.summary, event.severity)
+            }
+        }
+        is FixSuggestedParsedEvent -> Unit
+        is FixAppliedParsedEvent -> Unit
+        is GateBlockedParsedEvent -> Unit
+        is EnvReadyParsedEvent -> Unit
+        is ChatAnswerParsedEvent -> Unit
+        is TaskParsedEvent -> Unit
     }
 }
 

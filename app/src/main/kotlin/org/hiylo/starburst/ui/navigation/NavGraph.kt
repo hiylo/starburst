@@ -487,6 +487,10 @@ fun NavGraph(
 
         ServerRoutes(navController = navController)
 
+        buildIntelRoutes(navController = navController)
+
+        buildKbRoutes(navController = navController)
+
         SessionsRoutes(
             navController = navController,
             serverRepository = serverRepository,

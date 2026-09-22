@@ -109,6 +109,20 @@ data class PushSessionEvent(
     }
 }
 
+/** `/api/ws` Intel 通道放行的事件 type 白名单；其余 type 一律忽略。 */
+private val ALLOWED_TYPES = setOf(
+    "intel.run.event",
+    "intel.gate.blocked",
+    "intel.env.ready",
+    "intel.audit.finding",
+    "intel.fix.suggested",
+    "intel.fix.applied",
+    "intel.feature.chat.answer",
+    "alert.hardware",
+    "task.event",
+    "task.failure",
+)
+
 /**
  * 订阅后端 `/api/ws` 广播通道（Bearer APP token 鉴权），把 `session.event` 作为
  * [PushSessionEvent] 流式产出。连接关闭即结束（由调用方负责重连/退避）。
@@ -147,6 +161,40 @@ class BackendPushListener @Inject constructor(
             val eventType = payload["eventType"]?.jsonPrimitive?.contentOrNull ?: continue
             val raw = payload["payload"]?.jsonObject ?: JsonObject(emptyMap())
             emit(PushSessionEvent(sessionId = sessionId, eventType = eventType, payload = raw))
+        }
+    }
+
+    /**
+     * 订阅后端 `/api/ws` 的 Intel / 硬件告警 / 任务事件通道（独立于 [eventFlow] 的 session 通道）。
+     *
+     * 外层信封：`{"type":<eventType>,"payload":{...},"severity":...}`，仅放行 [ALLOWED_TYPES]
+     * 白名单；解析失败 / 未放行的帧被静默跳过。连接关闭即结束（由调用方负责重连/退避）。
+     *
+     * @param backendUrl 后端 HTTP 地址（自动映射为 ws/wss）
+     * @param token 后端鉴权 token
+     * @author Hsi Chu
+     * @since V1.0
+     */
+    fun intelEventFlow(backendUrl: String, token: String): Flow<IntelParsedEvent> = flow {
+        val base = backendUrl.trim().trimEnd('/').takeIf { it.isNotBlank() } ?: return@flow
+        val wsUrl = when {
+            base.startsWith("https://") -> base.replaceFirst("https://", "wss://")
+            base.startsWith("http://") -> base.replaceFirst("http://", "ws://")
+            else -> base
+        }
+        val session = httpClient.webSocketSession("$wsUrl/api/ws") {
+            method = HttpMethod.Get
+            header("Authorization", "Bearer $token")
+        }
+        session.pingIntervalMillis = 60_000L
+        for (frame in session.incoming) {
+            if (frame !is Frame.Text) continue
+            val text = frame.readText()
+            val env = runCatching { json.decodeFromString(IntelPushEnvelope.serializer(), text) }
+                .getOrNull() ?: continue
+            if (env.type !in ALLOWED_TYPES) continue
+            val parsed = IntelPushParser.parse(env.type, env.payload?.toString(), env.severity) ?: continue
+            emit(parsed)
         }
     }
 }

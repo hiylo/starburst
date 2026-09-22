@@ -41,6 +41,7 @@ import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.normalizeServerUrl
 import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
+import org.hiylo.starburst.data.repository.AlertHistoryRepository
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -191,6 +192,9 @@ class StarBurstConnectionService : Service() {
     @Inject
     lateinit var backendPushListener: BackendPushListener
 
+    @Inject
+    internal lateinit var alertHistoryRepository: AlertHistoryRepository
+
     private val binder = LocalBinder()
     internal val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -309,6 +313,9 @@ class StarBurstConnectionService : Service() {
 
     /** 状态类推送的 2s 去抖：合并突发事件，避免频繁全量拉状态。 */
     internal val lastStatusRefreshAtByServer = ConcurrentHashMap<String, Long>()
+
+    /** 各 server 的 Intel 推送订阅 job（生命周期独立于镜像 session 推送）。 */
+    internal val intelPushJobs = ConcurrentHashMap<String, Job>()
 
     inner class LocalBinder : Binder() {
         fun getService(): StarBurstConnectionService = this@StarBurstConnectionService
@@ -534,6 +541,7 @@ class StarBurstConnectionService : Service() {
                 replacedState = existing
                 val sseJob = startSseConnection(server, conn)
                 val pushJob = startBackendPushJob(server, conn, resolved.backendLocalPort)
+                startIntelPushJob(server, resolveBackendUrl(server, resolved.backendLocalPort), server.backendResolvedToken)
                 // SSE 结束（正常/异常/被 cancel）时取消「本次」push job。闭包捕获创建时的
                 // 局部引用而非实时读 connections[server.id]，避免替换 state 后误取消新装的 job。
                 val capturedPushJob = pushJob
@@ -590,6 +598,7 @@ class StarBurstConnectionService : Service() {
         val state = connections.remove(serverId) ?: return
         state.sseJob.cancel()
         state.pushJob?.cancel()
+        intelPushJobs.remove(serverId)?.cancel()
         closeSshSession(state.sshSession)
         reconciliationJobs.remove(serverId)?.cancel()
 
@@ -644,6 +653,7 @@ class StarBurstConnectionService : Service() {
         for ((_, state) in connections) {
             state.sseJob.cancel()
             state.pushJob?.cancel()
+            intelPushJobs.remove(state.config.id)?.cancel()
             closeSshSession(state.sshSession)
         }
         reconciliationJobs.values.forEach { it.cancel() }

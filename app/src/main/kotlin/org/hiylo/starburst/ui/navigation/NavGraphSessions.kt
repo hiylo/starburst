@@ -317,6 +317,28 @@ fun NavGraphBuilder.SessionsRoutes(
                                     ),
                                 )
                             },
+                            onNavigateToTestIntel = {
+                                navController.navigate(
+                                    Screen.TestIntel.createRoute(
+                                        serverUrl = serverUrl,
+                                        username = username,
+                                        password = password,
+                                        serverName = serverName,
+                                        serverId = serverId,
+                                    ),
+                                )
+                            },
+                            onNavigateToKnowledgeBase = {
+                                navController.navigate(
+                                    Screen.KnowledgeBase.createRoute(
+                                        serverUrl = serverUrl,
+                                        username = username,
+                                        password = password,
+                                        serverName = serverName,
+                                        serverId = serverId,
+                                    ),
+                                )
+                            },
                         )
                     }
                     VerticalDivider()
@@ -437,6 +459,28 @@ fun NavGraphBuilder.SessionsRoutes(
                     onNavigateToWorkbench = {
                         navController.navigate(
                             WorkbenchScreen.createRoute(
+                                serverUrl = serverUrl,
+                                username = username,
+                                password = password,
+                                serverName = serverName,
+                                serverId = serverId,
+                            ),
+                        )
+                    },
+                    onNavigateToTestIntel = {
+                        navController.navigate(
+                            Screen.TestIntel.createRoute(
+                                serverUrl = serverUrl,
+                                username = username,
+                                password = password,
+                                serverName = serverName,
+                                serverId = serverId,
+                            ),
+                        )
+                    },
+                    onNavigateToKnowledgeBase = {
+                        navController.navigate(
+                            Screen.KnowledgeBase.createRoute(
                                 serverUrl = serverUrl,
                                 username = username,
                                 password = password,

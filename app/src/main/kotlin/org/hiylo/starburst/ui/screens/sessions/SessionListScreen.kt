@@ -286,6 +286,8 @@ fun SessionListScreen(
     onOpenBookmarks: (serverId: String) -> Unit = {},
     onOpenFtsSearch: (serverId: String) -> Unit = {},
     onNavigateToWorkbench: () -> Unit = {},
+    onNavigateToTestIntel: () -> Unit = {},
+    onNavigateToKnowledgeBase: () -> Unit = {},
     viewModel: SessionListViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -554,6 +556,18 @@ fun SessionListScreen(
                                     CartoonInkIcon(
                                         Icons.Default.Dashboard,
                                         contentDescription = stringResource(R.string.workbench_enter),
+                                    )
+                                }
+                                IconButton(onClick = onNavigateToTestIntel) {
+                                    CartoonInkIcon(
+                                        Icons.Default.Science,
+                                        contentDescription = stringResource(R.string.test_intel),
+                                    )
+                                }
+                                IconButton(onClick = onNavigateToKnowledgeBase) {
+                                    CartoonInkIcon(
+                                        Icons.Default.AutoStories,
+                                        contentDescription = stringResource(R.string.kb_enter),
                                     )
                                 }
                             }

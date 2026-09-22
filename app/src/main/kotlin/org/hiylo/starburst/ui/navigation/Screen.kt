@@ -247,9 +247,81 @@ sealed class Screen(val route: String) {
         ): String = serverRoute("server_audit", serverUrl, username, password, serverName, serverId)
     }
 
+    data object TestIntel : Screen("test_intel") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("test_intel", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object TestIntelProject : Screen("test_intel_project") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+            projectId: Long,
+        ): String = serverRoute(
+            "test_intel_project", serverUrl, username, password, serverName, serverId,
+            "projectId" to projectId.toString(),
+        )
+    }
+
+    data object Kb : Screen("kb") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("kb", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object KbCollection : Screen("kb_collection") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+            collectionId: Long,
+        ): String = serverRoute(
+            "kb_collection", serverUrl, username, password, serverName, serverId,
+            "collectionId" to collectionId.toString(),
+        )
+    }
+
     data object Settings : Screen("settings")
     data object SyncSettings : Screen("sync_settings")
     data object Diagnostics : Screen("diagnostics")
     data object LlmProvider : Screen("llm_provider_settings")
     data object About : Screen("about")
+
+    data object KnowledgeBase : Screen("knowledge_base") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+        ): String = serverRoute("knowledge_base", serverUrl, username, password, serverName, serverId)
+    }
+
+    data object KnowledgeBaseCollection : Screen("knowledge_base_collection") {
+        fun createRoute(
+            serverUrl: String,
+            username: String,
+            password: String,
+            serverName: String,
+            serverId: String,
+            collectionId: Long,
+        ): String = serverRoute(
+            "knowledge_base_collection", serverUrl, username, password, serverName, serverId,
+            "collectionId" to collectionId.toString(),
+        )
+    }
 }

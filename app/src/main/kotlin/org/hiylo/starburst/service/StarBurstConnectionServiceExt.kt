@@ -33,6 +33,8 @@ import android.os.Handler
 import android.os.Looper
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendStatus
+import org.hiylo.starburst.data.api.HardwareAlertEvent
+import org.hiylo.starburst.data.api.IntelTestRun
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.OpenCodeGateway
 import org.hiylo.starburst.data.api.ServerConnection
@@ -753,6 +755,114 @@ internal fun StarBurstConnectionService.showErrorNotification(server: ServerConf
     }
 
     postEventNotification(server, sessionId, notifId, builder.build())
+}
+
+/** 百分比数值去零显示：90.0 -> 90，92.3 -> 92.3。 */
+private fun trimPercent(value: Double): String =
+    if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
+
+/** Intel 测试运行终态通知（仅 passed / failed 触发；queued / running 不打扰）。 */
+internal fun StarBurstConnectionService.showIntelRunNotification(server: ServerConfig, run: IntelTestRun) {
+    if (run.status != "passed" && run.status != "failed") return
+    val statusText = if (run.status == "passed") "已通过" else "失败"
+    val subject = run.scope.takeIf { it.isNotBlank() }
+        ?: run.moduleId.takeIf { it > 0 }?.toString()
+    val title = if (subject != null) "${server.displayName} · $subject" else server.displayName
+    val body = "$statusText · 进度 ${run.progress ?: "-"}"
+    val notifId = 100_000 + run.id.toInt()
+    val pendingIntent = PendingIntent.getActivity(
+        this,
+        notifId,
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setSubText(server.displayName)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setGroup("server_${server.id}")
+        .build()
+    postEventNotification(server, null, notifId, notification)
+}
+
+/** 硬件资源告警 / 恢复通知（metric：cpu / mem / disk）。 */
+internal fun StarBurstConnectionService.showHardwareAlertNotification(server: ServerConfig, event: HardwareAlertEvent) {
+    val metricLabel = when (event.metric) {
+        "cpu" -> "CPU"
+        "mem" -> "内存"
+        "disk" -> "磁盘"
+        else -> event.metric
+    }
+    val title = "服务器资源告警"
+    val body = if (event.state == "ok" || event.state == "recover") {
+        "已恢复"
+    } else {
+        "$metricLabel ${trimPercent(event.value)} 超过阈值 ${trimPercent(event.threshold)}"
+    }
+    val notifId = 200_000 + Math.abs(event.metric.hashCode())
+    val pendingIntent = PendingIntent.getActivity(
+        this,
+        notifId,
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setSubText(server.displayName)
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setGroup("server_${server.id}")
+        .build()
+    postEventNotification(server, null, notifId, notification)
+}
+
+/** 安全 / 合规审计发现通知（仅 warning / critical 触发）。 */
+internal fun StarBurstConnectionService.showAuditFindingNotification(server: ServerConfig, summary: String, severity: String) {
+    val title = "安全/合规审计发现"
+    val body = summary.take(120)
+    val notifId = 300_000 + Math.abs(summary.hashCode())
+    val pendingIntent = PendingIntent.getActivity(
+        this,
+        notifId,
+        Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        },
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+    )
+    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+        .setContentTitle(title)
+        .setContentText(body)
+        .setSubText("$severity · ${server.displayName}")
+        .setSmallIcon(R.mipmap.ic_launcher)
+        .setContentIntent(pendingIntent)
+        .setAutoCancel(true)
+        .setPriority(NotificationCompat.PRIORITY_HIGH)
+        .setDefaults(NotificationCompat.DEFAULT_ALL)
+        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setCategory(NotificationCompat.CATEGORY_STATUS)
+        .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        .setGroup("server_${server.id}")
+        .build()
+    postEventNotification(server, null, notifId, notification)
 }
 
 internal fun StarBurstConnectionService.postEventNotification(
