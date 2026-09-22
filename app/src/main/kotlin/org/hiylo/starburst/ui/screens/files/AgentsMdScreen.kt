@@ -290,7 +290,7 @@ private fun PreviewPane(
                 Text(
                     text = stringResource(R.string.agents_md_empty),
                     style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         } else {

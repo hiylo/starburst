@@ -51,7 +51,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -106,7 +105,10 @@ import com.mikepenz.markdown.m3.markdownTypography
 import com.mikepenz.markdown.model.DefaultMarkdownTypography
 import com.mikepenz.markdown.model.MarkdownTypography
 import org.hiylo.starburst.R
+import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppLoadingEdge
+import org.hiylo.starburst.ui.components.AppPrimaryButton
+import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.screens.chat.LocalCodeWordWrap
 import org.hiylo.starburst.ui.screens.chat.buildSafeHighlightedAnnotatedString
 import org.hiylo.starburst.ui.screens.chat.horizontallyScrollableMarkdownTable
@@ -575,10 +577,17 @@ private fun AiResultDialog(
         AiAction.Refactor -> stringResource(R.string.ai_dialog_refactor_title)
         AiAction.WriteTests -> stringResource(R.string.ai_dialog_write_tests_title)
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+        ) {
             when {
                 state.loading -> {
                     Row(
@@ -594,9 +603,11 @@ private fun AiResultDialog(
                         Text(stringResource(R.string.ai_dialog_loading))
                     }
                 }
+
                 state.error != null -> {
                     Text(state.error, color = MaterialTheme.colorScheme.error)
                 }
+
                 else -> {
                     androidx.compose.foundation.text.selection.SelectionContainer {
                         Box(
@@ -612,27 +623,28 @@ private fun AiResultDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
+            if (result != null) {
+                AppSecondaryButton(onClick = { clipboard.setText(AnnotatedString(result)) }, outlined = true) {
+                    Text(stringResource(R.string.ai_dialog_copy))
+                }
+            }
+            AppSecondaryButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ai_dialog_close))
+            }
             if (result != null && action != AiAction.Explain) {
-                TextButton(onClick = onApply) {
+                AppPrimaryButton(onClick = onApply) {
                     Text(stringResource(R.string.ai_dialog_apply))
                 }
             }
-        },
-        dismissButton = {
-            Row {
-                if (result != null) {
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
-                        Text(stringResource(R.string.ai_dialog_copy))
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.ai_dialog_close))
-                }
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
@@ -648,10 +660,17 @@ private fun OfflineResultDialog(
         OfflineAction.Complete -> stringResource(R.string.offline_dialog_complete_title)
         OfflineAction.Rewrite -> stringResource(R.string.offline_dialog_rewrite_title)
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+        ) {
             when {
                 state.loading -> {
                     Row(
@@ -667,9 +686,11 @@ private fun OfflineResultDialog(
                         Text(stringResource(R.string.offline_dialog_loading))
                     }
                 }
+
                 state.error != null -> {
                     Text(state.error, color = MaterialTheme.colorScheme.error)
                 }
+
                 else -> {
                     androidx.compose.foundation.text.selection.SelectionContainer {
                         Box(
@@ -685,27 +706,28 @@ private fun OfflineResultDialog(
                     }
                 }
             }
-        },
-        confirmButton = {
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End),
+        ) {
             if (result != null) {
-                TextButton(onClick = onApply) {
+                AppSecondaryButton(onClick = { clipboard.setText(AnnotatedString(result)) }, outlined = true) {
+                    Text(stringResource(R.string.ai_dialog_copy))
+                }
+            }
+            AppSecondaryButton(onClick = onDismiss) {
+                Text(stringResource(R.string.ai_dialog_close))
+            }
+            if (result != null) {
+                AppPrimaryButton(onClick = onApply) {
                     Text(stringResource(R.string.ai_dialog_apply))
                 }
             }
-        },
-        dismissButton = {
-            Row {
-                if (result != null) {
-                    TextButton(onClick = { clipboard.setText(AnnotatedString(result)) }) {
-                        Text(stringResource(R.string.ai_dialog_copy))
-                    }
-                }
-                TextButton(onClick = onDismiss) {
-                    Text(stringResource(R.string.ai_dialog_close))
-                }
-            }
-        },
-    )
+        }
+    }
 }
 
 @Composable
