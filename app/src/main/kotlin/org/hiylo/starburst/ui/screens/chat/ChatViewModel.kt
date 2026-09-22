@@ -20,6 +20,7 @@ import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.BackendDocumentsApi
+import org.hiylo.starburst.data.api.BackendKbApi
 import org.hiylo.starburst.data.api.CommandInfo
 import org.hiylo.starburst.data.api.GeneratedDocument
 import org.hiylo.starburst.data.api.OpenCodeApi
@@ -80,6 +81,7 @@ class ChatViewModel @Inject constructor(
     internal val serverAsrApi: ServerAsrApi,
     internal val shellRegistry: ServerShellRegistry,
     internal val documentsApi: BackendDocumentsApi,
+    internal val kbApi: BackendKbApi,
     internal val connectionStateRepository: ServerConnectionStateRepository,
 ) : ViewModel() {
 

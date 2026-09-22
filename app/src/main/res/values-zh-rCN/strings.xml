@@ -1248,4 +1248,24 @@
     <string name="kb_content_empty">该文档没有可提取的内容</string>
     <string name="kb_content_load_failed">加载文档内容失败</string>
     <string name="chat_rag_context_attached">已带入知识库资料（%1$d 条）</string>
+    <string name="chat_kb_upload">上传到知识库</string>
+    <string name="chat_kb_upload_hint">把当前项目文档上传到知识库可供检索</string>
+    <string name="chat_kb_upload_title">上传文档到知识库</string>
+    <string name="chat_kb_upload_documents">文档（%1$d）</string>
+    <string name="chat_kb_upload_select_all">全选</string>
+    <string name="chat_kb_upload_clear_all">清空</string>
+    <string name="chat_kb_upload_no_files">当前项目没有可上传的文档</string>
+    <string name="chat_kb_upload_load_failed">无法列出项目文档</string>
+    <string name="chat_kb_upload_skipped_dirs">有 %1$d 个子目录读取失败，已跳过</string>
+    <string name="chat_kb_upload_collection">集合</string>
+    <string name="chat_kb_upload_select_collection">选择集合</string>
+    <string name="chat_kb_upload_loading_collections">正在加载集合…</string>
+    <string name="chat_kb_upload_no_collection">暂无集合，请先到知识库页创建，或使用默认集合</string>
+    <string name="chat_kb_upload_create_default">创建默认集合</string>
+    <string name="chat_kb_upload_default_collection_name">会话上传</string>
+    <string name="chat_kb_upload_create_failed">创建默认集合失败</string>
+    <string name="chat_kb_upload_upload">上传</string>
+    <string name="chat_kb_upload_progress">上传中 %1$d/%2$d</string>
+    <string name="chat_kb_upload_done">已上传 %1$d 个文档</string>
+    <string name="chat_kb_upload_failed">上传失败，%1$d/%2$d 个文档失败</string>
 </resources>

@@ -134,6 +134,7 @@ fun ChatScreen(
     var showProjectOverview by showProjectOverviewState
     val showAttachmentOptionsState = remember { mutableStateOf(false) }
     var showAttachmentOptions by showAttachmentOptionsState
+    val showKbUploadState = remember { mutableStateOf(false) }
     val showTemplatePickerState = remember { mutableStateOf(false) }
     var showTemplatePicker by showTemplatePickerState
     val showDocumentGenerateDialogState = remember { mutableStateOf(false) }
@@ -995,6 +996,7 @@ showDocumentGenerateDialogState = showDocumentGenerateDialogState,
         showTimelineDialogState = showTimelineDialogState,
         showProjectOverviewState = showProjectOverviewState,
         showAttachmentOptionsState = showAttachmentOptionsState,
+        showKbUploadState = showKbUploadState,
         showTemplatePickerState = showTemplatePickerState,
         showSubagentContextDetailsState = showSubagentContextDetailsState,
         showSendConfirmDialogState = showSendConfirmDialogState,

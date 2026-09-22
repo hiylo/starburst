@@ -85,6 +85,7 @@ internal fun ChatScreenOverlayDialogs(
     showTimelineDialogState: MutableState<Boolean>,
     showProjectOverviewState: MutableState<Boolean>,
     showAttachmentOptionsState: MutableState<Boolean>,
+    showKbUploadState: MutableState<Boolean>,
     showTemplatePickerState: MutableState<Boolean>,
     showSubagentContextDetailsState: MutableState<Boolean>,
     showSendConfirmDialogState: MutableState<Boolean>,
@@ -100,6 +101,7 @@ internal fun ChatScreenOverlayDialogs(
     var showTimelineDialog by showTimelineDialogState
     var showProjectOverview by showProjectOverviewState
     var showAttachmentOptions by showAttachmentOptionsState
+    var showKbUpload by showKbUploadState
     var showTemplatePicker by showTemplatePickerState
     var showSubagentContextDetails by showSubagentContextDetailsState
     var showSendConfirmDialog by showSendConfirmDialogState
@@ -240,11 +242,28 @@ internal fun ChatScreenOverlayDialogs(
                                 viewModel.searchFilesForMention("")
                             },
                         )
+                        AttachmentSourceCard(
+                            icon = Icons.Default.MenuBook,
+                            title = stringResource(R.string.chat_kb_upload),
+                            description = stringResource(R.string.chat_kb_upload_hint),
+                            onClick = {
+                                showAttachmentOptions = false
+                                showKbUpload = true
+                            },
+                        )
                     }
                     Spacer(Modifier.navigationBarsPadding().height(8.dp))
                 }
             }
         }
+    }
+
+    // Upload current project documents to a knowledge base collection
+    if (showKbUpload) {
+        UploadToKbSheet(
+            viewModel = viewModel,
+            onDismiss = { showKbUpload = false },
+        )
     }
 
     if (showTemplatePicker) {

@@ -1280,4 +1280,24 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_content_empty">This document has no extractable content</string>
     <string name="kb_content_load_failed">Failed to load document content</string>
     <string name="chat_rag_context_attached">Knowledge base context loaded (%1$d sources)</string>
+    <string name="chat_kb_upload">Upload to Knowledge Base</string>
+    <string name="chat_kb_upload_hint">Upload the current project\'s documents to a collection for retrieval</string>
+    <string name="chat_kb_upload_title">Upload documents to Knowledge Base</string>
+    <string name="chat_kb_upload_documents">Documents (%1$d)</string>
+    <string name="chat_kb_upload_select_all">Select all</string>
+    <string name="chat_kb_upload_clear_all">Clear</string>
+    <string name="chat_kb_upload_no_files">No uploadable documents found in this project</string>
+    <string name="chat_kb_upload_load_failed">Failed to list project documents</string>
+    <string name="chat_kb_upload_skipped_dirs">%1$d subdirectories could not be read and were skipped</string>
+    <string name="chat_kb_upload_collection">Collection</string>
+    <string name="chat_kb_upload_select_collection">Select a collection</string>
+    <string name="chat_kb_upload_loading_collections">Loading collections…</string>
+    <string name="chat_kb_upload_no_collection">No collections yet. Create one in the Knowledge Base page first, or use the default.</string>
+    <string name="chat_kb_upload_create_default">Create default collection</string>
+    <string name="chat_kb_upload_default_collection_name">Session upload</string>
+    <string name="chat_kb_upload_create_failed">Failed to create default collection</string>
+    <string name="chat_kb_upload_upload">Upload</string>
+    <string name="chat_kb_upload_progress">Uploading %1$d/%2$d</string>
+    <string name="chat_kb_upload_done">Uploaded %1$d documents</string>
+    <string name="chat_kb_upload_failed">Upload failed, %1$d of %2$d documents failed</string>
 </resources>
