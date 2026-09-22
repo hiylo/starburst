@@ -14,6 +14,10 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
@@ -32,6 +36,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onStart
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -53,6 +58,7 @@ import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
+import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.api.QuestionInfo
 import org.hiylo.starburst.data.api.QuestionRequest
 import org.hiylo.starburst.data.api.promptAsync
@@ -95,6 +101,10 @@ private const val PANEL_MESSAGE_LIMIT = 40
 private const val PANEL_RECENT_COUNT = 8
 /** 决策面板单条消息的最大字符数。 */
 private const val PANEL_MESSAGE_CHAR_LIMIT = 400
+/** 卡片未展开时「最后消息预览」的最大字符数。 */
+private const val PREVIEW_CHAR_LIMIT = 96
+/** 卡片预览懒加载拉取的消息条数（够取最后一条有效消息即可）。 */
+private const val PREVIEW_MESSAGE_LIMIT = 6
 
 /** 工作台会话条目：会话 + 派生状态 + 该会话的待决问题（若有）+ 未读新消息标记。 */
 data class WorkbenchSession(
@@ -103,6 +113,10 @@ data class WorkbenchSession(
     val pendingQuestion: QuestionRequest? = null,
     /** 后端 session_unread 记录的有新消息未读（Web/App 共享，仅后端可用时有意义）。 */
     val unread: Boolean = false,
+    /** 最后一条有效消息预览（懒加载，null 表示尚未加载）。 */
+    val aiPreview: String? = null,
+    /** 本地置顶（本机持久化，跨重启保留）。 */
+    val pinned: Boolean = false,
 )
 
 /** AI 工作台看板的完整 UI 状态。 */
@@ -135,6 +149,9 @@ data class DecisionPanelState(
     val loading: Boolean = true,
 )
 
+/** 工作台会话列表筛选维度：全部 / 待回复(提问中) / 处理中 / 空闲。 */
+enum class WorkbenchFilter { All, Question, Busy, Idle }
+
 /**
  * AI 工作台看板 ViewModel（服务器级）：轮询后端 /api/events 事件流 + 会话列表/状态，
  * 排序「提问中(Question) > 处理中(Busy) > 空闲(Idle/其它)」；决策面板复用 promptAsync 发送快捷回复。
@@ -151,6 +168,7 @@ class WorkbenchViewModel @Inject constructor(
     private val backendPushListener: BackendPushListener,
     @ApplicationContext private val context: Context,
     private val serverAsrApi: ServerAsrApi,
+    private val dataStore: DataStore<Preferences>,
 ) : ViewModel() {
 
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
@@ -168,11 +186,43 @@ class WorkbenchViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(WorkbenchUiState(serverName = serverNameArg))
     val uiState: StateFlow<WorkbenchUiState> = _uiState.asStateFlow()
 
-    private val _panel = MutableStateFlow<DecisionPanelState?>(null)
-    val panel: StateFlow<DecisionPanelState?> = _panel.asStateFlow()
+    /** 展开中的决策面板集合（多会话可同时展开，互不互斥）。 */
+    private val _panels = MutableStateFlow<Map<String, DecisionPanelState>>(emptyMap())
+    val panels: StateFlow<Map<String, DecisionPanelState>> = _panels.asStateFlow()
 
-    private val _sendingSessionId = MutableStateFlow<String?>(null)
-    val sendingSessionId: StateFlow<String?> = _sendingSessionId.asStateFlow()
+    /** 会话列表筛选维度。 */
+    private val _filter = MutableStateFlow(WorkbenchFilter.All)
+    val filter: StateFlow<WorkbenchFilter> = _filter.asStateFlow()
+
+    /** 正在发送快捷回复的会话集合（按会话粒度并发，互不阻塞）。 */
+    private val _sendingSessionIds = MutableStateFlow<Set<String>>(emptySet())
+    val sendingSessionIds: StateFlow<Set<String>> = _sendingSessionIds.asStateFlow()
+
+    /** 会话列表搜索关键词（标题 / 目录 / 模型）。 */
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    /** 是否处于批量选择模式。 */
+    private val _selectionMode = MutableStateFlow(false)
+    val selectionMode: StateFlow<Boolean> = _selectionMode.asStateFlow()
+
+    /** 批量选择模式下的已选会话集合。 */
+    private val _selected = MutableStateFlow<Set<String>>(emptySet())
+    val selected: StateFlow<Set<String>> = _selected.asStateFlow()
+
+    /** 下拉刷新进行中标记。 */
+    private val _refreshing = MutableStateFlow(false)
+    val refreshing: StateFlow<Boolean> = _refreshing.asStateFlow()
+
+    /** 本机置顶会话集合（DataStore 持久化，服务器作用域）。 */
+    private val _pinned = MutableStateFlow<Set<String>>(emptySet())
+    val pinned: StateFlow<Set<String>> = _pinned.asStateFlow()
+
+    /** 置顶集合的 DataStore key。 */
+    private val pinnedKey = stringSetPreferencesKey("workbench_pinned_$serverId")
+
+    /** 预览懒加载中的会话集合（防并发重复加载）。 */
+    private val previewLoading = mutableSetOf<String>()
 
     // ============ 快捷回复语音输入（按住/点击说话，复用聊天页 ASR 管线） ============
 
@@ -299,6 +349,15 @@ class WorkbenchViewModel @Inject constructor(
             refreshSessions()
             startPushStream()
         }
+        // 本机置顶集合：DataStore 持久化，变更即同步到列表排序/卡片。
+        viewModelScope.launch {
+            dataStore.data.map { it[pinnedKey].orEmpty() }.collect { set ->
+                _pinned.value = set
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.map { it.copy(pinned = it.session.id in set) })
+                }
+            }
+        }
     }
 
     /** 推送流是否在线：在线时不轮询，断线期间由周期刷新兜底。 */
@@ -352,7 +411,7 @@ class WorkbenchViewModel @Inject constructor(
         // 未读状态优先走推送：后端把「有未读活动」的这些事件标记会话未读（口径与 isUnreadTriggerEvent
         // 一致），不再每 10s 轮询 /api/unread。正在查看的会话有新活动视为已读（任一端看过后全端清除）。
         if (isUnreadTriggerEventType(ev.eventType)) {
-            if (ev.sessionId == _panel.value?.sessionId) {
+            if (ev.sessionId in _panels.value) {
                 markSessionRead(ev.sessionId)
             } else {
                 markSessionUnread(ev.sessionId)
@@ -366,10 +425,20 @@ class WorkbenchViewModel @Inject constructor(
             "session.idle" -> {
                 applyPushedStatus(ev.sessionId, SessionStatus.Idle)
                 refreshSessionsSoon()
+                refreshPreviewSoon(ev.sessionId)
             }
             "question.asked", "question.updated", "permission.asked", "permission.updated",
             "session.error", "session.failed", "message.complete",
-            -> refreshSessionsSoon()
+            -> {
+                refreshSessionsSoon()
+                refreshPanelSoon(ev.sessionId)
+                refreshPreviewSoon(ev.sessionId)
+            }
+            "message.created", "message.updated",
+            -> {
+                refreshSessionsSoon()
+                refreshPanelSoon(ev.sessionId)
+            }
             else -> {}
         }
     }
@@ -442,7 +511,15 @@ class WorkbenchViewModel @Inject constructor(
             val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession)
             // 未读不再随每次刷新轮询 /api/unread：保留当前本地已跟踪的未读集合（由推送标记/读后清除驱动）。
             val currentUnread = _uiState.value.sessions.asSequence().filter { it.unread }.map { it.session.id }.toSet()
-            val enriched = items.map { if (it.session.id in currentUnread) it.copy(unread = true) else it }
+            val previews = _uiState.value.sessions.associate { it.session.id to it.aiPreview }
+            val pinnedSet = _pinned.value
+            val enriched = items.map {
+                it.copy(
+                    unread = it.session.id in currentUnread,
+                    aiPreview = previews[it.session.id],
+                    pinned = it.session.id in pinnedSet,
+                )
+            }
             _uiState.update { current ->
                 current.copy(
                     sessions = enriched,
@@ -450,11 +527,31 @@ class WorkbenchViewModel @Inject constructor(
                     sessionsError = null,
                 )
             }
+            syncOpenPanels(enriched)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             if (BuildConfig.DEBUG) Log.d(TAG, "refresh sessions failed: ${e.message}")
             _uiState.update { it.copy(loadingSessions = false, sessionsError = e.message ?: context.getString(R.string.workbench_error_sessions)) }
+        }
+    }
+
+    /** 用最新会话数据同步已展开面板的标题/目录/状态/待决问题字段（消息内容在收到推送时单独刷新）。 */
+    private fun syncOpenPanels(items: List<WorkbenchSession>) {
+        val open = _panels.value
+        if (open.isEmpty()) return
+        val byId = items.associateBy { it.session.id }
+        _panels.update { panels ->
+            panels.mapValues { (sessionId, panel) ->
+                val item = byId[sessionId] ?: return@mapValues panel
+                panel.copy(
+                    sessionTitle = item.session.title.orEmpty(),
+                    sessionDirectory = item.session.directory,
+                    sessionStatus = item.status,
+                    questions = item.pendingQuestion?.questions.orEmpty(),
+                    questionRequestId = item.pendingQuestion?.id,
+                )
+            }
         }
     }
 
@@ -521,9 +618,12 @@ class WorkbenchViewModel @Inject constructor(
             .sortedWith(workbenchSessionComparator)
     }
 
-    /** 会话排序：提问中(Question) > 处理中(Busy/Retry) > 空闲(Idle)；同组内用稳定的创建时间，状态不变时顺序不跳动。 */
+    /** 会话排序：置顶 > 提问中 > 处理中 > 空闲；同优先级内未读优先、最近更新优先，状态不变时顺序不跳动。 */
     private val workbenchSessionComparator: Comparator<WorkbenchSession> =
-        compareBy<WorkbenchSession> { statusRank(it.status) }
+        compareBy<WorkbenchSession> { if (it.pinned) 0 else 1 }
+            .thenBy { statusRank(it.status) }
+            .thenByDescending { it.unread }
+            .thenByDescending { it.session.time.updated }
             .thenByDescending { it.session.time.created }
             .thenByDescending { it.session.id }
 
@@ -533,17 +633,48 @@ class WorkbenchViewModel @Inject constructor(
         is SessionStatus.Idle -> 2
     }
 
-    /** 展开 / 收起某会话的决策面板；展开时异步加载 AI 最近回复摘要与待决问题。 */
+    /** 展开 / 收起某会话的决策面板；展开时异步加载 AI 最近回复摘要与待决问题（可多会话同时展开）。 */
     fun togglePanel(sessionId: String) {
-        if (_panel.value?.sessionId == sessionId) {
-            _panel.value = null
+        val open = _panels.value
+        if (sessionId in open) {
+            _panels.value = open - sessionId
             return
         }
-        _panel.value = DecisionPanelState(sessionId = sessionId, loading = true)
+        _panels.value = open + (sessionId to DecisionPanelState(sessionId = sessionId, loading = true))
         markSessionRead(sessionId)
         viewModelScope.launch {
-            _panel.value = loadPanel(sessionId)
+            val loaded = loadPanel(sessionId)
+            _panels.update { it + (sessionId to loaded) }
         }
+    }
+
+    /** 收起全部已展开的决策面板。 */
+    fun collapseAllPanels() {
+        _panels.value = emptyMap()
+    }
+
+    /** 切换会话列表筛选维度。 */
+    fun setFilter(f: WorkbenchFilter) {
+        _filter.value = f
+    }
+
+    /** 重新加载某会话的决策面板内容（发送 / 回复 / 推送触发）。 */
+    private fun refreshPanel(sessionId: String) {
+        if (sessionId !in _panels.value) return
+        viewModelScope.launch {
+            val loaded = loadPanel(sessionId)
+            _panels.update { if (sessionId in it) it + (sessionId to loaded) else it }
+        }
+    }
+
+    /** 推送触发的面板刷新去抖：流式输出期间 message.updated 密集，合并为约 800ms 一次。 */
+    private val panelRefreshAt = mutableMapOf<String, Long>()
+
+    private fun refreshPanelSoon(sessionId: String) {
+        val now = System.currentTimeMillis()
+        if (now - (panelRefreshAt[sessionId] ?: 0L) < PANEL_REFRESH_DEBOUNCE_MS) return
+        panelRefreshAt[sessionId] = now
+        refreshPanel(sessionId)
     }
 
     /** 点开会话视为已读：清本地未读标记并通知后端（任一端读过后全端不再显示未读）。 */
@@ -652,14 +783,14 @@ class WorkbenchViewModel @Inject constructor(
 
     /**
      * 快捷回复发送：复用现有发送链路 POST {conn.baseUrl}/session/{id}/prompt_async。
-     * 成功后把该会话乐观置为 Busy，并刷新决策面板。
+     * 按会话粒度并发门控（同一会话防重复提交，不同会话可同时发送），成功后把该会话乐观置为 Busy，并刷新决策面板。
      */
     fun sendQuickReply(sessionId: String, text: String, onResult: (Boolean) -> Unit = {}) {
         val trimmed = text.trim()
         val activeConn = conn ?: return
         val session = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.session ?: return
-        if (trimmed.isEmpty() || _sendingSessionId.value != null) return
-        _sendingSessionId.value = sessionId
+        if (trimmed.isEmpty() || sessionId in _sendingSessionIds.value) return
+        _sendingSessionIds.update { it + sessionId }
         viewModelScope.launch {
             try {
                 api.promptAsync(
@@ -676,9 +807,7 @@ class WorkbenchViewModel @Inject constructor(
                         },
                     )
                 }
-                if (_panel.value?.sessionId == sessionId) {
-                    _panel.value = loadPanel(sessionId)
-                }
+                refreshPanel(sessionId)
                 if (BuildConfig.DEBUG) Log.d(TAG, "Quick reply sent to session $sessionId")
                 onResult(true)
             } catch (e: CancellationException) {
@@ -687,7 +816,7 @@ class WorkbenchViewModel @Inject constructor(
                 Log.e(TAG, "Quick reply failed", e)
                 onResult(false)
             } finally {
-                _sendingSessionId.value = null
+                _sendingSessionIds.update { it - sessionId }
             }
         }
     }
@@ -712,8 +841,8 @@ class WorkbenchViewModel @Inject constructor(
                     answers = answers,
                     directory = session?.directory?.takeIf { it.isNotBlank() },
                 )
-                if (success && _panel.value?.sessionId == requestSessionId) {
-                    _panel.value = loadPanel(requestSessionId)
+                if (success) {
+                    refreshPanel(requestSessionId)
                 }
                 onResult(success)
             } catch (e: CancellationException) {
@@ -736,15 +865,186 @@ class WorkbenchViewModel @Inject constructor(
                 _uiState.update { state ->
                     state.copy(sessions = state.sessions.filterNot { it.session.id == sessionId })
                 }
-                if (_panel.value?.sessionId == sessionId) {
-                    _panel.value = null
+                if (_panels.value.containsKey(sessionId)) {
+                    _panels.update { it - sessionId }
                 }
                 if (BuildConfig.DEBUG) Log.d(TAG, "Deleted session $sessionId")
             }
             onResult(ok)
         }
     }
+
+    // ============ 搜索 / 筛选 / 批量 / 重命名 / 置顶 / 刷新 ============
+
+    /** 更新会话搜索关键词（标题 / 目录 / 模型）。 */
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    /** 进入 / 退出批量选择模式（切换时清空已选）。 */
+    fun toggleSelectionMode() {
+        _selectionMode.value = !_selectionMode.value
+        _selected.value = emptySet()
+    }
+
+    /** 勾选 / 取消勾选单个会话。 */
+    fun toggleSelected(sessionId: String) {
+        _selected.update { if (sessionId in it) it - sessionId else it + sessionId }
+    }
+
+    /** 全选当前可见会话。 */
+    fun selectAllVisible(ids: Set<String>) {
+        _selected.value = ids
+    }
+
+    /** 批量删除已选会话（并发请求，完成后退出选择模式）。 */
+    fun deleteSelected(onResult: (Boolean) -> Unit = {}) {
+        val activeConn = conn ?: return
+        val ids = _selected.value
+        if (ids.isEmpty()) return
+        viewModelScope.launch {
+            val results = coroutineScope {
+                ids.map { id -> async { runCatching { api.deleteSession(activeConn, id) }.getOrDefault(false) } }
+                    .awaitAll()
+            }
+            val deletedIds = ids.filterIndexed { i, _ -> results[i] }.toSet()
+            if (deletedIds.isNotEmpty()) {
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.filterNot { it.session.id in deletedIds })
+                }
+                _panels.update { panels -> panels.filterKeys { it !in deletedIds } }
+            }
+            _selectionMode.value = false
+            _selected.value = emptySet()
+            onResult(deletedIds.isNotEmpty())
+        }
+    }
+
+    /** 批量标记已选会话为已读（后端镜像通道 + 本地未读集合）。 */
+    fun markSelectedRead() {
+        val ids = _selected.value
+        if (ids.isEmpty()) return
+        _uiState.update { s ->
+            s.copy(sessions = s.sessions.map { if (it.session.id in ids) it.copy(unread = false) else it })
+        }
+        if (backendUrl.isNotBlank() && backendToken.isNotBlank()) {
+            viewModelScope.launch {
+                ids.forEach { id ->
+                    runCatching { backendApi.markSessionRead(backendUrl, backendToken, id) }
+                }
+            }
+        }
+        _selectionMode.value = false
+        _selected.value = emptySet()
+    }
+
+    /** 重命名会话（PATCH /session/{id} 更新 title）。 */
+    fun renameSession(sessionId: String, title: String, onResult: (Boolean) -> Unit = {}) {
+        val activeConn = conn ?: return
+        val trimmed = title.trim()
+        if (trimmed.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                val updated = api.updateSession(activeConn, sessionId, title = trimmed)
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.map { if (it.session.id == sessionId) it.copy(session = updated) else it })
+                }
+                syncOpenPanels(_uiState.value.sessions)
+                onResult(true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Rename session $sessionId failed", e)
+                onResult(false)
+            }
+        }
+    }
+
+    /** 置顶 / 取消置顶会话（本机持久化，仅影响本工作台排序）。 */
+    fun togglePin(sessionId: String) {
+        viewModelScope.launch {
+            dataStore.edit { prefs ->
+                val cur = prefs[pinnedKey].orEmpty()
+                prefs[pinnedKey] = if (sessionId in cur) cur - sessionId else cur + sessionId
+            }
+        }
+    }
+
+    /** 下拉刷新：手动触发一次全量刷新（推送断线兜底）。 */
+    fun manualRefresh() {
+        if (_refreshing.value) return
+        _refreshing.value = true
+        viewModelScope.launch {
+            refreshSessions()
+            _refreshing.value = false
+        }
+    }
+
+    /** 卡片懒加载「最后消息预览」：仅加载屏幕上可见的会话，已加载或加载中则跳过。 */
+    fun ensurePreview(sessionId: String) {
+        val current = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }
+        if (current?.aiPreview != null) return
+        if (sessionId in previewLoading) return
+        previewLoading += sessionId
+        viewModelScope.launch {
+            val preview = loadPreview(sessionId)
+            previewLoading -= sessionId
+            if (preview != null) {
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.map {
+                        if (it.session.id == sessionId && it.aiPreview == null) it.copy(aiPreview = preview) else it
+                    })
+                }
+            }
+        }
+    }
+
+    /** 推送驱动的预览刷新（完成类事件去抖，只对已加载过预览的会话生效）。 */
+    private val previewRefreshAt = mutableMapOf<String, Long>()
+
+    private fun refreshPreviewSoon(sessionId: String) {
+        val now = System.currentTimeMillis()
+        if (now - (previewRefreshAt[sessionId] ?: 0L) < PANEL_REFRESH_DEBOUNCE_MS) return
+        previewRefreshAt[sessionId] = now
+        viewModelScope.launch {
+            val preview = loadPreview(sessionId)
+            if (preview != null) {
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.map {
+                        if (it.session.id == sessionId) it.copy(aiPreview = preview) else it
+                    })
+                }
+            }
+        }
+    }
+
+    private suspend fun loadPreview(sessionId: String): String? {
+        val activeConn = conn ?: return null
+        val messages = runCatching {
+            api.listMessages(activeConn, sessionId, limit = PREVIEW_MESSAGE_LIMIT)
+        }.getOrElse { e ->
+            if (e is CancellationException) throw e
+            if (BuildConfig.DEBUG) Log.d(TAG, "load preview failed: ${e.message}")
+            return null
+        }
+        return buildPreview(messages)
+    }
+
+    /** 取最近一条有文本内容的消息（任一角色），压成单行预览。 */
+    private fun buildPreview(messages: List<MessageWithParts>): String? {
+        val last = messages.asReversed().mapNotNull { mw ->
+            val text = mw.parts
+                .filterIsInstance<Part.Text>()
+                .filter { it.synthetic != true && it.ignored != true }
+                .joinToString(" ") { it.text }
+                .trim()
+            text.takeIf { it.isNotBlank() }
+        }.firstOrNull() ?: return null
+        return last.replace(Regex("\\s+"), " ").take(PREVIEW_CHAR_LIMIT)
+    }
 }
 
 /** 状态类事件刷新的去抖窗口（毫秒）。 */
 private const val STATUS_REFRESH_DEBOUNCE_MS = 2_000L
+/** 推送触发决策面板刷新的去抖窗口（毫秒）。 */
+private const val PANEL_REFRESH_DEBOUNCE_MS = 800L
