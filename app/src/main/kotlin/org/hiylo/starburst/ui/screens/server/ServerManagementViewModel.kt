@@ -27,9 +27,13 @@ import org.hiylo.starburst.data.api.ServerConfigPatch
 import org.hiylo.starburst.data.api.ServerConfigResponse
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.BackendApi
+import org.hiylo.starburst.data.api.AlertsSnapshot
+import org.hiylo.starburst.data.api.AlertsUpdateRequest
 import org.hiylo.starburst.data.api.getConfig
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.updateConfig
+import org.hiylo.starburst.data.repository.AlertHistoryEntry
+import org.hiylo.starburst.data.repository.AlertHistoryRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
 import org.hiylo.starburst.domain.model.ServerConfig
@@ -39,7 +43,9 @@ import org.hiylo.starburst.service.ServerConnectionMetrics
 import org.hiylo.starburst.service.ServerConnectionStatus
 import org.hiylo.starburst.service.SshRunner
 import org.hiylo.starburst.ui.gate.BackendGate
+import org.hiylo.starburst.R
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +92,19 @@ data class ServerConnectionHealthUi(
     val lastHeartbeatAt: Long? = null,
 )
 
+/** 监控告警卡片状态。 */
+data class AlertsUiState(
+    val loading: Boolean = true,
+    val snapshot: AlertsSnapshot? = null,
+    val error: String? = null,
+)
+
+data class AlertHistoryUiState(
+    val loading: Boolean = true,
+    val entries: List<AlertHistoryEntry> = emptyList(),
+    val error: String? = null,
+)
+
 /**
  * 服务器管理页 ViewModel。
  *
@@ -99,14 +118,15 @@ class ServerManagementViewModel @Inject constructor(
     private val backendApi: BackendApi,
     private val shellRegistry: ServerShellRegistry,
     private val serverRepository: ServerRepository,
+    private val alertHistoryRepository: AlertHistoryRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
-    private val serverUrl: String = savedStateHandle.get<String>("serverUrl").orEmpty()
-    private val username: String = savedStateHandle.get<String>("username").orEmpty()
-    private val password: String = savedStateHandle.get<String>("password").orEmpty()
-    private val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
-    private val serverName: String = savedStateHandle.get<String>("serverName").orEmpty()
+    val serverUrl: String = savedStateHandle.get<String>("serverUrl").orEmpty()
+    val username: String = savedStateHandle.get<String>("username").orEmpty()
+    val password: String = savedStateHandle.get<String>("password").orEmpty()
+    val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
+    val serverName: String = savedStateHandle.get<String>("serverName").orEmpty()
     private val directory: String = savedStateHandle.get<String>("directory").orEmpty()
 
     private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
@@ -120,6 +140,12 @@ class ServerManagementViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow(ServerManagementUiState(serverName = serverName, isLoading = true))
     val uiState: StateFlow<ServerManagementUiState> = _uiState.asStateFlow()
+
+    private val _alertsUiState = MutableStateFlow(AlertsUiState())
+    val alertsUiState: StateFlow<AlertsUiState> = _alertsUiState.asStateFlow()
+
+    private val _alertHistoryUiState = MutableStateFlow(AlertHistoryUiState())
+    val alertHistoryUiState: StateFlow<AlertHistoryUiState> = _alertHistoryUiState.asStateFlow()
 
     /** 后端是否「正常可用」（健康 + 版本达标）。后端相关功能入口的显隐统一使用该判定。 */
     val isBackendReady: Boolean
@@ -145,18 +171,31 @@ class ServerManagementViewModel @Inject constructor(
     init {
         refresh()
         bindToService()
+        loadAlertHistory()
     }
 
     /** 界面可见性驱动的轮询任务；退后台时由 [launchWhileStarted] 自动挂起（耗电优化）。 */
     private var pollJob: Job? = null
 
+    /** 硬件告警快照兜底轮询任务；同样随界面可见性挂起/恢复。 */
+    private var alertPollJob: Job? = null
+
     /** 由 ServerManagementScreen 传入 lifecycle；仅在界面 STARTED 期间刷新系统资源信息。 */
     fun attachLifecycle(lifecycle: Lifecycle) {
-        if (pollJob?.isActive == true) return
-        pollJob = viewModelScope.launchWhileStarted(lifecycle) {
-            while (true) {
-                delay(SYSTEM_INFO_REFRESH_INTERVAL_MS)
-                loadSystemInfo()
+        if (pollJob?.isActive != true) {
+            pollJob = viewModelScope.launchWhileStarted(lifecycle) {
+                while (true) {
+                    delay(SYSTEM_INFO_REFRESH_INTERVAL_MS)
+                    loadSystemInfo()
+                }
+            }
+        }
+        if (alertPollJob?.isActive != true) {
+            alertPollJob = viewModelScope.launchWhileStarted(lifecycle) {
+                while (true) {
+                    delay(ALERT_POLL_INTERVAL_MS)
+                    reconcileAlerts()
+                }
             }
         }
     }
@@ -222,8 +261,117 @@ class ServerManagementViewModel @Inject constructor(
             loadSystemInfo()
             loadConfig()
             probeBackend()
+            loadAlerts()
             _uiState.update { it.copy(isLoading = false) }
         }
+    }
+
+    /** 拉取硬件告警快照（后端可用时）。 */
+    fun loadAlerts() {
+        viewModelScope.launch {
+            _alertsUiState.update { it.copy(loading = true, error = null) }
+            val server = serverRepository.getServer(serverId)
+            val url = server?.backendResolvedUrl.orEmpty()
+            val token = server?.backendResolvedToken.orEmpty()
+            if (url.isBlank() || token.isBlank()) {
+                _alertsUiState.update { it.copy(loading = false, snapshot = null) }
+                return@launch
+            }
+            try {
+                val snapshot = backendApi.alertsSnapshot(url, token)
+                _alertsUiState.update { it.copy(loading = false, snapshot = snapshot) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _alertsUiState.update {
+                    it.copy(loading = false, error = context.getString(R.string.alert_load_failed))
+                }
+            }
+        }
+    }
+
+    /** 更新告警配置并回写最新快照。 */
+    fun updateAlerts(request: AlertsUpdateRequest) {
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId)
+            val url = server?.backendResolvedUrl.orEmpty()
+            val token = server?.backendResolvedToken.orEmpty()
+            if (url.isBlank() || token.isBlank()) return@launch
+            try {
+                val snapshot = backendApi.updateAlerts(url, token, request)
+                _alertsUiState.update { it.copy(snapshot = snapshot, error = null) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _alertsUiState.update {
+                    it.copy(error = context.getString(R.string.alert_update_failed))
+                }
+            }
+        }
+    }
+
+    /** 拉取本地告警历史（越线/恢复事件，时间倒序）。 */
+    fun loadAlertHistory() {
+        viewModelScope.launch {
+            _alertHistoryUiState.update { it.copy(loading = true, error = null) }
+            try {
+                val entries = alertHistoryRepository.latest(serverId)
+                _alertHistoryUiState.update { it.copy(loading = false, entries = entries) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _alertHistoryUiState.update {
+                    it.copy(loading = false, error = context.getString(R.string.alert_history_load_failed))
+                }
+            }
+        }
+    }
+
+    /** 拉取告警快照并对齐本地历史：仅对「状态迁移」（进入告警 / 恢复）落库，稳态越线不重复记录。 */
+    private fun reconcileAlerts() {
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId)
+            val url = server?.backendResolvedUrl.orEmpty()
+            val token = server?.backendResolvedToken.orEmpty()
+            if (url.isBlank() || token.isBlank()) return@launch
+            val snapshot = try {
+                backendApi.alertsSnapshot(url, token)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                return@launch
+            }
+            val previous = _alertsUiState.value.snapshot?.alerts.orEmpty()
+            val current = snapshot.alerts
+            if (current != previous) {
+                (current.keys + previous.keys).forEach { metric ->
+                    val wasAlert = previous[metric] == true
+                    val isAlert = current[metric] == true
+                    if (wasAlert != isAlert) {
+                        alertHistoryRepository.record(
+                            serverId = serverId,
+                            metric = metric,
+                            value = metricValue(snapshot, metric),
+                            threshold = metricThreshold(snapshot, metric),
+                            state = if (isAlert) "alert" else "ok",
+                        )
+                    }
+                }
+            }
+            _alertsUiState.update { it.copy(snapshot = snapshot) }
+        }
+    }
+
+    private fun metricValue(snapshot: AlertsSnapshot, metric: String): Double = when (metric) {
+        "cpu" -> snapshot.metrics?.cpuPct ?: 0.0
+        "mem" -> snapshot.metrics?.memPct ?: 0.0
+        else -> snapshot.metrics?.diskPct ?: 0.0
+    }
+
+    private fun metricThreshold(snapshot: AlertsSnapshot, metric: String): Double = when (metric) {
+        "cpu" -> snapshot.thresholds?.cpuPct ?: 0.0
+        "mem" -> snapshot.thresholds?.memPct ?: 0.0
+        else -> snapshot.thresholds?.diskPct ?: 0.0
     }
 
     /** 探测当前服务器对应的 starburst-backend 是否已部署并存活（health + 版本）。 */
@@ -416,5 +564,8 @@ class ServerManagementViewModel @Inject constructor(
         /** 系统资源信息自动刷新间隔（毫秒）。 */
         // 每条 SSH 命令超时 20s、每轮 3~4 条；VPN 高 RTT 下 5s 一轮容易堆积重叠，放宽到 10s。
         const val SYSTEM_INFO_REFRESH_INTERVAL_MS = 10_000L
+
+        /** 硬件告警快照兜底轮询间隔（毫秒）；与后端采样间隔（60s）对齐，补偿 WS 丢帧。 */
+        const val ALERT_POLL_INTERVAL_MS = 60_000L
     }
 }

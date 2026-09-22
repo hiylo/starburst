@@ -9,8 +9,10 @@
  */
 package org.hiylo.starburst.ui.screens.server
 
+import android.text.format.DateUtils
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,14 +27,18 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MenuBook
 import androidx.compose.material.icons.filled.RestartAlt
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Terminal
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -40,6 +46,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +60,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
@@ -60,6 +68,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
+import org.hiylo.starburst.data.api.AlertsSnapshot
+import org.hiylo.starburst.data.api.AlertsThresholds
+import org.hiylo.starburst.data.api.AlertsMetrics
+import org.hiylo.starburst.data.api.AlertsUpdateRequest
+import org.hiylo.starburst.data.repository.AlertHistoryEntry
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppPrimaryButton
@@ -78,9 +91,12 @@ import kotlinx.coroutines.delay
 @Composable
 fun ServerManagementScreen(
     onNavigateBack: () -> Unit,
+    onNavigateToKb: (serverUrl: String, username: String, password: String, serverName: String, serverId: String) -> Unit = { _, _, _, _, _ -> },
     viewModel: ServerManagementViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val alertsUiState by viewModel.alertsUiState.collectAsState()
+    val alertHistoryUiState by viewModel.alertHistoryUiState.collectAsState()
     val isAmoled = isAmoledTheme()
     var showRestartConfirm by rememberSaveable { mutableStateOf(false) }
     var showLogTail by rememberSaveable { mutableStateOf(false) }
@@ -155,6 +171,48 @@ fun ServerManagementScreen(
                 probing = uiState.backendAvailable == null,
                 ready = viewModel.isBackendReady,
             )
+
+            // 知识库（后端就绪才展示）
+            if (viewModel.isBackendReady) {
+                KbEntrySection(
+                    isAmoled = isAmoled,
+                    onClick = {
+                        onNavigateToKb(
+                            viewModel.serverUrl,
+                            viewModel.username,
+                            viewModel.password,
+                            viewModel.serverName,
+                            viewModel.serverId,
+                        )
+                    },
+                )
+            }
+
+            // 监控告警（后端就绪才展示）
+            if (viewModel.isBackendReady) {
+                AlertsSection(
+                    isAmoled = isAmoled,
+                    uiState = alertsUiState,
+                    onRefresh = viewModel::loadAlerts,
+                    onToggleEnabled = { enabled ->
+                        viewModel.updateAlerts(AlertsUpdateRequest(enabled = enabled))
+                    },
+                    onUpdateThreshold = { metric, value ->
+                        viewModel.updateAlerts(
+                            when (metric) {
+                                "cpu" -> AlertsUpdateRequest(cpuPct = value)
+                                "mem" -> AlertsUpdateRequest(memPct = value)
+                                else -> AlertsUpdateRequest(diskPct = value)
+                            },
+                        )
+                    },
+                )
+                AlertHistorySection(
+                    isAmoled = isAmoled,
+                    uiState = alertHistoryUiState,
+                    onRefresh = viewModel::loadAlertHistory,
+                )
+            }
 
             // 服务基本信息
             SectionCard(isAmoled = isAmoled) {
@@ -421,5 +479,359 @@ private fun BackendStatusSection(
             value = statusText,
             valueColor = statusColor,
         )
+    }
+}
+
+/** 知识库入口卡片：后端就绪时跳转到集合列表页。 */
+@Composable
+private fun KbEntrySection(isAmoled: Boolean, onClick: () -> Unit) {
+    SectionCard(isAmoled = isAmoled) {
+        SectionHeader(stringResource(R.string.kb_title))
+        AppPrimaryButton(onClick = onClick, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.MenuBook, contentDescription = null, modifier = Modifier.width(18.dp).height(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text(stringResource(R.string.kb_enter))
+        }
+    }
+}
+
+/** 监控告警卡片：启用开关 + CPU/内存/磁盘当前值与阈值编辑。 */
+@Composable
+private fun AlertsSection(
+    isAmoled: Boolean,
+    uiState: AlertsUiState,
+    onRefresh: () -> Unit,
+    onToggleEnabled: (Boolean) -> Unit,
+    onUpdateThreshold: (metric: String, value: Double) -> Unit,
+) {
+    var editingMetric by rememberSaveable { mutableStateOf<String?>(null) }
+
+    SectionCard(isAmoled = isAmoled) {
+        SectionHeader(stringResource(R.string.alert_title))
+        when {
+            uiState.loading -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = stringResource(R.string.loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            uiState.error != null -> {
+                Text(
+                    text = uiState.error!!,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                AppSecondaryButton(
+                    onClick = onRefresh,
+                    outlined = true,
+                ) {
+                    Text(stringResource(R.string.server_mgmt_refresh))
+                }
+            }
+            uiState.snapshot == null -> {
+                Text(
+                    text = stringResource(R.string.server_backend_not_configured),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            else -> {
+                val snapshot = uiState.snapshot!!
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.alert_enabled),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Switch(
+                        checked = snapshot.enabled,
+                        onCheckedChange = onToggleEnabled,
+                    )
+                }
+
+                AlertMetricRow(
+                    label = stringResource(R.string.alert_cpu),
+                    metric = "cpu",
+                    snapshot = snapshot,
+                    onEdit = { editingMetric = "cpu" },
+                )
+                AlertMetricRow(
+                    label = stringResource(R.string.alert_memory),
+                    metric = "mem",
+                    snapshot = snapshot,
+                    onEdit = { editingMetric = "mem" },
+                )
+                AlertMetricRow(
+                    label = stringResource(R.string.alert_disk),
+                    metric = "disk",
+                    snapshot = snapshot,
+                    onEdit = { editingMetric = "disk" },
+                )
+            }
+        }
+    }
+
+    editingMetric?.let { metric ->
+        val snapshot = uiState.snapshot
+        val current = snapshot?.thresholds?.valueFor(metric) ?: 0.0
+        val metricLabel = when (metric) {
+            "cpu" -> stringResource(R.string.alert_cpu)
+            "mem" -> stringResource(R.string.alert_memory)
+            else -> stringResource(R.string.alert_disk)
+        }
+        ThresholdEditDialog(
+            title = stringResource(R.string.alert_threshold_title, metricLabel),
+            initialValue = current,
+            onDismiss = { editingMetric = null },
+            onConfirm = { value ->
+                editingMetric = null
+                onUpdateThreshold(metric, value)
+            },
+        )
+    }
+}
+
+private fun AlertsThresholds.valueFor(metric: String): Double = when (metric) {
+    "cpu" -> this.cpuPct
+    "mem" -> this.memPct
+    else -> this.diskPct
+}
+
+private fun AlertsMetrics.valueFor(metric: String): Double = when (metric) {
+    "cpu" -> this.cpuPct
+    "mem" -> this.memPct
+    else -> this.diskPct
+}
+
+/** 告警历史卡片：最近越线/恢复事件的本地记录（时间倒序）。 */
+@Composable
+private fun AlertHistorySection(
+    isAmoled: Boolean,
+    uiState: AlertHistoryUiState,
+    onRefresh: () -> Unit,
+) {
+    SectionCard(isAmoled = isAmoled) {
+        SectionHeader(stringResource(R.string.alert_history))
+        when {
+            uiState.loading -> {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text(
+                        text = stringResource(R.string.loading),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            uiState.error != null -> Text(
+                text = uiState.error!!,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error,
+            )
+            uiState.entries.isEmpty() -> Text(
+                text = stringResource(R.string.alert_history_empty),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            else -> uiState.entries.forEach { entry ->
+                AlertHistoryRow(entry = entry)
+            }
+        }
+        HorizontalDivider()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onRefresh) {
+                Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.server_mgmt_refresh))
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlertHistoryRow(entry: AlertHistoryEntry) {
+    val alerting = entry.state == "alert"
+    val metricLabel = when (entry.metric) {
+        "cpu" -> stringResource(R.string.alert_cpu)
+        "mem" -> stringResource(R.string.alert_memory)
+        else -> stringResource(R.string.alert_disk)
+    }
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(if (alerting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary),
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = metricLabel,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Medium,
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = stringResource(
+                    if (alerting) R.string.alert_history_state_alert else R.string.alert_history_state_ok,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = if (alerting) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+            )
+        }
+        Text(
+            text = stringResource(R.string.alert_history_item, entry.value, entry.threshold),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = DateUtils.getRelativeTimeSpanString(entry.timestamp).toString(),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+        )
+    }
+}
+
+@Composable
+private fun AlertMetricRow(
+    label: String,
+    metric: String,
+    snapshot: AlertsSnapshot,
+    onEdit: () -> Unit,
+) {
+    val current = snapshot.metrics?.valueFor(metric)
+    val threshold = snapshot.thresholds?.valueFor(metric)
+    val alerting = snapshot.alerts[metric] == true
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (alerting) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(8.dp),
+                    ) {
+                    }
+                    Text(
+                        text = stringResource(R.string.alert_active),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
+                }
+            }
+            Text(
+                text = if (current != null && threshold != null) {
+                    stringResource(R.string.alert_current, current, threshold)
+                } else if (current != null) {
+                    stringResource(R.string.alert_current_no_threshold, current)
+                } else {
+                    stringResource(R.string.server_mgmt_unknown)
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        IconButton(onClick = onEdit) {
+            Icon(
+                Icons.Default.Edit,
+                contentDescription = stringResource(R.string.alert_edit),
+                modifier = Modifier.size(18.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun ThresholdEditDialog(
+    title: String,
+    initialValue: Double,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit,
+) {
+    var text by rememberSaveable(initialValue) { mutableStateOf(initialValue.toString()) }
+    var invalid by rememberSaveable { mutableStateOf(false) }
+
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        OutlinedTextField(
+            value = text,
+            onValueChange = { input ->
+                text = input
+                invalid = false
+            },
+            label = { Text(stringResource(R.string.alert_threshold_value)) },
+            placeholder = { Text("0-100") },
+            isError = invalid,
+            supportingText = if (invalid) {
+                { Text(stringResource(R.string.alert_threshold_invalid)) }
+            } else {
+                null
+            },
+            singleLine = true,
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Decimal,
+            ),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(
+                onClick = onDismiss,
+                outlined = true,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+            AppPrimaryButton(
+                onClick = {
+                    val value = text.toDoubleOrNull()
+                    if (value != null && value in 0.0..100.0) {
+                        onConfirm(value)
+                    } else {
+                        invalid = true
+                    }
+                },
+            ) {
+                Text(stringResource(R.string.server_mgmt_save))
+            }
+        }
     }
 }
