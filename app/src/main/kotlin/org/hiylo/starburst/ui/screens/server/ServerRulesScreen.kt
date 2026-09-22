@@ -32,7 +32,6 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -67,6 +66,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendRule
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.AppDialog
+import org.hiylo.starburst.ui.components.AppDialogActions
+import org.hiylo.starburst.ui.components.AppPrimaryButton
+import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
@@ -137,7 +140,7 @@ fun ServerRulesScreen(
                         Text(
                             text = stringResource(R.string.server_rules_empty),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -256,7 +259,7 @@ private fun RuleCard(
             Text(
                 text = rule.prompt,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
@@ -271,20 +274,29 @@ private fun RuleCard(
         }
     }
     if (confirmDelete) {
-        AlertDialog(
-            onDismissRequest = { confirmDelete = false },
-            title = { Text(stringResource(R.string.server_rules_delete_confirm)) },
-            text = { Text(rule.name.ifBlank { rule.id }) },
-            confirmButton = {
-                TextButton(onClick = {
+        AppDialog(onDismissRequest = { confirmDelete = false }) {
+            Text(
+                text = stringResource(R.string.server_rules_delete_confirm),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+            )
+            Text(
+                text = rule.name.ifBlank { rule.id },
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+            AppDialogActions(
+                dismissText = stringResource(R.string.cancel),
+                confirmText = stringResource(R.string.confirm),
+                destructiveConfirm = true,
+                onDismiss = { confirmDelete = false },
+                onConfirm = {
                     confirmDelete = false
                     onDelete()
-                }) { Text(stringResource(R.string.confirm), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 
@@ -316,97 +328,98 @@ private fun CreateRuleDialog(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.server_rules_add)) },
-        text = {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.server_rules_add),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = description,
+                onValueChange = { description = it },
+                label = { Text(stringResource(R.string.server_rules_generate_hint)) },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            TextButton(
+                onClick = { onGenerate(description) },
+                enabled = !isGenerating && description.isNotBlank(),
             ) {
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text(stringResource(R.string.server_rules_generate_hint)) },
-                    minLines = 2,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                TextButton(
-                    onClick = { onGenerate(description) },
-                    enabled = !isGenerating && description.isNotBlank(),
-                ) {
-                    if (isGenerating) {
-                        CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.server_rules_generating))
-                    } else {
-                        Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.width(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.server_rules_generate))
-                    }
-                }
-                if (generateError != null) {
-                    Text(generateError, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
-                }
-                OutlinedTextField(
-                    value = name,
-                    onValueChange = { name = it },
-                    label = { Text(stringResource(R.string.server_rules_name)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RULE_KINDS.forEach { k ->
-                        FilterChip(
-                            selected = kind == k,
-                            onClick = { kind = k },
-                            label = { Text(k) },
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = schedule,
-                    onValueChange = { schedule = it },
-                    label = { Text(stringResource(R.string.server_rules_schedule)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = directory,
-                    onValueChange = { directory = it },
-                    label = { Text(stringResource(R.string.server_rules_directory)) },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    label = { Text(stringResource(R.string.server_rules_prompt)) },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = stringResource(R.string.server_rules_enabled),
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    Switch(checked = enabled, onCheckedChange = { enabled = it })
+                if (isGenerating) {
+                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.server_rules_generating))
+                } else {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, modifier = Modifier.width(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(stringResource(R.string.server_rules_generate))
                 }
             }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onCreate(name, kind, schedule, directory, prompt, enabled) },
-                enabled = !isSaving && prompt.isNotBlank() && name.isNotBlank(),
-            ) { Text(stringResource(R.string.server_rules_save)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+            if (generateError != null) {
+                Text(generateError, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+            }
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.server_rules_name)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                RULE_KINDS.forEach { k ->
+                    FilterChip(
+                        selected = kind == k,
+                        onClick = { kind = k },
+                        label = { Text(k) },
+                    )
+                }
+            }
+            OutlinedTextField(
+                value = schedule,
+                onValueChange = { schedule = it },
+                label = { Text(stringResource(R.string.server_rules_schedule)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = directory,
+                onValueChange = { directory = it },
+                label = { Text(stringResource(R.string.server_rules_directory)) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = { prompt = it },
+                label = { Text(stringResource(R.string.server_rules_prompt)) },
+                minLines = 3,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.server_rules_enabled),
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = enabled, onCheckedChange = { enabled = it })
+            }
+        }
+        AppDialogActions(
+            dismissText = stringResource(R.string.cancel),
+            confirmText = stringResource(R.string.server_rules_save),
+            confirmEnabled = !isSaving && prompt.isNotBlank() && name.isNotBlank(),
+            onDismiss = onDismiss,
+            onConfirm = { onCreate(name, kind, schedule, directory, prompt, enabled) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
 
 @Composable
@@ -416,50 +429,62 @@ private fun ExecutionsDialog(
     executions: List<org.hiylo.starburst.data.api.BackendRuleExecution>,
     onDismiss: () -> Unit,
 ) {
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.server_rules_executions)) },
-        text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.server_rules_executions),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "$ruleName · ${stringResource(R.string.server_rules_execution_total)} ${executions.size}",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (isLoading) {
+                Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (executions.isEmpty()) {
                 Text(
-                    text = "$ruleName · ${stringResource(R.string.server_rules_execution_total)} ${executions.size}",
-                    style = MaterialTheme.typography.labelSmall,
+                    text = stringResource(R.string.server_rules_executions_empty),
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                Spacer(Modifier.height(8.dp))
-                if (isLoading) {
-                    Box(modifier = Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                } else if (executions.isEmpty()) {
-                    Text(
-                        text = stringResource(R.string.server_rules_executions_empty),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                    )
-                } else {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        items(executions, key = { it.id }) { exec ->
-                            Column {
-                                Text(
-                                    text = formatBackendTime(exec.triggeredAt),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                                Text(
-                                    text = exec.taskId,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
+            } else {
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(executions, key = { it.id }) { exec ->
+                        Column {
+                            Text(
+                                text = formatBackendTime(exec.triggeredAt),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            Text(
+                                text = exec.taskId,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
                         }
                     }
                 }
             }
-        },
-        confirmButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
-    )
+        }
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(onClick = onDismiss) {
+                Text(stringResource(R.string.close))
+            }
+        }
+    }
 }

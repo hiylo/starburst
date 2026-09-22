@@ -116,7 +116,7 @@ fun ServerAuditScreen(
                         Text(
                             text = stringResource(R.string.server_audit_empty),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

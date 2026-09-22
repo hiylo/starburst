@@ -287,7 +287,7 @@ fun ServerProvidersScreen(
                         Text(
                             text = stringResource(R.string.server_settings_oauth_device_code_hint),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Surface(
                             shape = RoundedCornerShape(12.dp),
@@ -357,7 +357,7 @@ fun ServerProvidersScreen(
                         Text(
                             text = stringResource(R.string.server_settings_oauth_headless_fallback),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (pending.authorization.url.isNotBlank()) {
@@ -511,7 +511,7 @@ fun ServerProvidersScreen(
                     Text(
                         text = stringResource(R.string.server_settings_providers_connected),
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 items(connected, key = { it.providerId }) { provider ->
@@ -536,7 +536,7 @@ fun ServerProvidersScreen(
                     Text(
                         text = stringResource(R.string.server_settings_providers_available),
                         style = MaterialTheme.typography.labelLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 items(available, key = { it.providerId }) { provider ->

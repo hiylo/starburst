@@ -54,7 +54,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -72,6 +71,8 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.AppDialog
+import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
@@ -308,41 +309,44 @@ private fun ServerSysPromptDialog(
 ) {
     var prompt by remember { mutableStateOf(initialPrompt) }
     var contextLimit by remember { mutableStateOf(initialContextLimit) }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.server_settings_sysprompt_dialog_title)) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    label = { Text(stringResource(R.string.server_settings_sysprompt_label)) },
-                    placeholder = { Text(stringResource(R.string.server_settings_sysprompt_hint)) },
-                    modifier = Modifier.fillMaxWidth(),
-                    minLines = 3,
-                )
-                OutlinedTextField(
-                    value = contextLimit,
-                    onValueChange = { contextLimit = it.filter(Char::isDigit).take(9) },
-                    label = { Text(stringResource(R.string.server_settings_context_limit_label)) },
-                    placeholder = { Text(stringResource(R.string.server_settings_context_limit_hint)) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { onSave(prompt, contextLimit) }) {
-                Text(stringResource(R.string.sysprompt_save))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text(stringResource(R.string.cancel))
-            }
-        },
-    )
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.server_settings_sysprompt_dialog_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = { prompt = it },
+                label = { Text(stringResource(R.string.server_settings_sysprompt_label)) },
+                placeholder = { Text(stringResource(R.string.server_settings_sysprompt_hint)) },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+            )
+            OutlinedTextField(
+                value = contextLimit,
+                onValueChange = { contextLimit = it.filter(Char::isDigit).take(9) },
+                label = { Text(stringResource(R.string.server_settings_context_limit_label)) },
+                placeholder = { Text(stringResource(R.string.server_settings_context_limit_hint)) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
+        AppDialogActions(
+            dismissText = stringResource(R.string.cancel),
+            confirmText = stringResource(R.string.sysprompt_save),
+            onDismiss = onDismiss,
+            onConfirm = { onSave(prompt, contextLimit) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
 
 /**

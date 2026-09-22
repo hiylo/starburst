@@ -195,7 +195,7 @@ fun ServerModelFilterScreen(
                                                 Text(
                                                     text = model.modelId,
                                                     style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                                 val caps = model.capabilities
                                                 if (caps != null && (caps.toolcall || caps.reasoning || caps.attachment)) {

@@ -27,7 +27,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +59,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendToken
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.AppDialog
+import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
@@ -128,7 +129,7 @@ fun ServerTokensScreen(
                         Text(
                             text = stringResource(R.string.server_tokens_empty),
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -217,20 +218,29 @@ private fun TokenCard(token: BackendToken, isAmoled: Boolean, onRevoke: () -> Un
         }
     }
     if (confirmRevoke) {
-        AlertDialog(
-            onDismissRequest = { confirmRevoke = false },
-            title = { Text(stringResource(R.string.server_tokens_revoke_confirm)) },
-            text = { Text(token.name) },
-            confirmButton = {
-                TextButton(onClick = {
+        AppDialog(onDismissRequest = { confirmRevoke = false }) {
+            Text(
+                text = stringResource(R.string.server_tokens_revoke_confirm),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+            )
+            Text(
+                text = token.name,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+            AppDialogActions(
+                dismissText = stringResource(R.string.cancel),
+                confirmText = stringResource(R.string.confirm),
+                destructiveConfirm = true,
+                onDismiss = { confirmRevoke = false },
+                onConfirm = {
                     confirmRevoke = false
                     onRevoke()
-                }) { Text(stringResource(R.string.confirm), color = MaterialTheme.colorScheme.error) }
-            },
-            dismissButton = {
-                TextButton(onClick = { confirmRevoke = false }) { Text(stringResource(R.string.cancel)) }
-            },
-        )
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 
@@ -241,58 +251,64 @@ private fun CreateTokenDialog(
     onCreate: (String) -> Unit,
 ) {
     var name by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.server_tokens_add)) },
-        text = {
-            OutlinedTextField(
-                value = name,
-                onValueChange = { name = it },
-                label = { Text(stringResource(R.string.server_tokens_name)) },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = { onCreate(name) },
-                enabled = !isCreating && name.isNotBlank(),
-            ) { Text(stringResource(R.string.server_tokens_create)) }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-        },
-    )
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.server_tokens_add),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text(stringResource(R.string.server_tokens_name)) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+        )
+        AppDialogActions(
+            dismissText = stringResource(R.string.cancel),
+            confirmText = stringResource(R.string.server_tokens_create),
+            confirmEnabled = !isCreating && name.isNotBlank(),
+            onDismiss = onDismiss,
+            onConfirm = { onCreate(name) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
 
 @Composable
 private fun CreatedTokenDialog(token: String, onDismiss: () -> Unit) {
     val clipboard = LocalClipboardManager.current
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.server_tokens_created_title)) },
-        text = {
-            Column {
-                Text(
-                    text = stringResource(R.string.server_tokens_created_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = token,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { clipboard.setText(AnnotatedString(token)) }) {
-                Text(stringResource(R.string.server_tokens_copy))
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) }
-        },
-    )
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.server_tokens_created_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.server_tokens_created_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = token,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.primary,
+            )
+        }
+        AppDialogActions(
+            dismissText = stringResource(R.string.close),
+            confirmText = stringResource(R.string.server_tokens_copy),
+            onDismiss = onDismiss,
+            onConfirm = { clipboard.setText(AnnotatedString(token)) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }
