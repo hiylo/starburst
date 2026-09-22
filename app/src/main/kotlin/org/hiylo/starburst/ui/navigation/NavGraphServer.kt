@@ -260,6 +260,16 @@ fun NavGraphBuilder.ServerRoutes(navController: NavHostController) {
             navArgument("directory") { type = NavType.StringType; defaultValue = "" },
         )
     ) {
-        ServerManagementScreen(onNavigateBack = { navController.popBackStack() })
+        val serverUrl = it.arguments?.getString("serverUrl").orEmpty()
+        val username = it.arguments?.getString("username").orEmpty()
+        val password = it.arguments?.getString("password").orEmpty()
+        val serverName = it.arguments?.getString("serverName").orEmpty()
+        val serverId = it.arguments?.getString("serverId").orEmpty()
+        ServerManagementScreen(
+            onNavigateBack = { navController.popBackStack() },
+            onNavigateToKb = { url, user, pwd, name, id ->
+                navController.navigate(Screen.Kb.createRoute(url, user, pwd, name, id))
+            },
+        )
     }
 }

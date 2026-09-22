@@ -101,6 +101,7 @@ internal fun ChatInputBar(
     attachments: List<ImageAttachment> = emptyList(),
     onAttach: () -> Unit = {},
     onTemplateClick: () -> Unit = {},
+    onDocumentGenerateClick: () -> Unit = {},
     isListening: Boolean = false,
     voiceLevel: Float = 0f,
     onMicPress: () -> Unit = {},
@@ -799,6 +800,20 @@ internal fun ChatInputBar(
                         Icon(
                             imageVector = Icons.Default.Style,
                             contentDescription = stringResource(R.string.chat_template),
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                        )
+                    }
+                }
+                // Document generation entry — opens the generate-document dialog.
+                if (!isShellMode) {
+                    IconButton(
+                        onClick = onDocumentGenerateClick,
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = stringResource(R.string.document_generate),
                             modifier = Modifier.size(22.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
                         )

@@ -74,6 +74,7 @@ internal fun ChatScreenBottomBar(
     showCustomCommandsDialogState: MutableState<Boolean>,
     showAttachmentOptionsState: MutableState<Boolean>,
     showTemplatePickerState: MutableState<Boolean>,
+    showDocumentGenerateDialogState: MutableState<Boolean>,
     showSendConfirmDialogState: MutableState<Boolean>,
     pendingSendActionState: MutableState<(() -> Unit)?>,
 ) {
@@ -230,6 +231,7 @@ internal fun ChatScreenBottomBar(
         attachments = attachments,
         onAttach = { showAttachmentOptions = true },
         onTemplateClick = { showTemplatePicker = true },
+        onDocumentGenerateClick = { showDocumentGenerateDialogState.value = true },
         isListening = isListening,
         voiceLevel = voiceLevel,
         onMicPress = { startVoiceInput() },

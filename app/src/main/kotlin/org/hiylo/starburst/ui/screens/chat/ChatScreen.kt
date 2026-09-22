@@ -136,6 +136,8 @@ fun ChatScreen(
     var showAttachmentOptions by showAttachmentOptionsState
     val showTemplatePickerState = remember { mutableStateOf(false) }
     var showTemplatePicker by showTemplatePickerState
+    val showDocumentGenerateDialogState = remember { mutableStateOf(false) }
+    var showDocumentGenerateDialog by showDocumentGenerateDialogState
     val showSubagentContextDetailsState = remember { mutableStateOf(false) }
     var showSubagentContextDetails by showSubagentContextDetailsState
     val isTerminalModeState = rememberSaveable { mutableStateOf(startInTerminalMode) }
@@ -905,6 +907,7 @@ fun ChatScreen(
                 showCustomCommandsDialogState = showCustomCommandsDialogState,
                 showAttachmentOptionsState = showAttachmentOptionsState,
                 showTemplatePickerState = showTemplatePickerState,
+                showDocumentGenerateDialogState = showDocumentGenerateDialogState,
                 showSendConfirmDialogState = showSendConfirmDialogState,
                 pendingSendActionState = pendingSendActionState,
             )
@@ -942,6 +945,7 @@ fun ChatScreen(
             autoScrollEnabledState = autoScrollEnabledState,
             hasUnreadMessagesState = hasUnreadMessagesState,
             isAtBottom = isAtBottom,
+            showDocumentGenerateDialogState = showDocumentGenerateDialogState,
             pendingInteractions = pendingInteractions,
             isBusy = isBusy,
             onNavigateToChildSession = onNavigateToChildSession,

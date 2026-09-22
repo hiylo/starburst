@@ -19,7 +19,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.AgentInfo
+import org.hiylo.starburst.data.api.BackendDocumentsApi
 import org.hiylo.starburst.data.api.CommandInfo
+import org.hiylo.starburst.data.api.GeneratedDocument
 import org.hiylo.starburst.data.api.OpenCodeApi
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
@@ -76,6 +78,7 @@ class ChatViewModel @Inject constructor(
     internal val serverRepository: ServerRepository,
     internal val serverAsrApi: ServerAsrApi,
     internal val shellRegistry: ServerShellRegistry,
+    internal val documentsApi: BackendDocumentsApi,
 ) : ViewModel() {
 
     @Volatile
@@ -133,6 +136,23 @@ class ChatViewModel @Inject constructor(
 
     internal val _summaryVisible = MutableStateFlow(false)
     val summaryVisible: StateFlow<Boolean> = _summaryVisible
+    // ============ Document generation ============
+    /** 本会话已生成的文档（聊天气泡之外的本地展示列表）。 */
+    internal val _generatedDocuments = MutableStateFlow<List<GeneratedDocument>>(emptyList())
+    val generatedDocuments: StateFlow<List<GeneratedDocument>> = _generatedDocuments
+    /** 是否正在生成文档（生成对话框按钮 loading）。 */
+    internal val _isGeneratingDocument = MutableStateFlow(false)
+    val isGeneratingDocument: StateFlow<Boolean> = _isGeneratingDocument
+    /** 是否正在按意见重新生成文档（修改对话框按钮 loading）。 */
+    internal val _isRevisingDocument = MutableStateFlow(false)
+    val isRevisingDocument: StateFlow<Boolean> = _isRevisingDocument
+    /** 解析后的后端文档服务地址与 token（预览/下载/生成共用）。 */
+    internal val _documentBackendUrl = MutableStateFlow("")
+    val documentBackendUrl: StateFlow<String> = _documentBackendUrl
+    internal val _documentBackendToken = MutableStateFlow("")
+    /** 一次性文档操作提示（后端不可用 / 失败），由 ChatScreenMessageBody 收集为 Toast。 */
+    internal val _documentToast = MutableSharedFlow<String>(extraBufferCapacity = 1)
+    val documentToast: SharedFlow<String> = _documentToast
     /** Monotonic token invalidating in-flight suggestion generations when the conversation changes. */
     internal var suggestionsGeneration = 0L
     internal val _allProviders = MutableStateFlow<List<ProviderInfo>>(emptyList())
@@ -681,6 +701,18 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.terminalFontSize.collect { size ->
                 terminalWorkspace.setDefaultFontSize(size)
+            }
+        }
+
+        // 解析后端文档服务地址（DataStore 读取，非阻塞；预览/下载/生成均依赖）。
+        viewModelScope.launch {
+            val server = serverRepository.getServer(serverId)
+            val host = runCatching { java.net.URL(serverUrl).host }.getOrNull()
+                ?: serverUrl.substringAfter("://").substringBefore(":")
+            val url = (server?.backendResolvedUrl ?: "http://$host:18880").trimEnd('/')
+            if (url.isNotBlank()) {
+                _documentBackendUrl.value = url
+                _documentBackendToken.value = server?.backendResolvedToken.orEmpty()
             }
         }
 

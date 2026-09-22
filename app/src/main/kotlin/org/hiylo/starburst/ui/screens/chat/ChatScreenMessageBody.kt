@@ -10,6 +10,9 @@
 
 package org.hiylo.starburst.ui.screens.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.net.Uri
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -44,7 +47,10 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.ui.platform.SoftwareKeyboardController
 import androidx.compose.ui.unit.Density
+import org.hiylo.starburst.data.api.GeneratedDocument
+import org.hiylo.starburst.data.api.resolveDocumentUrl
 import org.hiylo.starburst.domain.model.PendingInteraction
+import org.hiylo.starburst.logging.AppLogger as Log
 
 
 /**
@@ -88,6 +94,7 @@ internal fun ChatScreenMessageBody(
     autoScrollEnabledState: MutableState<Boolean>,
     hasUnreadMessagesState: MutableState<Boolean>,
     isAtBottom: Boolean,
+    showDocumentGenerateDialogState: MutableState<Boolean>,
     pendingInteractions: List<PendingInteraction>,
     isBusy: Boolean,
     onNavigateToChildSession: (String) -> Unit,
@@ -102,6 +109,68 @@ internal fun ChatScreenMessageBody(
     var terminalOverlayHeightPx by terminalOverlayHeightPxState
     var autoScrollEnabled by autoScrollEnabledState
     var hasUnreadMessages by hasUnreadMessagesState
+    var showGenerateDocumentDialog by showDocumentGenerateDialogState
+
+    // ============ Document generation ============
+    // 本会话已生成的文档（聊天气泡之外的本地展示）与对应操作状态。
+    val generatedDocuments by viewModel.generatedDocuments.collectAsState()
+    val isGeneratingDocument by viewModel.isGeneratingDocument.collectAsState()
+    val isRevisingDocument by viewModel.isRevisingDocument.collectAsState()
+    val documentBackendUrl by viewModel.documentBackendUrl.collectAsState()
+    var previewDocument by remember { mutableStateOf<GeneratedDocument?>(null) }
+    var reviseDocument by remember { mutableStateOf<GeneratedDocument?>(null) }
+    var downloadingDocId by remember { mutableStateOf<Long?>(null) }
+    var pendingDocDownload by remember { mutableStateOf<GeneratedDocument?>(null) }
+
+    // 文档操作提示（后端不可用 / 生成失败 / 下载失败）统一走 Snackbar。
+    LaunchedEffect(Unit) {
+        viewModel.documentToast.collect { message ->
+            snackbarHostState.showSnackbar(message)
+        }
+    }
+
+    // 下载走 SAF 让用户选择落盘位置：先请求系统文件，选中后拉取字节写入。
+    val documentDownloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
+    ) { uri: Uri? ->
+        val doc = pendingDocDownload
+        pendingDocDownload = null
+        if (uri == null || doc == null) {
+            downloadingDocId = null
+            return@rememberLauncherForActivityResult
+        }
+        coroutineScope.launch {
+            try {
+                val bytes = viewModel.fetchDocumentBytes(doc)
+                    ?: error("download returned empty")
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) }
+                    ?: error("unable to open output stream")
+                snackbarHostState.showSnackbar(context.getString(R.string.document_downloaded))
+            } catch (e: Exception) {
+                Log.w("ChatScreenMessageBody", "Failed to write document ${doc.id}", e)
+                snackbarHostState.showSnackbar(context.getString(R.string.document_download_failed))
+            } finally {
+                downloadingDocId = null
+            }
+        }
+    }
+
+    // 请求下载：把 id 标记为下载中并弹出系统文件保存器。
+    fun requestDownloadDocument(doc: GeneratedDocument) {
+        if (downloadingDocId != null) return
+        downloadingDocId = doc.id
+        pendingDocDownload = doc
+        val extension = when (doc.docType) {
+            "pptx" -> ".pptx"
+            "docx" -> ".docx"
+            "xlsx" -> ".xlsx"
+            else -> ""
+        }
+        val baseName = doc.name.substringBeforeLast('.')
+            .ifBlank { doc.name }
+            .ifBlank { "document_${doc.id}" }
+        documentDownloadLauncher.launch("$baseName$extension")
+    }
 
     Box(
         modifier = Modifier
@@ -225,6 +294,20 @@ internal fun ChatScreenMessageBody(
                     // including spacing and padding below a tall or streaming message.
                     item(key = "conversation_bottom") {
                         Spacer(Modifier.height(4.dp))
+                    }
+
+                    // 本会话生成的文档卡片（聊天气泡之外的本地展示）。
+                    generatedDocuments.forEach { document ->
+                        item(key = "generated_doc_${document.id}") {
+                            GeneratedDocumentCard(
+                                document = document,
+                                backendUrl = documentBackendUrl,
+                                isDownloading = downloadingDocId == document.id,
+                                onDownload = { requestDownloadDocument(document) },
+                                onPreview = { previewDocument = document },
+                                onRevise = { reviseDocument = document },
+                            )
+                        }
                     }
 
                     // Blinking typing cursor while the assistant is generating a reply.
@@ -533,6 +616,42 @@ internal fun ChatScreenMessageBody(
                     }
                 }
             }
+        }
+
+        // 文档生成对话框（由输入区「生成文档」入口打开）。
+        if (showGenerateDocumentDialog) {
+            DocumentGenerateDialog(
+                isGenerating = isGeneratingDocument,
+                onGenerate = { type, prompt ->
+                    viewModel.generateDocument(type, prompt) { ok ->
+                        if (ok) showGenerateDocumentDialog = false
+                    }
+                },
+                onDismiss = { showGenerateDocumentDialog = false },
+            )
+        }
+
+        // 按意见修改对话框。
+        reviseDocument?.let { document ->
+            DocumentReviseDialog(
+                docName = document.name,
+                isRevising = isRevisingDocument,
+                onRevise = { instruction ->
+                    viewModel.reviseDocument(document.id, instruction) { ok ->
+                        if (ok) reviseDocument = null
+                    }
+                },
+                onDismiss = { reviseDocument = null },
+            )
+        }
+
+        // 文档预览弹层（后端 doc/preview.html 整页加载）。
+        previewDocument?.let { document ->
+            DocumentPreviewSheet(
+                backendUrl = documentBackendUrl,
+                fileUrl = resolveDocumentUrl(documentBackendUrl, document.downloadUrl),
+                onDismiss = { previewDocument = null },
+            )
         }
     }
 }
