@@ -166,6 +166,9 @@ dependencies {
     // Accompanist (for SwipeRefresh)
     implementation("com.google.accompanist:accompanist-swiperefresh:0.34.0")
 
+    // Baseline Profile（安装时应用 baseline-prof.txt 的 AOT 配置）
+    implementation("androidx.profileinstaller:profileinstaller:1.3.1")
+
     // Testing
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")

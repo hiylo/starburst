@@ -17,3 +17,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "StarBurst"
 include(":app")
+include(":baselineprofile")
