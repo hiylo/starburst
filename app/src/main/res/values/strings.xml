@@ -600,6 +600,10 @@
     <string name="notification_session_error">Session error</string>
     <string name="notification_group_summary">StarBurst notifications</string>
     <string name="notification_export_progress">Session export progress</string>
+    <string name="notify_intel_run_body">%1$s · Progress %2$s</string>
+    <string name="notify_alert_hardware">Server resource alert</string>
+    <string name="notify_alert_hardware_threshold">%1$s %2$s exceeded threshold %3$s</string>
+    <string name="notify_audit_finding">Security / compliance finding</string>
     <!-- Errors -->
     <string name="error_unknown">An error occurred</string>
     <string name="session_error_title">Session ended with an error</string>

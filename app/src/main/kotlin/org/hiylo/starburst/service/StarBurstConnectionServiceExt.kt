@@ -81,6 +81,12 @@ import java.util.Locale
 import java.util.concurrent.ConcurrentHashMap
 import javax.inject.Inject
 
+private const val NOTIFICATION_CHANNELS_PREFS = "starburst_notification_channels"
+private const val NOTIFICATION_CHANNELS_MIGRATED_KEY = "notif_channels_migrated_v1"
+
+/** 通知 ID：掺入 serverId 避免跨服务器冲突；位与 Int.MAX_VALUE 规避 Int.MIN_VALUE 取负。 */
+private fun stableNotifId(seed: Int, salt: String): Int = (salt + seed).hashCode() and Int.MAX_VALUE
+
 internal suspend fun StarBurstConnectionService.startReconciliation(server: ServerConfig, conn: ServerConnection) {
     // 先取消并等待旧对账 job 退出，再启动新 job：若只 put 新 job 而不取消旧的，
     // 新旧两轮会并发拉取同一批状态，弱网下互相加重负载；join 保证旧 job 已彻底退出。
@@ -464,15 +470,20 @@ internal fun StarBurstConnectionService.sessionDirectoryOf(sessionId: String): S
 
 internal fun StarBurstConnectionService.createNotificationChannels() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        // The tasks channel previously shipped without an explicit sound. Android never
-        // updates an already-created channel's sound settings, so force it by deleting
-        // and recreating the channel once on this upgrade.
-        if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID) != null) {
-            notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID)
-        }
-        // 权限/提问通知此前无声（MIUI 上 HIGH channel 不 setSound 即静音），重建一次以生效。
-        if (BuildConfig.VERSION_CODE >= 1 && notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID) != null) {
-            notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID)
+        // 仅首次升级重建一次，避免每次启动 delete+recreate 重置用户渠道定制。
+        val migratedPrefs = getSharedPreferences(NOTIFICATION_CHANNELS_PREFS, Context.MODE_PRIVATE)
+        if (!migratedPrefs.getBoolean(NOTIFICATION_CHANNELS_MIGRATED_KEY, false)) {
+            // The tasks channel previously shipped without an explicit sound. Android never
+            // updates an already-created channel's sound settings, so force it by deleting
+            // and recreating the channel once on this upgrade.
+            if (notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID) != null) {
+                notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_TASKS_ID)
+            }
+            // 权限/提问通知此前无声（MIUI 上 HIGH channel 不 setSound 即静音），重建一次以生效。
+            if (notificationManager.getNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID) != null) {
+                notificationManager.deleteNotificationChannel(NOTIFICATION_CHANNEL_PERMISSIONS_ID)
+            }
+            migratedPrefs.edit().putBoolean(NOTIFICATION_CHANNELS_MIGRATED_KEY, true).apply()
         }
 
         val connectionChannel = NotificationChannel(
@@ -762,14 +773,22 @@ private fun trimPercent(value: Double): String =
     if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
 
 /** Intel 测试运行终态通知（仅 passed / failed 触发；queued / running 不打扰）。 */
-internal fun StarBurstConnectionService.showIntelRunNotification(server: ServerConfig, run: IntelTestRun) {
+internal suspend fun StarBurstConnectionService.showIntelRunNotification(server: ServerConfig, run: IntelTestRun) {
+    if (!settingsRepository.notificationsEnabled.first()) return
     if (run.status != "passed" && run.status != "failed") return
-    val statusText = if (run.status == "passed") "已通过" else "失败"
+    val statusText = if (run.status == "passed") {
+        getString(R.string.test_intel_run_status_passed)
+    } else {
+        getString(R.string.test_intel_run_status_failed)
+    }
     val subject = run.scope.takeIf { it.isNotBlank() }
         ?: run.moduleId.takeIf { it > 0 }?.toString()
     val title = if (subject != null) "${server.displayName} · $subject" else server.displayName
-    val body = "$statusText · 进度 ${run.progress ?: "-"}"
-    val notifId = 100_000 + run.id.toInt()
+    val progress = run.progress?.takeIf { it.isNotBlank() } ?: "-"
+    val body = getString(R.string.notify_intel_run_body, statusText, progress)
+    val notifId = stableNotifId(run.id.toInt(), "intel_run_${server.id}")
+    val silent = settingsRepository.silentNotifications.first()
+    val channelId = if (silent) NOTIFICATION_CHANNEL_TASKS_SILENT_ID else NOTIFICATION_CHANNEL_TASKS_ID
     val pendingIntent = PendingIntent.getActivity(
         this,
         notifId,
@@ -778,38 +797,47 @@ internal fun StarBurstConnectionService.showIntelRunNotification(server: ServerC
         },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
-    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+    val builder = NotificationCompat.Builder(this, channelId)
         .setContentTitle(title)
         .setContentText(body)
         .setSubText(server.displayName)
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setDefaults(NotificationCompat.DEFAULT_ALL)
-        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setGroup("server_${server.id}")
-        .build()
-    postEventNotification(server, null, notifId, notification)
+    if (!silent) {
+        builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+    }
+    postEventNotification(server, null, notifId, builder.build())
 }
 
 /** 硬件资源告警 / 恢复通知（metric：cpu / mem / disk）。 */
-internal fun StarBurstConnectionService.showHardwareAlertNotification(server: ServerConfig, event: HardwareAlertEvent) {
+internal suspend fun StarBurstConnectionService.showHardwareAlertNotification(server: ServerConfig, event: HardwareAlertEvent) {
+    if (!settingsRepository.notificationsEnabled.first()) return
     val metricLabel = when (event.metric) {
-        "cpu" -> "CPU"
-        "mem" -> "内存"
-        "disk" -> "磁盘"
+        "cpu" -> getString(R.string.alert_cpu)
+        "mem" -> getString(R.string.alert_memory)
+        "disk" -> getString(R.string.alert_disk)
         else -> event.metric
     }
-    val title = "服务器资源告警"
+    val title = getString(R.string.notify_alert_hardware)
     val body = if (event.state == "ok" || event.state == "recover") {
-        "已恢复"
+        getString(R.string.alert_history_state_ok)
     } else {
-        "$metricLabel ${trimPercent(event.value)} 超过阈值 ${trimPercent(event.threshold)}"
+        getString(
+            R.string.notify_alert_hardware_threshold,
+            metricLabel,
+            trimPercent(event.value),
+            trimPercent(event.threshold),
+        )
     }
-    val notifId = 200_000 + Math.abs(event.metric.hashCode())
+    val notifId = stableNotifId(event.metric.hashCode(), "hw_alert_${server.id}")
+    val silent = settingsRepository.silentNotifications.first()
+    val channelId = if (silent) NOTIFICATION_CHANNEL_TASKS_SILENT_ID else NOTIFICATION_CHANNEL_TASKS_ID
     val pendingIntent = PendingIntent.getActivity(
         this,
         notifId,
@@ -818,28 +846,32 @@ internal fun StarBurstConnectionService.showHardwareAlertNotification(server: Se
         },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
-    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+    val builder = NotificationCompat.Builder(this, channelId)
         .setContentTitle(title)
         .setContentText(body)
         .setSubText(server.displayName)
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setDefaults(NotificationCompat.DEFAULT_ALL)
-        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setGroup("server_${server.id}")
-        .build()
-    postEventNotification(server, null, notifId, notification)
+    if (!silent) {
+        builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+    }
+    postEventNotification(server, null, notifId, builder.build())
 }
 
-/** 安全 / 合规审计发现通知（仅 warning / critical 触发）。 */
-internal fun StarBurstConnectionService.showAuditFindingNotification(server: ServerConfig, summary: String, severity: String) {
-    val title = "安全/合规审计发现"
+/** 安全 / 合规审计发现通知（仅 high / critical 触发）。 */
+internal suspend fun StarBurstConnectionService.showAuditFindingNotification(server: ServerConfig, summary: String, severity: String) {
+    if (!settingsRepository.notificationsEnabled.first()) return
+    val title = getString(R.string.notify_audit_finding)
     val body = summary.take(120)
-    val notifId = 300_000 + Math.abs(summary.hashCode())
+    val notifId = stableNotifId(summary.hashCode(), "audit_${server.id}")
+    val silent = settingsRepository.silentNotifications.first()
+    val channelId = if (silent) NOTIFICATION_CHANNEL_TASKS_SILENT_ID else NOTIFICATION_CHANNEL_TASKS_ID
     val pendingIntent = PendingIntent.getActivity(
         this,
         notifId,
@@ -848,21 +880,22 @@ internal fun StarBurstConnectionService.showAuditFindingNotification(server: Ser
         },
         PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
     )
-    val notification = NotificationCompat.Builder(this, NOTIFICATION_CHANNEL_TASKS_ID)
+    val builder = NotificationCompat.Builder(this, channelId)
         .setContentTitle(title)
         .setContentText(body)
         .setSubText("$severity · ${server.displayName}")
         .setSmallIcon(R.mipmap.ic_launcher)
         .setContentIntent(pendingIntent)
         .setAutoCancel(true)
-        .setPriority(NotificationCompat.PRIORITY_HIGH)
-        .setDefaults(NotificationCompat.DEFAULT_ALL)
-        .setVibrate(longArrayOf(0, 500, 200, 500))
+        .setPriority(if (silent) NotificationCompat.PRIORITY_LOW else NotificationCompat.PRIORITY_HIGH)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setGroup("server_${server.id}")
-        .build()
-    postEventNotification(server, null, notifId, notification)
+    if (!silent) {
+        builder.setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setVibrate(longArrayOf(0, 500, 200, 500))
+    }
+    postEventNotification(server, null, notifId, builder.build())
 }
 
 internal fun StarBurstConnectionService.postEventNotification(

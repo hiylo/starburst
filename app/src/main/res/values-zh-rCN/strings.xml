@@ -369,6 +369,10 @@
     <string name="notification_session_error">会话错误</string>
     <string name="notification_group_summary">StarBurst 通知</string>
     <string name="notification_export_progress">会话导出进度</string>
+    <string name="notify_intel_run_body">%1$s · 进度 %2$s</string>
+    <string name="notify_alert_hardware">服务器资源告警</string>
+    <string name="notify_alert_hardware_threshold">%1$s %2$s 超过阈值 %3$s</string>
+    <string name="notify_audit_finding">安全/合规审计发现</string>
     <string name="chat_summarized">上下文已压缩</string>
     <string name="menu_export_session">导出会话</string>
     <string name="chat_session_exported">会话已导出</string>

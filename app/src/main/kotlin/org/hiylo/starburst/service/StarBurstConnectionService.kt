@@ -808,6 +808,13 @@ class StarBurstConnectionService : Service() {
             closeSshSession(newSsh)
             return
         }
+        // 隧道重建后本地端口可能变化：重启 Intel 推送订阅，避免仍订阅旧 127.0.0.1:<旧端口>。
+        intelPushJobs.remove(serverId)?.cancel()
+        startIntelPushJob(
+            oldState.config,
+            resolveBackendUrl(oldState.config, newBackendLocalPort),
+            oldState.config.backendResolvedToken,
+        )
         oldState.pushJob?.cancel()
         closeSshSession(oldSsh)
     }
@@ -993,6 +1000,13 @@ class StarBurstConnectionService : Service() {
                 resolved?.let { closeSshSession(it.sshSession) }
                 return
             }
+            // 隧道重建后本地端口可能变化：重启 Intel 推送订阅，避免仍订阅旧 127.0.0.1:<旧端口>。
+            intelPushJobs.remove(config.id)?.cancel()
+            startIntelPushJob(
+                config,
+                resolveBackendUrl(config, resolved?.backendLocalPort),
+                config.backendResolvedToken,
+            )
             // 回收旧连接资源：旧 SSE job、旧推送订阅、旧 SSH 隧道。
             current.sseJob.cancel()
             current.pushJob?.cancel()

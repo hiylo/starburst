@@ -288,7 +288,7 @@ internal fun StarBurstConnectionService.startIntelPushJob(server: ServerConfig, 
 }
 
 /** 派发 Intel 推送事件为通知；仅通知真正需要用户看的（run 终态、硬件告警/恢复、审计发现）。 */
-internal fun StarBurstConnectionService.handleIntelPushEvent(server: ServerConfig, event: IntelParsedEvent) {
+internal suspend fun StarBurstConnectionService.handleIntelPushEvent(server: ServerConfig, event: IntelParsedEvent) {
     when (event) {
         is IntelRunParsedEvent -> {
             if (event.run.status == "passed" || event.run.status == "failed") {
@@ -308,7 +308,8 @@ internal fun StarBurstConnectionService.handleIntelPushEvent(server: ServerConfi
             }
         }
         is AuditFindingParsedEvent -> {
-            if (event.severity == "warning" || event.severity == "critical") {
+            // 后端 severity 取值 critical|high|medium|low|info（无 warning），high 及以上才提醒。
+            if (event.severity in setOf("high", "critical")) {
                 showAuditFindingNotification(server, event.summary, event.severity)
             }
         }
