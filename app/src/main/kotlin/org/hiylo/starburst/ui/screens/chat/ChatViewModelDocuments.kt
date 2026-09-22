@@ -15,6 +15,20 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.GeneratedDocument
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
+import java.io.IOException
+
+/** 从异常 message 中提取面向用户的简短原因（如后端 503 的 error 详情）。 */
+private fun Throwable.userReason(): String = message
+    ?.substringAfter(": ", "")
+    ?.take(100)
+    ?: ""
+
+/** 校验生成响应有效（后端 4xx/5xx 会被反序列化成默认空对象，需显式拦截避免产生垃圾卡片）。 */
+private fun requireValidGenerated(doc: GeneratedDocument) {
+    if (doc.id <= 0L || doc.downloadUrl.isBlank()) {
+        throw IOException("invalid generate response (id=${doc.id}, url='${doc.downloadUrl}')")
+    }
+}
 
 // ============ Document generation ============
 
@@ -62,6 +76,7 @@ internal fun ChatViewModel.generateDocument(type: String, prompt: String, onResu
                 return@launch
             }
             val doc = documentsApi.generate(url, token, type, text)
+            requireValidGenerated(doc)
             _generatedDocuments.value = _generatedDocuments.value.filterNot { it.id == doc.id } + doc
             val notice = context.getString(
                 R.string.document_generated_notice,
@@ -75,7 +90,9 @@ internal fun ChatViewModel.generateDocument(type: String, prompt: String, onResu
         } catch (e: Exception) {
             e.rethrowCancellation()
             Log.e(TAG, "Failed to generate document", e)
-            _documentToast.tryEmit(context.getString(R.string.document_generate_failed))
+            _documentToast.tryEmit(
+                context.getString(R.string.document_generate_failed_detail, e.userReason()),
+            )
             onResult(false)
         } finally {
             _isGeneratingDocument.value = false
@@ -106,6 +123,7 @@ internal fun ChatViewModel.reviseDocument(docId: Long, instruction: String, onRe
                 return@launch
             }
             val doc = documentsApi.regenerate(url, token, docId, text, sessionId)
+            requireValidGenerated(doc)
             _generatedDocuments.value = _generatedDocuments.value.filterNot { it.id == doc.id } + doc
             val notice = context.getString(
                 R.string.document_regenerated_notice,
@@ -119,7 +137,9 @@ internal fun ChatViewModel.reviseDocument(docId: Long, instruction: String, onRe
         } catch (e: Exception) {
             e.rethrowCancellation()
             Log.e(TAG, "Failed to revise document $docId", e)
-            _documentToast.tryEmit(context.getString(R.string.document_revise_failed))
+            _documentToast.tryEmit(
+                context.getString(R.string.document_revise_failed_detail, e.userReason()),
+            )
             onResult(false)
         } finally {
             _isRevisingDocument.value = false
@@ -141,4 +161,9 @@ internal suspend fun ChatViewModel.fetchDocumentBytes(document: GeneratedDocumen
         Log.e(TAG, "Failed to download document ${document.id}", e)
         null
     }
+}
+
+/** 从本会话的生成文档列表移除一张卡片（仅本地隐藏，不删除后端记录）。 */
+internal fun ChatViewModel.removeGeneratedDocument(id: Long) {
+    _generatedDocuments.value = _generatedDocuments.value.filterNot { it.id == id }
 }

@@ -19,8 +19,10 @@ import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import java.io.IOException
 import java.net.URL
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -47,12 +49,16 @@ class BackendDocumentsApi @Inject constructor(
         token: String,
         type: String,
         prompt: String,
-    ): GeneratedDocument = httpClient.post("${backendUrl.trimEnd('/')}/api/documents/generate") {
-        header("Authorization", "Bearer $token")
-        contentType(ContentType.Application.Json)
-        setBody(DocumentGenerateRequest(type, prompt))
-        timeout { requestTimeoutMillis = 120_000L }
-    }.body()
+    ): GeneratedDocument {
+        val resp = httpClient.post("${backendUrl.trimEnd('/')}/api/documents/generate") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(DocumentGenerateRequest(type, prompt))
+            timeout { requestTimeoutMillis = 120_000L }
+        }
+        resp.requireSuccess("document generate failed")
+        return resp.body()
+    }
 
     /**
      * 基于既有文档重新生成（`POST /api/documents/regenerate`），响应与 generate 同构。
@@ -64,12 +70,25 @@ class BackendDocumentsApi @Inject constructor(
         docId: Long,
         instruction: String? = null,
         sessionId: String? = null,
-    ): GeneratedDocument = httpClient.post("${backendUrl.trimEnd('/')}/api/documents/regenerate") {
-        header("Authorization", "Bearer $token")
-        contentType(ContentType.Application.Json)
-        setBody(DocumentRegenerateRequest(docId, instruction, sessionId))
-        timeout { requestTimeoutMillis = 120_000L }
-    }.body()
+    ): GeneratedDocument {
+        val resp = httpClient.post("${backendUrl.trimEnd('/')}/api/documents/regenerate") {
+            header("Authorization", "Bearer $token")
+            contentType(ContentType.Application.Json)
+            setBody(DocumentRegenerateRequest(docId, instruction, sessionId))
+            timeout { requestTimeoutMillis = 120_000L }
+        }
+        resp.requireSuccess("document regenerate failed")
+        return resp.body()
+    }
+
+    /** 非 2xx 时抛出含后端 error 详情的 [IOException]（本项目 HttpClient 未开 expectSuccess，需显式判定）。 */
+    private suspend fun HttpResponse.requireSuccess(context: String) {
+        if (status.value in 200..299) return
+        val body = runCatching { bodyAsText() }.getOrNull().orEmpty()
+        val detail = Regex("\"error\"\\s*:\\s*\"([^\"]*)\"").find(body)?.groupValues?.get(1)
+            ?: body.take(120)
+        throw IOException("$context: $detail")
+    }
 
     /** 列出已生成的文档（`GET /api/documents?limit=`），最新在前。 */
     suspend fun listDocuments(backendUrl: String, token: String, limit: Int = 50): List<GeneratedDocument> {

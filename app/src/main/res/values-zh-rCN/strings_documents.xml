@@ -14,12 +14,15 @@
     <string name="document_revise_button">应用修改</string>
     <string name="document_download">下载</string>
     <string name="document_preview">预览</string>
+    <string name="document_remove">移除文档</string>
     <string name="document_revise_action">按意见修改</string>
     <string name="document_generated_notice">已生成文档《%1$s》（docId=%2$s，%3$s）</string>
     <string name="document_regenerated_notice">已重新生成文档《%1$s》（docId=%2$s，%3$s）</string>
     <string name="document_backend_unavailable">当前服务器未配置文档后端</string>
     <string name="document_generate_failed">文档生成失败</string>
+    <string name="document_generate_failed_detail">文档生成失败：%1$s</string>
     <string name="document_revise_failed">文档修改失败</string>
+    <string name="document_revise_failed_detail">文档修改失败：%1$s</string>
     <string name="document_download_failed">文档下载失败</string>
     <string name="document_downloaded">文档已下载</string>
 </resources>

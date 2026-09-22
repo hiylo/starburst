@@ -309,6 +309,7 @@ internal fun ChatScreenMessageBody(
                                 onDownload = { requestDownloadDocument(document) },
                                 onPreview = { previewDocument = document },
                                 onRevise = { reviseDocument = document },
+                                onRemove = { viewModel.removeGeneratedDocument(document.id) },
                             )
                         }
                     }

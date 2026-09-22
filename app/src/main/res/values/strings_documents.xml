@@ -14,12 +14,15 @@
     <string name="document_revise_button">Apply changes</string>
     <string name="document_download">Download</string>
     <string name="document_preview">Preview</string>
+    <string name="document_remove">Remove document</string>
     <string name="document_revise_action">Revise by feedback</string>
     <string name="document_generated_notice">Generated document \"%1$s\" (docId=%2$s, %3$s)</string>
     <string name="document_regenerated_notice">Regenerated document \"%1$s\" (docId=%2$s, %3$s)</string>
     <string name="document_backend_unavailable">Document backend unavailable for this server</string>
     <string name="document_generate_failed">Failed to generate document</string>
+    <string name="document_generate_failed_detail">Generation failed: %1$s</string>
     <string name="document_revise_failed">Failed to revise document</string>
+    <string name="document_revise_failed_detail">Revision failed: %1$s</string>
     <string name="document_download_failed">Failed to download document</string>
     <string name="document_downloaded">Document downloaded</string>
 </resources>
