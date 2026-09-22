@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -89,6 +88,8 @@ import org.hiylo.starburst.domain.model.BackendArchive
 import org.hiylo.starburst.domain.model.BackendTask
 import org.hiylo.starburst.domain.model.BackendTaskStatus
 import org.hiylo.starburst.ui.components.AppCardShape
+import org.hiylo.starburst.ui.components.AppDialog
+import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
@@ -289,29 +290,35 @@ fun TaskListScreen(
     }
 
     if (showPurgeDialog) {
-        AlertDialog(
-            onDismissRequest = { showPurgeDialog = false },
-            title = { Text(stringResource(R.string.task_purge_finished)) },
-            text = { Text(stringResource(R.string.task_purge_finished_desc)) },
-            confirmButton = {
-                val context = LocalContext.current
-                TextButton(
-                    onClick = {
-                        showPurgeDialog = false
-                        viewModel.purgeFinishedTasks { deleted ->
-                            Toast.makeText(
-                                context,
-                                context.getString(R.string.task_purge_done, deleted),
-                                Toast.LENGTH_SHORT,
-                            ).show()
-                        }
-                    },
-                ) { Text(stringResource(R.string.task_purge_confirm)) }
-            },
-            dismissButton = {
-                TextButton(onClick = { showPurgeDialog = false }) { Text(stringResource(R.string.server_cancel)) }
-            },
-        )
+        val context = LocalContext.current
+        AppDialog(onDismissRequest = { showPurgeDialog = false }) {
+            Text(
+                text = stringResource(R.string.task_purge_finished),
+                style = MaterialTheme.typography.headlineSmall,
+                modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+            )
+            Text(
+                text = stringResource(R.string.task_purge_finished_desc),
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            )
+            AppDialogActions(
+                dismissText = stringResource(R.string.server_cancel),
+                confirmText = stringResource(R.string.task_purge_confirm),
+                onDismiss = { showPurgeDialog = false },
+                onConfirm = {
+                    showPurgeDialog = false
+                    viewModel.purgeFinishedTasks { deleted ->
+                        Toast.makeText(
+                            context,
+                            context.getString(R.string.task_purge_done, deleted),
+                            Toast.LENGTH_SHORT,
+                        ).show()
+                    }
+                },
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+            )
+        }
     }
 }
 
@@ -392,7 +399,7 @@ private fun TasksContent(
                     Text(
                         text = stringResource(R.string.tasks_empty),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -441,7 +448,7 @@ private fun ArchivesContent(
                     Text(
                         text = stringResource(R.string.tasks_archives_empty),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -488,7 +495,7 @@ private fun StatsContent(
                     Text(
                         text = stringResource(R.string.tasks_stats_empty),
                         style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -676,13 +683,13 @@ private fun ArchiveCard(archive: BackendArchive, onDelete: () -> Unit) {
                     Text(
                         text = formatBytes(archive.size),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = archive.createdAt.orEmpty(),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -780,7 +787,7 @@ private fun TaskCard(
                 Text(
                     text = task.createdAt.orEmpty(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.width(4.dp))
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(24.dp)) {
@@ -883,39 +890,45 @@ private fun BatchDialog(
 ) {
     var prompt by remember { mutableStateOf("") }
     var dirsText by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(stringResource(R.string.tasks_batch_title)) },
-        text = {
-            Column {
-                OutlinedTextField(
-                    value = prompt,
-                    onValueChange = { prompt = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.tasks_prompt_hint)) },
-                    minLines = 2,
-                    maxLines = 4,
-                )
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = dirsText,
-                    onValueChange = { dirsText = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(R.string.tasks_batch_dirs_hint)) },
-                    minLines = 3,
-                    maxLines = 6,
-                )
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    val dirs = dirsText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
-                    if (prompt.isNotBlank() && dirs.isNotEmpty()) onConfirm(prompt, dirs)
-                },
-                enabled = prompt.isNotBlank(),
-            ) { Text(stringResource(R.string.tasks_batch_confirm)) }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.server_cancel)) } },
-    )
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.tasks_batch_title),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            OutlinedTextField(
+                value = prompt,
+                onValueChange = { prompt = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.tasks_prompt_hint)) },
+                minLines = 2,
+                maxLines = 4,
+            )
+            OutlinedTextField(
+                value = dirsText,
+                onValueChange = { dirsText = it },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text(stringResource(R.string.tasks_batch_dirs_hint)) },
+                minLines = 3,
+                maxLines = 6,
+            )
+        }
+        AppDialogActions(
+            dismissText = stringResource(R.string.server_cancel),
+            confirmText = stringResource(R.string.tasks_batch_confirm),
+            confirmEnabled = prompt.isNotBlank(),
+            onDismiss = onDismiss,
+            onConfirm = {
+                val dirs = dirsText.lineSequence().map { it.trim() }.filter { it.isNotEmpty() }.toList()
+                if (prompt.isNotBlank() && dirs.isNotEmpty()) onConfirm(prompt, dirs)
+            },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+    }
 }

@@ -316,7 +316,7 @@ fun TaskCreateDialog(
                                     Text(
                                         text = streamText,
                                         style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         maxLines = 3,
                                         overflow = TextOverflow.Ellipsis,
                                     )
