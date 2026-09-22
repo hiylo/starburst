@@ -188,7 +188,7 @@ internal fun ToolCallCard(tool: Part.Tool) {
                             Text(
                                 text = toolDisplay.subtitle,
                                 style = CodeTypography.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -664,7 +664,7 @@ internal fun EditToolCard(tool: Part.Tool) {
                             Text(
                                 text = shortPath,
                                 style = CodeTypography.copy(fontSize = 11.sp),
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

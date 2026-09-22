@@ -973,7 +973,7 @@ internal fun ChatInputBar(
                                         // 点麦克风进入语音模式；与行内附件图标并列，麦克风最靠右。
                                         IconButton(
                                             onClick = { voiceMode = true },
-                                            modifier = Modifier.size(40.dp),
+                                            modifier = Modifier.size(44.dp),
                                         ) {
                                             CartoonInkIcon(
                                                 Icons.Default.Mic,
@@ -1027,14 +1027,7 @@ internal fun ChatInputBar(
                         .combinedClickable(
                             onClick = {
                                 when (action) {
-                                    ComposerAction.SEND -> {
-                                        val intent = detectDocumentIntent(textFieldValue.text)
-                                        if (intent != null) {
-                                            onDocumentIntentDetected(intent.type, intent.prompt)
-                                        } else {
-                                            onSend()
-                                        }
-                                    }
+                                    ComposerAction.SEND -> onSend()
                                     ComposerAction.STOP -> onStop()
                                     ComposerAction.DISABLED -> Unit
                                 }

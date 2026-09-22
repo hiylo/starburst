@@ -135,15 +135,17 @@ internal fun MarkdownContent(
         lineHeight = bodyLineHeight
     )
 
+    val linkTextColor = when {
+        isAmoled -> MaterialTheme.colorScheme.primary
+        isUser -> MaterialTheme.colorScheme.onPrimaryContainer
+        else -> MaterialTheme.colorScheme.primary
+    }
+
     val colors = markdownColor(
         text = textColor,
         codeText = codeBlockFg,
         inlineCodeText = inlineCodeFg,
-        linkText = when {
-            isAmoled -> MaterialTheme.colorScheme.primary
-            isUser -> MaterialTheme.colorScheme.onPrimaryContainer
-            else -> MaterialTheme.colorScheme.primary
-        },
+        linkText = linkTextColor,
         codeBackground = codeBlockBg,
         inlineCodeBackground = Color.Transparent,
         dividerColor = textColor.copy(alpha = 0.32f)
@@ -193,7 +195,7 @@ internal fun MarkdownContent(
         bullet = bodyStyle,
         list = bodyStyle,
         link = bodyStyle.copy(
-            color = linkText,
+            color = linkTextColor,
             fontWeight = FontWeight.Medium
         )
     )

@@ -38,6 +38,8 @@ import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.theme.StatusError
+import org.hiylo.starburst.ui.theme.StatusWarning
 import androidx.activity.result.ActivityResultLauncher
 import androidx.compose.ui.platform.ClipboardManager
 import android.content.Context
@@ -127,7 +129,7 @@ internal fun ChatScreenTopBar(
                         Text(
                             text = parts.joinToString(" · "),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -150,8 +152,8 @@ internal fun ChatScreenTopBar(
                     uiState.estimatedContextTokens.toDouble() / uiState.effectiveContextWindow * 100,
                 ).toInt()
                 val indicatorColor = when {
-                    percentage >= 90 -> MaterialTheme.colorScheme.error
-                    percentage >= 70 -> MaterialTheme.colorScheme.tertiary
+                    percentage >= 90 -> StatusError
+                    percentage >= 70 -> StatusWarning
                     else -> MaterialTheme.colorScheme.primary
                 }
                 IconButton(onClick = { showSubagentContextDetails = true }) {
@@ -276,7 +278,7 @@ internal fun ChatScreenTopBar(
                     }
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_reload_session)) },
@@ -358,7 +360,7 @@ internal fun ChatScreenTopBar(
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f),
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
                     )
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_compact_session)) },

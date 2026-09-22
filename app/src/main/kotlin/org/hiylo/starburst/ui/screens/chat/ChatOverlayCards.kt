@@ -133,7 +133,7 @@ internal fun TodoListCard(tool: Part.Tool) {
                     Text(
                         text = "$completedCount/$totalCount",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -230,14 +230,14 @@ private fun StepFinishInfo(step: Part.StepFinish) {
                 Text(
                     text = stringResource(R.string.chat_tokens_format, tokens.input, tokens.output),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             step.cost?.let { cost ->
                 Text(
                     text = stringResource(R.string.chat_cost_format, String.format(Locale.ROOT, "%.4f", cost)),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
