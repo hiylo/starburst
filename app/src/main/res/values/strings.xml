@@ -1300,6 +1300,9 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_view_content">View content</string>
     <string name="kb_content_empty">This document has no extractable content</string>
     <string name="kb_content_load_failed">Failed to load document content</string>
+    <string name="kb_download_original">Download original file</string>
+    <string name="kb_download_original_done">Original file downloaded</string>
+    <string name="kb_download_original_failed">Failed to download original file</string>
     <string name="kb_edit_collection">Edit collection</string>
     <string name="kb_save">Save</string>
     <string name="kb_saving">Saving…</string>

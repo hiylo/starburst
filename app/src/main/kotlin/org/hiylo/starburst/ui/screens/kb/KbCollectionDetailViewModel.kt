@@ -320,6 +320,15 @@ class KbCollectionDetailViewModel @Inject constructor(
         _uiState.update { it.copy(documentContent = null) }
     }
 
+    /** 拉取文档原始文件字节（供 UI 写入用户选择的位置）；失败返回 null。 */
+    suspend fun fetchOriginalFile(document: KbDocument): ByteArray? = try {
+        kbApi.downloadOriginalFile(backendUrl, backendToken, document.id)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        null
+    }
+
     /** 读取 content Uri 的文本内容；失败返回 null，超限抛 [KbFileTooLargeException]。 */
     private fun readTextFile(uri: Uri): String? {
         if (uri.scheme != "content") return null

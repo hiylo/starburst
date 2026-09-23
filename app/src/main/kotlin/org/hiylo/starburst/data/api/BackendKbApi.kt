@@ -22,6 +22,7 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import java.io.IOException
 import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -128,6 +129,17 @@ class BackendKbApi @Inject constructor(
             header("Authorization", "Bearer $token")
         }.body()
         return resp.chunks
+    }
+
+    /** 下载 KB 文档的原始文件字节（`GET /api/kb/documents/{id}/file`）；非 2xx 抛 IOException。 */
+    suspend fun downloadOriginalFile(backendUrl: String, token: String, id: Long): ByteArray {
+        val resp = httpClient.get("${backendUrl.trimEnd('/')}/api/kb/documents/$id/file") {
+            header("Authorization", "Bearer $token")
+        }
+        if (resp.status.value !in 200..299) {
+            throw IOException("download original file failed (HTTP ${resp.status.value})")
+        }
+        return resp.body<ByteArray>()
     }
 
     /** 删除知识库文档（`DELETE /api/kb/documents/{id}`）。 */

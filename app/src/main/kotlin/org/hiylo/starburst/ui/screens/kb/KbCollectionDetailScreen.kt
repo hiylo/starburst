@@ -35,6 +35,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -114,6 +115,38 @@ fun KbCollectionDetailScreen(
     var showIngestDialog by rememberSaveable { mutableStateOf(false) }
     var showSearchDialog by rememberSaveable { mutableStateOf(false) }
     var deleteTarget by remember { mutableStateOf<KbDocument?>(null) }
+    val context = LocalContext.current
+    val downloadScope = rememberCoroutineScope()
+    var downloadTarget by remember { mutableStateOf<KbDocument?>(null) }
+    var downloadingOriginalId by remember { mutableStateOf<Long?>(null) }
+    val originalDownloadLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("*/*"),
+    ) { uri ->
+        val target = downloadTarget
+        downloadTarget = null
+        if (uri == null || target == null) {
+            downloadingOriginalId = null
+            return@rememberLauncherForActivityResult
+        }
+        downloadScope.launch {
+            try {
+                val bytes = viewModel.fetchOriginalFile(target) ?: error("empty")
+                context.contentResolver.openOutputStream(uri)?.use { it.write(bytes) } ?: error("no stream")
+                Toast.makeText(context, R.string.kb_download_original_done, Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, R.string.kb_download_original_failed, Toast.LENGTH_SHORT).show()
+            } finally {
+                downloadingOriginalId = null
+            }
+        }
+    }
+
+    fun requestOriginalDownload(doc: KbDocument) {
+        if (downloadingOriginalId != null) return
+        downloadingOriginalId = doc.id
+        downloadTarget = doc
+        originalDownloadLauncher.launch(doc.name.ifBlank { "document_${doc.id}" })
+    }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -209,6 +242,8 @@ fun KbCollectionDetailScreen(
                 isAmoled = isAmoled,
                 onDeleteDocument = { deleteTarget = it },
                 onViewDocument = { viewModel.viewDocumentContent(it) },
+                onDownloadDocument = { requestOriginalDownload(it) },
+                downloadingOriginalId = downloadingOriginalId,
                 onLoadMore = viewModel::loadMoreDocuments,
             )
         }
@@ -271,6 +306,8 @@ private fun ColumnScope.DocumentsSection(
     isAmoled: Boolean,
     onDeleteDocument: (KbDocument) -> Unit,
     onViewDocument: (KbDocument) -> Unit,
+    onDownloadDocument: (KbDocument) -> Unit,
+    downloadingOriginalId: Long?,
     onLoadMore: () -> Unit,
 ) {
     Text(
@@ -311,6 +348,8 @@ private fun ColumnScope.DocumentsSection(
                         deleting = state.deletingId == document.id,
                         onDeleteClick = { onDeleteDocument(document) },
                         onViewContent = { onViewDocument(document) },
+                        downloading = downloadingOriginalId == document.id,
+                        onDownload = { onDownloadDocument(document) },
                     )
                 }
                 if (state.hasMore) {
@@ -342,6 +381,8 @@ private fun KbDocumentCard(
     deleting: Boolean,
     onDeleteClick: () -> Unit,
     onViewContent: () -> Unit,
+    downloading: Boolean,
+    onDownload: () -> Unit,
 ) {
     Card(
         shape = AppCardShape,
@@ -376,6 +417,21 @@ private fun KbDocumentCard(
                         contentDescription = stringResource(R.string.kb_view_content),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+                IconButton(
+                    onClick = onDownload,
+                    enabled = !downloading,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    if (downloading) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    } else {
+                        Icon(
+                            Icons.Default.Download,
+                            contentDescription = stringResource(R.string.kb_download_original),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 StatusBadge(text = kbStatusLabel(document.status), color = kbStatusColor(document.status))
                 IconButton(

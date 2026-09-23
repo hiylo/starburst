@@ -1268,6 +1268,9 @@
     <string name="kb_view_content">查看内容</string>
     <string name="kb_content_empty">该文档没有可提取的内容</string>
     <string name="kb_content_load_failed">加载文档内容失败</string>
+    <string name="kb_download_original">下载原始文件</string>
+    <string name="kb_download_original_done">原始文件已下载</string>
+    <string name="kb_download_original_failed">下载原始文件失败</string>
     <string name="kb_edit_collection">编辑集合</string>
     <string name="kb_save">保存</string>
     <string name="kb_saving">保存中…</string>
