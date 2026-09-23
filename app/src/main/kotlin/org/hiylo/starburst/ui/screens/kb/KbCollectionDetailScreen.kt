@@ -36,6 +36,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
@@ -48,6 +49,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -88,6 +90,7 @@ import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.screens.chat.DocumentPreviewSheet
 import org.hiylo.starburst.ui.screens.testintel.StatusBadge
 import org.hiylo.starburst.ui.screens.testintel.formatTimestamp
 import org.hiylo.starburst.ui.theme.StatusConnected
@@ -119,6 +122,7 @@ fun KbCollectionDetailScreen(
     val downloadScope = rememberCoroutineScope()
     var downloadTarget by remember { mutableStateOf<KbDocument?>(null) }
     var downloadingOriginalId by remember { mutableStateOf<Long?>(null) }
+    var previewDocument by remember { mutableStateOf<KbDocument?>(null) }
     val originalDownloadLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("*/*"),
     ) { uri ->
@@ -204,6 +208,18 @@ fun KbCollectionDetailScreen(
                 }
             }
 
+            uiState.stats?.let { stats ->
+                RAGUsageStatsCard(
+                    isAmoled = isAmoled,
+                    spliced = stats.spliced,
+                    noResult = stats.skipNoResult + stats.skipBelowThreshold,
+                    noVector = stats.skipNoVector,
+                    noEmbedding = stats.skipNoEmbedding,
+                    timeout = stats.skipTimeout,
+                    onRefresh = viewModel::loadStats,
+                )
+            }
+
             uiState.error?.let { error ->
                 Surface(
                     shape = RoundedCornerShape(12.dp),
@@ -243,6 +259,7 @@ fun KbCollectionDetailScreen(
                 onDeleteDocument = { deleteTarget = it },
                 onViewDocument = { viewModel.viewDocumentContent(it) },
                 onDownloadDocument = { requestOriginalDownload(it) },
+                onPreviewDocument = { previewDocument = it },
                 downloadingOriginalId = downloadingOriginalId,
                 onLoadMore = viewModel::loadMoreDocuments,
             )
@@ -270,6 +287,8 @@ fun KbCollectionDetailScreen(
             searching = uiState.searching,
             error = uiState.searchError,
             results = uiState.results,
+            searchAll = uiState.searchAll,
+            onSearchAllChange = viewModel::setSearchAll,
             onQueryChange = viewModel::setQuery,
             onSearch = viewModel::search,
             onDismiss = {
@@ -298,6 +317,19 @@ fun KbCollectionDetailScreen(
             onDismiss = viewModel::dismissDocumentContent,
         )
     }
+
+    previewDocument?.let { doc ->
+        val (previewUrl, previewToken) = viewModel.previewEndpoint()
+        if (previewUrl.isNotBlank()) {
+            DocumentPreviewSheet(
+                backendUrl = previewUrl,
+                fileUrl = "${previewUrl.trimEnd('/')}/api/kb/documents/${doc.id}/file",
+                onDismiss = { previewDocument = null },
+                token = previewToken,
+                onDownload = { requestOriginalDownload(doc) },
+            )
+        }
+    }
 }
 
 @Composable
@@ -307,6 +339,7 @@ private fun ColumnScope.DocumentsSection(
     onDeleteDocument: (KbDocument) -> Unit,
     onViewDocument: (KbDocument) -> Unit,
     onDownloadDocument: (KbDocument) -> Unit,
+    onPreviewDocument: (KbDocument) -> Unit,
     downloadingOriginalId: Long?,
     onLoadMore: () -> Unit,
 ) {
@@ -350,6 +383,7 @@ private fun ColumnScope.DocumentsSection(
                         onViewContent = { onViewDocument(document) },
                         downloading = downloadingOriginalId == document.id,
                         onDownload = { onDownloadDocument(document) },
+                        onPreview = { onPreviewDocument(document) },
                     )
                 }
                 if (state.hasMore) {
@@ -383,6 +417,7 @@ private fun KbDocumentCard(
     onViewContent: () -> Unit,
     downloading: Boolean,
     onDownload: () -> Unit,
+    onPreview: () -> Unit,
 ) {
     Card(
         shape = AppCardShape,
@@ -408,6 +443,16 @@ private fun KbDocumentCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                IconButton(
+                    onClick = onPreview,
+                    modifier = Modifier.size(28.dp),
+                ) {
+                    Icon(
+                        Icons.Default.OpenInNew,
+                        contentDescription = stringResource(R.string.kb_preview),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 IconButton(
                     onClick = onViewContent,
                     modifier = Modifier.size(28.dp),
@@ -807,6 +852,8 @@ private fun SearchDialog(
     searching: Boolean,
     error: String?,
     results: List<KbSearchResult>,
+    searchAll: Boolean,
+    onSearchAllChange: (Boolean) -> Unit,
     onQueryChange: (String) -> Unit,
     onSearch: () -> Unit,
     onDismiss: () -> Unit,
@@ -817,6 +864,27 @@ private fun SearchDialog(
             style = MaterialTheme.typography.headlineSmall,
             modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
         )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(start = 24.dp, end = 24.dp, top = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.kb_search_scope),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            listOf(false to stringResource(R.string.kb_search_scope_current), true to stringResource(R.string.kb_search_scope_all))
+                .forEach { (all, label) ->
+                    FilterChip(
+                        selected = searchAll == all,
+                        onClick = { onSearchAllChange(all) },
+                        label = { Text(label) },
+                    )
+                }
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -900,6 +968,70 @@ private fun SearchDialog(
                 Text(stringResource(R.string.close))
             }
         }
+    }
+}
+
+@Composable
+private fun RAGUsageStatsCard(
+    isAmoled: Boolean,
+    spliced: Long,
+    noResult: Long,
+    noVector: Long,
+    noEmbedding: Long,
+    timeout: Long,
+    onRefresh: () -> Unit,
+) {
+    val container = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
+    val border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)) else null
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = container,
+        border = border,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.kb_stats_title),
+                    style = MaterialTheme.typography.labelLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = onRefresh, modifier = Modifier.size(24.dp)) {
+                    Icon(
+                        Icons.Default.Refresh,
+                        contentDescription = stringResource(R.string.kb_stats_refresh),
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+            StatRow(stringResource(R.string.kb_stats_spliced), spliced)
+            StatRow(stringResource(R.string.kb_stats_no_result), noResult)
+            StatRow(stringResource(R.string.kb_stats_no_vector), noVector)
+            StatRow(stringResource(R.string.kb_stats_no_embedding), noEmbedding)
+            StatRow(stringResource(R.string.kb_stats_timeout), timeout)
+        }
+    }
+}
+
+@Composable
+private fun StatRow(label: String, value: Long) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text = value.toString(),
+            style = MaterialTheme.typography.bodySmall,
+            fontWeight = FontWeight.Medium,
+        )
     }
 }
 

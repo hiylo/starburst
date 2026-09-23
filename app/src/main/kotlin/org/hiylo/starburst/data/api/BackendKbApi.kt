@@ -142,6 +142,12 @@ class BackendKbApi @Inject constructor(
         return resp.body<ByteArray>()
     }
 
+    /** 获取 RAG-in-Prompt 使用统计（`GET /api/kb/stats`）。 */
+    suspend fun kbStats(backendUrl: String, token: String): KbRagStats =
+        httpClient.get("${backendUrl.trimEnd('/')}/api/kb/stats") {
+            header("Authorization", "Bearer $token")
+        }.body<KbStatsResponse>().rag
+
     /** 删除知识库文档（`DELETE /api/kb/documents/{id}`）。 */
     suspend fun deleteDocument(backendUrl: String, token: String, id: Long): Boolean {
         val resp: HttpResponse = httpClient.delete("${backendUrl.trimEnd('/')}/api/kb/documents/$id") {

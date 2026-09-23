@@ -64,6 +64,22 @@ internal data class KbChunksResponse(
     val chunks: List<KbChunk> = emptyList(),
 )
 
+/** RAG-in-Prompt 使用统计（`GET /api/kb/stats`），观察「知识库有没有被用上」。 */
+@Serializable
+data class KbRagStats(
+    val spliced: Long = 0,
+    val skipNoEmbedding: Long = 0,
+    val skipNoVector: Long = 0,
+    val skipTimeout: Long = 0,
+    val skipNoResult: Long = 0,
+    val skipBelowThreshold: Long = 0,
+)
+
+@Serializable
+internal data class KbStatsResponse(
+    val rag: KbRagStats = KbRagStats(),
+)
+
 /** 已生成的文档（后端 /api/documents，docType：xlsx | docx | pptx）。 */
 @Serializable
 data class GeneratedDocument(

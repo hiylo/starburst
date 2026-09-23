@@ -31,6 +31,7 @@ import org.hiylo.starburst.data.api.BackendKbApi
 import org.hiylo.starburst.data.api.KbChunk
 import org.hiylo.starburst.data.api.KbCollection
 import org.hiylo.starburst.data.api.KbDocument
+import org.hiylo.starburst.data.api.KbRagStats
 import org.hiylo.starburst.data.api.KbSearchResult
 import org.hiylo.starburst.data.repository.ServerRepository
 import java.io.ByteArrayOutputStream
@@ -52,6 +53,8 @@ data class KbCollectionDetailUiState(
     val searching: Boolean = false,
     val results: List<KbSearchResult> = emptyList(),
     val searchError: String? = null,
+    val searchAll: Boolean = false,
+    val stats: KbRagStats? = null,
     val documentContent: DocumentContentView? = null,
 )
 
@@ -103,8 +106,31 @@ class KbCollectionDetailViewModel @Inject constructor(
             backendToken = server?.backendResolvedToken.orEmpty()
             loadCollection()
             loadDocuments()
+            loadStats()
         }
     }
+
+    /** 拉取 RAG-in-Prompt 使用统计；失败静默（统计非关键，不影响主功能）。 */
+    fun loadStats() {
+        viewModelScope.launch {
+            try {
+                val stats = kbApi.kbStats(backendUrl, backendToken)
+                _uiState.update { it.copy(stats = stats) }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 统计非关键，静默失败
+            }
+        }
+    }
+
+    /** 切换搜索范围：true=全部集合，false=仅当前集合。 */
+    fun setSearchAll(all: Boolean) {
+        _uiState.update { it.copy(searchAll = all) }
+    }
+
+    /** 原始文件预览用的后端地址与 token（供 Screen 层打开预览弹层）。 */
+    internal fun previewEndpoint(): Pair<String, String> = backendUrl to backendToken
 
     /** 从集合列表里解析当前集合元信息（名称/描述/计数）用于页面标题。 */
     private suspend fun loadCollection() {
@@ -435,7 +461,7 @@ class KbCollectionDetailViewModel @Inject constructor(
                     backendUrl = backendUrl,
                     token = backendToken,
                     query = query,
-                    collectionIds = listOf(collectionId),
+                    collectionIds = if (_uiState.value.searchAll) null else listOf(collectionId),
                 )
                 _uiState.update { it.copy(searching = false, results = results) }
             } catch (e: CancellationException) {

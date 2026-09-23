@@ -1271,6 +1271,17 @@
     <string name="kb_download_original">下载原始文件</string>
     <string name="kb_download_original_done">原始文件已下载</string>
     <string name="kb_download_original_failed">下载原始文件失败</string>
+    <string name="kb_preview">预览</string>
+    <string name="kb_stats_title">RAG 使用统计</string>
+    <string name="kb_stats_refresh">刷新统计</string>
+    <string name="kb_stats_spliced">拼入提示词</string>
+    <string name="kb_stats_no_result">无命中 / 低于阈值</string>
+    <string name="kb_stats_no_vector">向量索引不可用</string>
+    <string name="kb_stats_no_embedding">嵌入模型未配置</string>
+    <string name="kb_stats_timeout">检索超时</string>
+    <string name="kb_search_scope">范围</string>
+    <string name="kb_search_scope_current">当前集合</string>
+    <string name="kb_search_scope_all">全部集合</string>
     <string name="kb_edit_collection">编辑集合</string>
     <string name="kb_save">保存</string>
     <string name="kb_saving">保存中…</string>

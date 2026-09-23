@@ -1303,6 +1303,17 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_download_original">Download original file</string>
     <string name="kb_download_original_done">Original file downloaded</string>
     <string name="kb_download_original_failed">Failed to download original file</string>
+    <string name="kb_preview">Preview</string>
+    <string name="kb_stats_title">RAG usage</string>
+    <string name="kb_stats_refresh">Refresh stats</string>
+    <string name="kb_stats_spliced">Spliced into prompts</string>
+    <string name="kb_stats_no_result">No result / below threshold</string>
+    <string name="kb_stats_no_vector">Vector index unavailable</string>
+    <string name="kb_stats_no_embedding">Embedding not configured</string>
+    <string name="kb_stats_timeout">Retrieval timeout</string>
+    <string name="kb_search_scope">Scope</string>
+    <string name="kb_search_scope_current">This collection</string>
+    <string name="kb_search_scope_all">All collections</string>
     <string name="kb_edit_collection">Edit collection</string>
     <string name="kb_save">Save</string>
     <string name="kb_saving">Saving…</string>
