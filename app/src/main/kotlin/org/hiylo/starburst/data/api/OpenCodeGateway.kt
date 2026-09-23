@@ -20,6 +20,42 @@ package org.hiylo.starburst.data.api
  * @author Hsi Chu
  * @since V1.0
  */
+import kotlinx.coroutines.withTimeoutOrNull
+
+/**
+ * 计算「发送消息用的连接」：后端镜像已配置且可用 → MIRROR（`{backendUrl}/api/opencode` + Bearer）；
+ * 否则直连 opencode。探测结果由调用方缓存（[cached] 非 null 直接复用，避免每次发送都探测）。
+ *
+ * 这是把 App「消息发送」接入后端镜像的关键入口：走后端 `/api/opencode` 后，后端会执行
+ * 知识库 RAG-in-Prompt 检索并注入上下文，App 会话因此能使用知识库。
+ */
+suspend fun resolveSendingConnection(
+    backendApi: BackendApi,
+    backendUrl: String?,
+    backendToken: String?,
+    direct: ServerConnection,
+    cached: ServerConnection?,
+): ServerConnection {
+    cached?.let { return it }
+    val url = backendUrl?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }
+    val token = backendToken?.trim()?.takeIf { it.isNotBlank() }
+    if (url == null || token == null) return direct
+    val status = runCatching {
+        withTimeoutOrNull(2_500L) {
+            if (!backendApi.isHealthy(url)) return@withTimeoutOrNull null
+            val info = backendApi.getSystemInfo(url, token)
+            if (info == null || info.backend.isBlank()) return@withTimeoutOrNull null
+            BackendStatus(
+                backendUrl = url,
+                backendToken = token,
+                backendAvailable = true,
+                backendVersion = info.version,
+            )
+        }
+    }.getOrNull()
+    return if (status != null) OpenCodeGateway.resolve(direct, status) else direct
+}
+
 data class BackendStatus(
     /** 后端基础地址（无尾部斜杠约定，内部自行 trim）；null/空白视为未配置。 */
     val backendUrl: String? = null,

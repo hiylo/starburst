@@ -19,6 +19,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.AgentInfo
+import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendDocumentsApi
 import org.hiylo.starburst.data.api.BackendKbApi
 import org.hiylo.starburst.data.api.CommandInfo
@@ -70,6 +71,7 @@ class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     internal val eventReducer: EventReducer,
     internal val api: OpenCodeApi,
+    internal val backendApi: BackendApi,
     internal val draftRepository: DraftRepository,
     internal val settingsRepository: SettingsRepository,
     internal val pendingPromptRepository: PendingPromptRepository,
@@ -105,6 +107,10 @@ class ChatViewModel @Inject constructor(
      */
     internal val shellConn: ServerConnection
         get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+
+    /** 发送消息用的连接缓存：后端镜像可用时指向 `{backendUrl}/api/opencode`，否则直连。 */
+    @Volatile
+    internal var sendingConnCache: ServerConnection? = null
 
     internal val _isLoading = MutableStateFlow(true)
     internal val _error = MutableStateFlow<String?>(null)

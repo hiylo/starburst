@@ -52,6 +52,7 @@ import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.resolveSendingConnection
 import org.hiylo.starburst.data.api.rejectQuestion
 import org.hiylo.starburst.data.api.replyToPermission
 import org.hiylo.starburst.data.api.replyToQuestion
@@ -282,8 +283,19 @@ internal fun ChatViewModel.sendParts(parts: List<PromptPart>): Boolean {
             } else {
                 null
             }
+            // 发送走后端镜像（知识库 RAG 注入的通道）：后端可用时经 {backendUrl}/api/opencode，
+            // 探测失败/未配置回退直连；镜像结果缓存避免每次发送都探测。
+            val server = serverRepository.getServer(serverId)
+            val sendConn = resolveSendingConnection(
+                backendApi = backendApi,
+                backendUrl = server?.backendResolvedUrl,
+                backendToken = server?.backendResolvedToken,
+                direct = conn,
+                cached = sendingConnCache,
+            )
+            if (sendConn !== conn) sendingConnCache = sendConn
             api.promptAsync(
-                conn = conn,
+                conn = sendConn,
                 sessionId = sessionId,
                 messageId = messageId,
                 parts = parts,
