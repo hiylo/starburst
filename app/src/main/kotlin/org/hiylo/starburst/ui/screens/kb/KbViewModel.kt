@@ -34,6 +34,7 @@ data class KbCollectionListUiState(
     val collections: List<KbCollection> = emptyList(),
     val creating: Boolean = false,
     val deletingId: Long? = null,
+    val updatingId: Long? = null,
 )
 
 /**
@@ -128,6 +129,33 @@ class KbCollectionListViewModel @Inject constructor(
             } catch (e: Exception) {
                 _uiState.update { it.copy(deletingId = null) }
                 Toast.makeText(context, R.string.kb_delete_collection_failed, Toast.LENGTH_SHORT).show()
+                onResult(false)
+            }
+        }
+    }
+
+    /** 更新集合（`PATCH /api/kb/collections/{id}`）；成功后刷新列表，失败 Toast 提示。 */
+    fun updateCollection(id: Long, name: String, description: String, onResult: (Boolean) -> Unit = {}) {
+        val trimmedName = name.trim()
+        if (trimmedName.isEmpty() || _uiState.value.updatingId != null) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(updatingId = id) }
+            try {
+                kbApi.updateCollection(
+                    backendUrl = backendUrl,
+                    token = backendToken,
+                    id = id,
+                    name = trimmedName,
+                    description = description.trim().ifBlank { null },
+                )
+                _uiState.update { it.copy(updatingId = null) }
+                onResult(true)
+                refresh()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update { it.copy(updatingId = null) }
+                Toast.makeText(context, R.string.kb_update_collection_failed, Toast.LENGTH_SHORT).show()
                 onResult(false)
             }
         }

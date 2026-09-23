@@ -10,6 +10,7 @@ package org.hiylo.starburst.ui.screens.kb
 
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -62,6 +63,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -75,6 +77,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.KbDocument
 import org.hiylo.starburst.data.api.KbSearchResult
@@ -89,6 +92,7 @@ import org.hiylo.starburst.ui.screens.testintel.formatTimestamp
 import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusProcessing
+import java.util.Locale
 
 /**
  * 知识库：集合详情页。
@@ -205,6 +209,7 @@ fun KbCollectionDetailScreen(
                 isAmoled = isAmoled,
                 onDeleteDocument = { deleteTarget = it },
                 onViewDocument = { viewModel.viewDocumentContent(it) },
+                onLoadMore = viewModel::loadMoreDocuments,
             )
         }
     }
@@ -219,11 +224,8 @@ fun KbCollectionDetailScreen(
                     if (ok) showIngestDialog = false
                 }
             },
-            onIngestFile = { name, uri, mime ->
-                viewModel.ingestFile(name, uri, mime) { ok ->
-                    if (ok) showIngestDialog = false
-                }
-            },
+            onIngestFile = viewModel::ingestFile,
+            onUploadComplete = viewModel::loadDocuments,
         )
     }
 
@@ -269,6 +271,7 @@ private fun ColumnScope.DocumentsSection(
     isAmoled: Boolean,
     onDeleteDocument: (KbDocument) -> Unit,
     onViewDocument: (KbDocument) -> Unit,
+    onLoadMore: () -> Unit,
 ) {
     Text(
         text = stringResource(R.string.kb_documents),
@@ -309,6 +312,23 @@ private fun ColumnScope.DocumentsSection(
                         onDeleteClick = { onDeleteDocument(document) },
                         onViewContent = { onViewDocument(document) },
                     )
+                }
+                if (state.hasMore) {
+                    item(key = "load_more") {
+                        TextButton(
+                            onClick = onLoadMore,
+                            enabled = !state.loadingMore,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 4.dp),
+                        ) {
+                            if (state.loadingMore) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(6.dp))
+                            }
+                            Text(stringResource(R.string.kb_load_more))
+                        }
+                    }
                 }
             }
         }
@@ -410,38 +430,104 @@ private fun KbDocumentCard(
     }
 }
 
+/** 多文件上传队列的单文件状态。 */
+private enum class KbUploadStatus { Pending, Uploading, Success, Failed }
+
+/** 多文件上传队列条目（含 content Uri 与展示元信息）。 */
+private data class KbUploadItem(
+    val uri: Uri,
+    val name: String,
+    val mime: String,
+    val size: Long,
+    val status: KbUploadStatus = KbUploadStatus.Pending,
+)
+
 @Composable
 private fun IngestDialog(
     ingesting: Boolean,
     error: String?,
     onDismiss: () -> Unit,
     onIngestText: (name: String, content: String) -> Unit,
-    onIngestFile: (name: String, uri: Uri, mime: String) -> Unit,
+    onIngestFile: suspend (name: String, uri: Uri, mime: String) -> Boolean,
+    onUploadComplete: () -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var mode by rememberSaveable { mutableStateOf("text") }
     var name by rememberSaveable { mutableStateOf("") }
     var content by rememberSaveable { mutableStateOf("") }
-    var pickedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
-    var pickedName by rememberSaveable { mutableStateOf("") }
-    var pickedMime by rememberSaveable { mutableStateOf<String?>(null) }
+    var items by remember { mutableStateOf<List<KbUploadItem>>(emptyList()) }
+    var uploading by remember { mutableStateOf(false) }
+    var currentIndex by remember { mutableStateOf(0) }
     var validationError by rememberSaveable { mutableStateOf<String?>(null) }
 
     val fileLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.OpenDocument(),
-    ) { uri: Uri? ->
-        if (uri != null) {
-            pickedUri = uri
-            pickedName = displayNameOf(context.contentResolver, uri)
-            pickedMime = context.contentResolver.getType(uri)
-            if (name.isBlank()) name = pickedName
+        contract = ActivityResultContracts.OpenMultipleDocuments(),
+    ) { uris ->
+        if (!uris.isNullOrEmpty()) {
+            items = uris.mapNotNull { uri ->
+                val fileName = displayNameOf(context.contentResolver, uri)
+                if (fileName.isBlank()) {
+                    null
+                } else {
+                    KbUploadItem(
+                        uri = uri,
+                        name = fileName,
+                        mime = context.contentResolver.getType(uri) ?: "text/plain",
+                        size = contentSizeOf(context.contentResolver, uri) ?: 0L,
+                    )
+                }
+            }
+            uploading = false
+            currentIndex = 0
             validationError = null
         }
     }
 
-    val canSubmit = name.isNotBlank() &&
-        (mode != "text" || content.isNotBlank()) &&
-        (mode != "file" || pickedUri != null)
+    suspend fun uploadItemAt(index: Int): Boolean {
+        val item = items[index]
+        items = items.mapIndexed { i, it -> if (i == index) it.copy(status = KbUploadStatus.Uploading) else it }
+        val ok = onIngestFile(item.name, item.uri, item.mime)
+        items = items.mapIndexed { i, it ->
+            if (i == index) it.copy(status = if (ok) KbUploadStatus.Success else KbUploadStatus.Failed) else it
+        }
+        return ok
+    }
+
+    fun startUploadAll() {
+        if (uploading || items.isEmpty()) return
+        scope.launch {
+            uploading = true
+            var success = 0
+            var failed = 0
+            for (i in items.indices) {
+                if (items[i].status == KbUploadStatus.Success) {
+                    success++
+                    continue
+                }
+                currentIndex = i
+                if (uploadItemAt(i)) success++ else failed++
+            }
+            uploading = false
+            Toast.makeText(
+                context,
+                context.getString(R.string.kb_upload_summary, success, failed),
+                Toast.LENGTH_SHORT,
+            ).show()
+            onUploadComplete()
+        }
+    }
+
+    fun retryItem(index: Int) {
+        if (uploading) return
+        scope.launch {
+            uploading = true
+            currentIndex = index
+            uploadItemAt(index)
+            uploading = false
+            onUploadComplete()
+        }
+    }
 
     AppDialog(onDismissRequest = onDismiss) {
         Text(
@@ -469,16 +555,16 @@ private fun IngestDialog(
                 Text(stringResource(R.string.kb_ingest_file))
             }
         }
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it },
-            label = { Text(stringResource(R.string.kb_doc_name)) },
-            singleLine = true,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp),
-        )
         if (mode == "text") {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text(stringResource(R.string.kb_doc_name)) },
+                singleLine = true,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 24.dp, vertical = 8.dp),
+            )
             OutlinedTextField(
                 value = content,
                 onValueChange = { content = it },
@@ -513,19 +599,32 @@ private fun IngestDialog(
                 Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (pickedName.isNotBlank()) pickedName
-                    else stringResource(R.string.kb_choose_file),
+                    if (items.isNotEmpty()) {
+                        stringResource(R.string.kb_selected_files, items.size)
+                    } else {
+                        stringResource(R.string.kb_choose_files)
+                    },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (pickedUri == null) {
-                Text(
-                    text = stringResource(R.string.kb_no_file),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                )
+            if (items.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 260.dp)
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    items.forEachIndexed { index, item ->
+                        KbUploadRow(
+                            item = item,
+                            uploading = uploading,
+                            onRetry = { retryItem(index) },
+                        )
+                    }
+                }
             }
         }
         error?.let {
@@ -556,26 +655,94 @@ private fun IngestDialog(
             ) {
                 Text(stringResource(R.string.cancel))
             }
-            AppPrimaryButton(
-                onClick = {
-                    if (!canSubmit) {
-                        validationError = context.getString(R.string.kb_ingest_no_content)
-                    } else if (mode == "text") {
-                        onIngestText(name, content)
-                    } else {
-                        onIngestFile(name, pickedUri!!, pickedMime ?: "text/plain")
+            if (mode == "text") {
+                AppPrimaryButton(
+                    onClick = {
+                        if (name.isBlank() || content.isBlank()) {
+                            validationError = context.getString(R.string.kb_ingest_no_content)
+                        } else {
+                            onIngestText(name, content)
+                        }
+                    },
+                    enabled = !ingesting,
+                ) {
+                    if (ingesting) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
                     }
-                },
-                enabled = !ingesting,
-            ) {
-                if (ingesting) {
-                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
-                    Spacer(Modifier.width(6.dp))
+                    Text(stringResource(R.string.kb_ingest))
                 }
-                Text(stringResource(R.string.kb_ingest))
+            } else {
+                AppPrimaryButton(
+                    onClick = { startUploadAll() },
+                    enabled = items.isNotEmpty() && !uploading,
+                ) {
+                    if (uploading) {
+                        CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(6.dp))
+                        Text(stringResource(R.string.kb_upload_progress, currentIndex + 1, items.size))
+                    } else {
+                        Text(stringResource(R.string.kb_upload_all))
+                    }
+                }
             }
         }
     }
+}
+
+@Composable
+private fun KbUploadRow(
+    item: KbUploadItem,
+    uploading: Boolean,
+    onRetry: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 4.dp),
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = formatBytes(item.size),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        StatusBadge(text = kbUploadStatusLabel(item.status), color = kbUploadStatusColor(item.status))
+        if (item.status == KbUploadStatus.Failed && !uploading) {
+            IconButton(onClick = onRetry, modifier = Modifier.size(28.dp)) {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.retry),
+                    tint = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.size(18.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun kbUploadStatusLabel(status: KbUploadStatus): String = when (status) {
+    KbUploadStatus.Pending -> stringResource(R.string.kb_upload_pending)
+    KbUploadStatus.Uploading -> stringResource(R.string.kb_upload_uploading)
+    KbUploadStatus.Success -> stringResource(R.string.kb_upload_done)
+    KbUploadStatus.Failed -> stringResource(R.string.kb_status_failed)
+}
+
+private fun kbUploadStatusColor(status: KbUploadStatus): Color = when (status) {
+    KbUploadStatus.Pending -> StatusProcessing
+    KbUploadStatus.Uploading -> StatusProcessing
+    KbUploadStatus.Success -> StatusConnected
+    KbUploadStatus.Failed -> StatusError
 }
 
 @Composable
@@ -750,6 +917,27 @@ private fun displayNameOf(contentResolver: android.content.ContentResolver, uri:
         }
     }
     return queried ?: uri.lastPathSegment?.substringAfterLast('/') ?: ""
+}
+
+/** 查询 content:// Uri 的文件大小（字节）；无法获取时返回 null。 */
+private fun contentSizeOf(contentResolver: android.content.ContentResolver, uri: Uri): Long? = runCatching {
+    val cursor = contentResolver.query(uri, arrayOf(OpenableColumns.SIZE), null, null, null)
+        ?: return@runCatching null
+    cursor.use {
+        if (!it.moveToFirst()) {
+            null
+        } else {
+            val index = it.getColumnIndex(OpenableColumns.SIZE)
+            if (index >= 0 && !it.isNull(index)) it.getLong(index) else null
+        }
+    }
+}.getOrNull()
+
+/** 字节数转可读文本（MiB/KiB/B），用于上传队列展示。 */
+private fun formatBytes(bytes: Long): String = when {
+    bytes >= 1024L * 1024L -> String.format(Locale.ROOT, "%.1f MiB", bytes / 1024.0 / 1024.0)
+    bytes >= 1024L -> String.format(Locale.ROOT, "%.1f KiB", bytes / 1024.0)
+    else -> "$bytes B"
 }
 
 @Composable

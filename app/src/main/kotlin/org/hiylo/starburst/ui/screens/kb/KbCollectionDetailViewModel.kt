@@ -43,6 +43,8 @@ data class KbCollectionDetailUiState(
     val loading: Boolean = true,
     val error: String? = null,
     val documents: List<KbDocument> = emptyList(),
+    val hasMore: Boolean = false,
+    val loadingMore: Boolean = false,
     val ingesting: Boolean = false,
     val ingestError: String? = null,
     val deletingId: Long? = null,
@@ -117,10 +119,10 @@ class KbCollectionDetailViewModel @Inject constructor(
         }
     }
 
-    /** 加载集合下的文档列表。 */
+    /** 加载集合下的文档列表（首页 `limit+offset=0`，重置分页）。 */
     fun loadDocuments() {
         viewModelScope.launch {
-            _uiState.update { it.copy(loading = true, error = null) }
+            _uiState.update { it.copy(loading = true, error = null, hasMore = true) }
             if (backendUrl.isBlank() || backendToken.isBlank()) {
                 _uiState.update {
                     it.copy(loading = false, error = context.getString(R.string.kb_backend_error))
@@ -128,14 +130,55 @@ class KbCollectionDetailViewModel @Inject constructor(
                 return@launch
             }
             try {
-                val documents = kbApi.listDocuments(backendUrl, backendToken, collectionId)
-                _uiState.update { it.copy(loading = false, error = null, documents = documents) }
+                val documents = kbApi.listDocuments(
+                    backendUrl, backendToken, collectionId,
+                    limit = DOCUMENTS_PAGE_SIZE, offset = 0,
+                )
+                _uiState.update {
+                    it.copy(
+                        loading = false,
+                        error = null,
+                        documents = documents,
+                        hasMore = documents.size >= DOCUMENTS_PAGE_SIZE,
+                    )
+                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.update {
                     it.copy(
                         loading = false,
+                        error = e.message ?: context.getString(R.string.kb_documents_load_failed),
+                    )
+                }
+            }
+        }
+    }
+
+    /** 追加加载更多文档（`offset = 已加载数量`），不足一页时置 hasMore=false。 */
+    fun loadMoreDocuments() {
+        if (_uiState.value.loadingMore || !_uiState.value.hasMore || _uiState.value.loading) return
+        viewModelScope.launch {
+            _uiState.update { it.copy(loadingMore = true) }
+            try {
+                val offset = _uiState.value.documents.size
+                val more = kbApi.listDocuments(
+                    backendUrl, backendToken, collectionId,
+                    limit = DOCUMENTS_PAGE_SIZE, offset = offset,
+                )
+                _uiState.update { state ->
+                    state.copy(
+                        loadingMore = false,
+                        documents = state.documents + more,
+                        hasMore = more.size >= DOCUMENTS_PAGE_SIZE,
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _uiState.update {
+                    it.copy(
+                        loadingMore = false,
                         error = e.message ?: context.getString(R.string.kb_documents_load_failed),
                     )
                 }
@@ -172,71 +215,61 @@ class KbCollectionDetailViewModel @Inject constructor(
         }
     }
 
-    /** 摄入文件：文本类走 `content` 字段，二进制（PDF/Office）base64 后走 `contentBase64`。 */
-    fun ingestFile(name: String, uri: Uri, mime: String, onResult: (Boolean) -> Unit = {}) {
+    /**
+     * 摄入单个文件：文本类走 `content` 字段，二进制（PDF/Office）base64 后走 `contentBase64`。
+     * 返回是否成功，供多文件队列逐文件调用；失败原因写入 [ingestError]。
+     */
+    suspend fun ingestFile(name: String, uri: Uri, mime: String): Boolean {
         val trimmedName = name.trim()
-        if (trimmedName.isEmpty() || _uiState.value.ingesting) return
-        viewModelScope.launch {
-            _uiState.update { it.copy(ingesting = true, ingestError = null) }
-            try {
-                if (isTextMime(mime)) {
-                    val text = withContext(Dispatchers.IO) { readTextFile(uri) }
-                    if (text.isNullOrBlank()) {
-                        _uiState.update {
-                            it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
-                        }
-                        onResult(false)
-                        return@launch
-                    }
-                    kbApi.ingest(
-                        backendUrl = backendUrl,
-                        token = backendToken,
-                        collectionId = collectionId,
-                        name = trimmedName,
-                        mime = mime.ifBlank { null },
-                        content = text,
-                    )
-                } else {
-                    val contentBase64 = withContext(Dispatchers.IO) { readBinaryFileBase64(uri) }
-                    if (contentBase64.isNullOrBlank()) {
-                        _uiState.update {
-                            it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
-                        }
-                        onResult(false)
-                        return@launch
-                    }
-                    kbApi.ingest(
-                        backendUrl = backendUrl,
-                        token = backendToken,
-                        collectionId = collectionId,
-                        name = trimmedName,
-                        mime = mime.ifBlank { null },
-                        contentBase64 = contentBase64,
-                    )
+        if (trimmedName.isEmpty()) return false
+        _uiState.update { it.copy(ingestError = null) }
+        return try {
+            if (isTextMime(mime)) {
+                val text = withContext(Dispatchers.IO) { readTextFile(uri) }
+                if (text.isNullOrBlank()) {
+                    _uiState.update { it.copy(ingestError = context.getString(R.string.kb_ingest_failed)) }
+                    return false
                 }
-                _uiState.update { it.copy(ingesting = false) }
-                onResult(true)
-                loadDocuments()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: KbFileTooLargeException) {
-                _uiState.update {
-                    it.copy(
-                        ingesting = false,
-                        ingestError = context.getString(
-                            R.string.kb_file_too_large,
-                            formatBytes(e.actualBytes),
-                            formatBytes(e.limitBytes),
-                        ),
-                    )
+                kbApi.ingest(
+                    backendUrl = backendUrl,
+                    token = backendToken,
+                    collectionId = collectionId,
+                    name = trimmedName,
+                    mime = mime.ifBlank { null },
+                    content = text,
+                )
+            } else {
+                val contentBase64 = withContext(Dispatchers.IO) { readBinaryFileBase64(uri) }
+                if (contentBase64.isNullOrBlank()) {
+                    _uiState.update { it.copy(ingestError = context.getString(R.string.kb_ingest_failed)) }
+                    return false
                 }
-                onResult(false)
-            } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(ingesting = false, ingestError = context.getString(R.string.kb_ingest_failed))
-                }
-                onResult(false)
+                kbApi.ingest(
+                    backendUrl = backendUrl,
+                    token = backendToken,
+                    collectionId = collectionId,
+                    name = trimmedName,
+                    mime = mime.ifBlank { null },
+                    contentBase64 = contentBase64,
+                )
             }
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: KbFileTooLargeException) {
+            _uiState.update {
+                it.copy(
+                    ingestError = context.getString(
+                        R.string.kb_file_too_large,
+                        formatBytes(e.actualBytes),
+                        formatBytes(e.limitBytes),
+                    ),
+                )
+            }
+            false
+        } catch (e: Exception) {
+            _uiState.update { it.copy(ingestError = context.getString(R.string.kb_ingest_failed)) }
+            false
         }
     }
 
@@ -412,6 +445,9 @@ class KbCollectionDetailViewModel @Inject constructor(
     }
 
     private companion object {
+        /** 文档列表分页大小（服务端上限 200）。 */
+        const val DOCUMENTS_PAGE_SIZE = 50
+
         /** 文本/JSON 类文件摄入大小上限（字节）；对齐后端 JSON body 4 MiB 限制。 */
         const val KB_FILE_SIZE_LIMIT_BYTES = 4L * 1024 * 1024
 

@@ -16,11 +16,13 @@ import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.parameter
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.serialization.Serializable
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -58,6 +60,22 @@ class BackendKbApi @Inject constructor(
     }
 
     /**
+     * 更新知识库集合（`PATCH /api/kb/collections/{id}`）。
+     * name/description 二者至少一个非空；null 字段不写入请求体，未传字段保持原值。
+     */
+    suspend fun updateCollection(
+        backendUrl: String,
+        token: String,
+        id: Long,
+        name: String? = null,
+        description: String? = null,
+    ): KbCollection = httpClient.patch("${backendUrl.trimEnd('/')}/api/kb/collections/$id") {
+        header("Authorization", "Bearer $token")
+        contentType(ContentType.Application.Json)
+        setBody(KbUpdateCollectionRequest(name, description))
+    }.body()
+
+    /**
      * 删除知识库集合（`DELETE /api/kb/collections/{id}`），级联删除文档与分块。
      */
     suspend fun deleteCollection(backendUrl: String, token: String, id: Long): Boolean {
@@ -87,17 +105,19 @@ class BackendKbApi @Inject constructor(
         timeout { requestTimeoutMillis = 300_000L }
     }.body()
 
-    /** 列出某集合下的文档（`GET /api/kb/documents?collectionId=&limit=`）。 */
+    /** 列出某集合下的文档（`GET /api/kb/documents?collectionId=&limit=&offset=`，分页）。 */
     suspend fun listDocuments(
         backendUrl: String,
         token: String,
         collectionId: Long,
         limit: Int = 50,
+        offset: Int = 0,
     ): List<KbDocument> {
         val resp: KbDocumentsResponse = httpClient.get("${backendUrl.trimEnd('/')}/api/kb/documents") {
             header("Authorization", "Bearer $token")
             parameter("collectionId", collectionId)
             parameter("limit", limit)
+            parameter("offset", offset)
         }.body()
         return resp.documents
     }
@@ -138,3 +158,10 @@ class BackendKbApi @Inject constructor(
         return resp.results
     }
 }
+
+/** `PATCH /api/kb/collections/{id}` 的请求体；null 字段不序列化（未传字段保持原值）。 */
+@Serializable
+internal data class KbUpdateCollectionRequest(
+    val name: String? = null,
+    val description: String? = null,
+)

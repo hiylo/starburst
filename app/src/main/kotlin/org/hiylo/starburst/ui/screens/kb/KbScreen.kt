@@ -27,11 +27,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MenuBook
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -85,6 +89,7 @@ fun KbScreen(
     val uiState by viewModel.uiState.collectAsState()
     val isAmoled = isAmoledTheme()
     var showCreateDialog by rememberSaveable { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<KbCollection?>(null) }
     var deleteTarget by remember { mutableStateOf<KbCollection?>(null) }
 
     Scaffold(
@@ -171,6 +176,7 @@ fun KbScreen(
                             collection = collection,
                             onClick = { onOpenCollection(collection.id) },
                             deleting = uiState.deletingId == collection.id,
+                            onEditClick = { editTarget = collection },
                             onDeleteClick = { deleteTarget = collection },
                         )
                     }
@@ -186,6 +192,19 @@ fun KbScreen(
             onConfirm = { name, description ->
                 viewModel.createCollection(name, description) { ok ->
                     if (ok) showCreateDialog = false
+                }
+            },
+        )
+    }
+
+    editTarget?.let { target ->
+        EditCollectionDialog(
+            collection = target,
+            saving = uiState.updatingId != null,
+            onDismiss = { editTarget = null },
+            onConfirm = { name, description ->
+                viewModel.updateCollection(target.id, name, description) { ok ->
+                    if (ok) editTarget = null
                 }
             },
         )
@@ -210,9 +229,11 @@ private fun KbCollectionCard(
     collection: KbCollection,
     onClick: () -> Unit,
     deleting: Boolean,
+    onEditClick: () -> Unit,
     onDeleteClick: () -> Unit,
 ) {
     val isAmoled = isAmoledTheme()
+    var menuOpen by remember { mutableStateOf(false) }
     Card(
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
@@ -245,6 +266,34 @@ private fun KbCollectionCard(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
+                Box {
+                    IconButton(
+                        onClick = { menuOpen = true },
+                        modifier = Modifier.size(28.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.MoreVert,
+                            contentDescription = stringResource(R.string.more_options),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    DropdownMenu(
+                        expanded = menuOpen,
+                        onDismissRequest = { menuOpen = false },
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.kb_edit_collection)) },
+                            leadingIcon = {
+                                Icon(Icons.Default.Edit, contentDescription = null, modifier = Modifier.size(18.dp))
+                            },
+                            onClick = {
+                                menuOpen = false
+                                onEditClick()
+                            },
+                        )
+                    }
+                }
                 IconButton(
                     onClick = onDeleteClick,
                     enabled = !deleting,
@@ -348,6 +397,68 @@ private fun CreateCollectionDialog(
                 Text(
                     stringResource(if (creating) R.string.kb_creating else R.string.kb_create),
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditCollectionDialog(
+    collection: KbCollection,
+    saving: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (name: String, description: String) -> Unit,
+) {
+    var name by rememberSaveable(collection.id) { mutableStateOf(collection.name) }
+    var description by rememberSaveable(collection.id) { mutableStateOf(collection.description) }
+
+    AppDialog(onDismissRequest = onDismiss) {
+        Text(
+            text = stringResource(R.string.kb_edit_collection),
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(start = 24.dp, end = 24.dp, top = 24.dp),
+        )
+        OutlinedTextField(
+            value = name,
+            onValueChange = { name = it },
+            label = { Text(stringResource(R.string.kb_collection_name)) },
+            placeholder = { Text(stringResource(R.string.kb_collection_name_hint)) },
+            singleLine = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        OutlinedTextField(
+            value = description,
+            onValueChange = { description = it },
+            label = { Text(stringResource(R.string.kb_collection_description)) },
+            placeholder = { Text(stringResource(R.string.kb_collection_description_hint)) },
+            minLines = 2,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+        ) {
+            AppSecondaryButton(
+                onClick = onDismiss,
+                outlined = true,
+            ) {
+                Text(stringResource(R.string.cancel))
+            }
+            AppPrimaryButton(
+                onClick = { onConfirm(name, description) },
+                enabled = name.isNotBlank() && !saving,
+            ) {
+                if (saving) {
+                    CircularProgressIndicator(modifier = Modifier.width(18.dp).height(18.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(6.dp))
+                }
+                Text(stringResource(if (saving) R.string.kb_saving else R.string.kb_save))
             }
         }
     }
