@@ -138,6 +138,7 @@ internal fun ChatInputBar(
     onAttach: () -> Unit = {},
     onTemplateClick: () -> Unit = {},
     onDocumentGenerateClick: () -> Unit = {},
+    showDocumentGenerate: Boolean = false,
     onDocumentIntentDetected: (type: String, prompt: String) -> Unit = { _, _ -> },
     isListening: Boolean = false,
     voiceLevel: Float = 0f,
@@ -852,8 +853,21 @@ internal fun ChatInputBar(
                         )
                     }
                 }
-                // Document generation entry — temporarily hidden (2026-09-22).
-                // if (!isShellMode) { IconButton(onClick = onDocumentGenerateClick, modifier = Modifier.size(44.dp)) { Icon(...) } }
+                // Document generation entry — shown when the server has a backend
+                // token configured (document endpoints require it).
+                if (!isShellMode && showDocumentGenerate) {
+                    IconButton(
+                        onClick = onDocumentGenerateClick,
+                        modifier = Modifier.size(44.dp),
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = stringResource(R.string.document_generate),
+                            modifier = Modifier.size(22.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
+                        )
+                    }
+                }
                 // Text field — minimal style, no heavy outline
                 val mentionHighlightColor = MaterialTheme.colorScheme.primary
                 val mentionBgColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)

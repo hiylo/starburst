@@ -16,6 +16,7 @@
     <string name="document_preview">Preview</string>
     <string name="document_remove">Remove document</string>
     <string name="document_revise_action">Revise by feedback</string>
+    <string name="document_regenerate_action">Regenerate</string>
     <string name="document_generated_notice">Generated document \"%1$s\" (docId=%2$s, %3$s)</string>
     <string name="document_regenerated_notice">Regenerated document \"%1$s\" (docId=%2$s, %3$s)</string>
     <string name="document_backend_unavailable">Document backend unavailable for this server</string>

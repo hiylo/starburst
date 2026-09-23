@@ -37,7 +37,9 @@ import org.hiylo.starburst.ui.components.AppSecondaryButton
  * @param isDownloading 是否正在下载该文档（下载按钮展示 loading）。
  * @param onDownload 下载回调。
  * @param onPreview 预览回调。
+ * @param onRegenerate 按原需求重新生成回调。
  * @param onRevise 按意见修改回调。
+ * @param onRemove 移除回调（可为 null 隐藏移除按钮）。
  *
  * @author Hsi Chu
  * @since 3.1.0
@@ -49,6 +51,7 @@ internal fun GeneratedDocumentCard(
     isDownloading: Boolean,
     onDownload: () -> Unit,
     onPreview: () -> Unit,
+    onRegenerate: () -> Unit,
     onRevise: () -> Unit,
     onRemove: (() -> Unit)? = null,
 ) {
@@ -129,6 +132,19 @@ internal fun GeneratedDocumentCard(
                         text = stringResource(R.string.document_preview),
                         modifier = Modifier.fillMaxWidth(),
                         textAlign = TextAlign.Center,
+                    )
+                }
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppSecondaryButton(
+                    onClick = onRegenerate,
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(
+                        text = stringResource(R.string.document_regenerate_action),
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
                     )
                 }
                 AppSecondaryButton(

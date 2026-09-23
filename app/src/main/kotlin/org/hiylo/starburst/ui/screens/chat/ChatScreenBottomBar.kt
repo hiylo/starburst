@@ -96,6 +96,8 @@ internal fun ChatScreenBottomBar(
         val model = provider?.models?.get(uiState.selectedModelId)
         model?.name ?: uiState.selectedModelId ?: ""
     } else ""
+    // 文档生成入口门控：后端 token 已配置（/api/documents 端点需要 Bearer）。
+    val documentBackendToken by viewModel._documentBackendToken.collectAsState()
     val hasRunningTool = uiState.messages.any { message ->
         message.parts.any { part -> part is Part.Tool && part.state is ToolState.Running }
     }
@@ -233,6 +235,7 @@ internal fun ChatScreenBottomBar(
         onAttach = { showAttachmentOptions = true },
         onTemplateClick = { showTemplatePicker = true },
         onDocumentGenerateClick = { showDocumentGenerateDialogState.value = true },
+        showDocumentGenerate = documentBackendToken.isNotBlank(),
         onDocumentIntentDetected = onDocumentIntentDetected,
         isListening = isListening,
         voiceLevel = voiceLevel,

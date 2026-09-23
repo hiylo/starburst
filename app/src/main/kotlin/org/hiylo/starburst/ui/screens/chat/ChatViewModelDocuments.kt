@@ -110,9 +110,21 @@ internal fun ChatViewModel.generateDocument(type: String, prompt: String, onResu
  * @param onResult 完成回调（true=成功，false=失败或后端不可用）。
  */
 internal fun ChatViewModel.reviseDocument(docId: Long, instruction: String, onResult: (Boolean) -> Unit = {}) {
-    if (_isRevisingDocument.value) return
     val text = instruction.trim()
     if (text.isBlank()) return
+    regenerateDocument(docId, text, onResult)
+}
+
+/**
+ * 重新生成文档（留空指令 = 按原需求重跑，`POST /api/documents/regenerate` 无 instruction）。
+ * 成功：刷新对应产物卡片并往会话发一条用户文本消息；失败/后端不可用：弹 Toast。
+ *
+ * @param docId 原文档 id。
+ * @param instruction 修改意见（为空串时后端按原需求重跑）。
+ * @param onResult 完成回调（true=成功，false=失败或后端不可用）。
+ */
+internal fun ChatViewModel.regenerateDocument(docId: Long, instruction: String = "", onResult: (Boolean) -> Unit = {}) {
+    if (_isRevisingDocument.value) return
     _isRevisingDocument.value = true
     viewModelScope.launch {
         try {
@@ -122,7 +134,7 @@ internal fun ChatViewModel.reviseDocument(docId: Long, instruction: String, onRe
                 onResult(false)
                 return@launch
             }
-            val doc = documentsApi.regenerate(url, token, docId, text, sessionId)
+            val doc = documentsApi.regenerate(url, token, docId, instruction, sessionId)
             requireValidGenerated(doc)
             _generatedDocuments.value = _generatedDocuments.value.filterNot { it.id == doc.id } + doc
             val notice = context.getString(
@@ -136,7 +148,7 @@ internal fun ChatViewModel.reviseDocument(docId: Long, instruction: String, onRe
             onResult(true)
         } catch (e: Exception) {
             e.rethrowCancellation()
-            Log.e(TAG, "Failed to revise document $docId", e)
+            Log.e(TAG, "Failed to regenerate document $docId", e)
             _documentToast.tryEmit(
                 context.getString(R.string.document_revise_failed_detail, e.userReason()),
             )
