@@ -24,7 +24,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.listDirectory
 import org.hiylo.starburst.data.api.readFile
@@ -80,7 +80,7 @@ private const val MAX_DIRS_PER_LEVEL = 10
 @HiltViewModel
 class AgentsMdViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
     private val shellRegistry: ServerShellRegistry,
@@ -101,7 +101,7 @@ class AgentsMdViewModel @Inject constructor(
      * 常不可达，会导致 AGENTS.md 读写请求到不了服务器。
      */
     private val effectiveConn: ServerConnection
-        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: connection
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, connection.baseUrl) ?: connection
 
     private val _uiState = MutableStateFlow(AgentsMdUiState(directory = directory))
     val uiState: StateFlow<AgentsMdUiState> = _uiState.asStateFlow()
@@ -137,7 +137,7 @@ class AgentsMdViewModel @Inject constructor(
             _uiState.update { it.copy(exists = null, detectError = null) }
             try {
                 val content = api.readFile(effectiveConn, AGENTS_FILE, directory)
-                // opencode 对不存在的文件返回 200 + 空 content（而非 404），
+                // 服务端对不存在的文件返回 200 + 空 content（而非 404），
                 // 因此必须以内容是否为空来判断文件是否存在，否则空文件会被误判为「已存在」而卡在空预览。
                 val hasContent = content.content.isNotBlank()
                 _uiState.update {

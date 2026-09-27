@@ -15,7 +15,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -75,6 +74,7 @@ import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 /**
@@ -153,7 +153,7 @@ fun BookmarksScreen(
                         CartoonStickerIcon(
                             Icons.Default.BookmarkBorder,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.size(48.dp),
                             stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
                             padding = 10.dp,
@@ -213,7 +213,7 @@ private fun EmptyBookmarks() {
         CartoonStickerIcon(
             Icons.Default.BookmarkBorder,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.size(48.dp),
             stickerTint = MaterialTheme.colorScheme.onPrimaryContainer,
             padding = 10.dp,
@@ -296,6 +296,7 @@ private fun BookmarkCard(
         ),
         border = appAmoledBorder(0.65f),
         modifier = Modifier
+            .cartoonChrome(AppCardShape)
             .fillMaxWidth()
             .combinedClickable(onClick = onOpen, onLongClick = onRemove),
     ) {

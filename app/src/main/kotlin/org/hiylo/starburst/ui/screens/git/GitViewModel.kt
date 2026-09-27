@@ -17,7 +17,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.getCurrentProject
@@ -126,7 +126,7 @@ data class GitUiState(
 @HiltViewModel
 class GitViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     @ApplicationContext private val context: Context,
     private val suggestionProvider: SuggestionProvider,
     private val settingsRepository: SettingsRepository,
@@ -135,21 +135,21 @@ class GitViewModel @Inject constructor(
     private val connectionStateRepository: ServerConnectionStateRepository,
 ) : ViewModel() {
 
-    private val conn = ServerConnection.from(
-        url = savedStateHandle.get<String>("serverUrl").orEmpty(),
-        username = savedStateHandle.get<String>("username").orEmpty().ifBlank { "opencode" },
-        password = savedStateHandle.get<String>("password").orEmpty().ifEmpty { null },
-    )
     private val serverId = savedStateHandle.get<String>("serverId").orEmpty()
     private val directory = savedStateHandle.get<String>("directory").orEmpty()
+    private val serverUrl = savedStateHandle.get<String>("serverUrl").orEmpty()
+    private val username = savedStateHandle.get<String>("username").orEmpty().ifBlank { "opencode" }
+    private val password = savedStateHandle.get<String>("password").orEmpty().ifEmpty { null }
 
     /**
-     * 实际用于 PTY/只读查询的连接：优先复用连接服务解析后的直连地址（SSH 隧道
-     * `127.0.0.1:localPort`），否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸
-     * `serverUrl`（配置地址）往往不可达，会导致 Git 页请求到不了服务器而空白无数据。
+     * 实际请求用连接：优先复用连接服务解析后的直连地址（SSH 隧道 `127.0.0.1:localPort`；
+     * 同主机直连型后端 starburst-agent 时已带上 Bearer），否则回退到导航传入的
+     * `serverUrl`。蜂窝/VPN 下裸 `serverUrl`（配置地址）往往不可达，会导致 Git 页
+     * 请求到不了服务器而空白无数据。
      */
-    private val effectiveConn: ServerConnection
-        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+    private val conn: ServerConnection
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, serverUrl)
+            ?: ServerConnection.from(serverUrl, username, password)
 
     private val _uiState = MutableStateFlow(GitUiState(directory = directory))
     val uiState: StateFlow<GitUiState> = _uiState.asStateFlow()
@@ -167,7 +167,7 @@ class GitViewModel @Inject constructor(
     private var ptySessionAcquired = false
     private val ptySession by lazy {
         ptySessionAcquired = true
-        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, effectiveConn, directory)
+        shellRegistry.acquire(serverId.ifBlank { conn.baseUrl }, api, conn, directory)
     }
 
     /** 已加载的提交数量，用于「加载更多」时计算 `--skip`。 */
@@ -297,9 +297,9 @@ class GitViewModel @Inject constructor(
         if (configured.isNotBlank()) return configured
         // 回退到服务器当前项目；首次进入可能存在网络/时序竞争，重试几次。
         repeat(3) { attempt ->
-            val current = runCatching { api.getCurrentProject(effectiveConn).worktree.ifBlank { null } }.getOrNull()
+            val current = runCatching { api.getCurrentProject(conn).worktree.ifBlank { null } }.getOrNull()
             if (!current.isNullOrBlank()) return current
-            val first = runCatching { api.listProjects(effectiveConn).firstOrNull()?.worktree.orEmpty() }.getOrNull()
+            val first = runCatching { api.listProjects(conn).firstOrNull()?.worktree.orEmpty() }.getOrNull()
             if (!first.isNullOrBlank()) return first
             if (attempt < 2) delay(300)
         }

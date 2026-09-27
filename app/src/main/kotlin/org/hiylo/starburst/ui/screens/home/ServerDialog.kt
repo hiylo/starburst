@@ -66,7 +66,7 @@ fun ServerDialog(
     val (initialHost, initialPort) = parseHostAndPort(server?.url)
     var name by remember(server) { mutableStateOf(server?.name ?: "") }
     var host by remember(server) { mutableStateOf(initialHost) }
-    var openCodePort by remember(server) { mutableStateOf(initialPort?.toString() ?: "4096") }
+    var serverPort by remember(server) { mutableStateOf(initialPort?.toString() ?: "4096") }
     var useHttps by remember(server) { mutableStateOf(server?.url?.startsWith("https://") == true) }
     var username by remember(server) { mutableStateOf(server?.username ?: "opencode") }
     var password by remember(server) { mutableStateOf(server?.password ?: "") }
@@ -153,10 +153,10 @@ fun ServerDialog(
                 )
 
                 OutlinedTextField(
-                    value = openCodePort,
-                    onValueChange = { openCodePort = it },
-                    label = { Text(stringResource(R.string.server_opencode_port)) },
-                    placeholder = { Text(stringResource(R.string.server_opencode_port_hint)) },
+                    value = serverPort,
+                    onValueChange = { serverPort = it },
+                    label = { Text(stringResource(R.string.server_port)) },
+                    placeholder = { Text(stringResource(R.string.server_port_hint)) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
                     keyboardActions = nextAction,
                     singleLine = true,
@@ -321,11 +321,11 @@ fun ServerDialog(
                     }
 
                     if (hostError == null) {
-                        val openCodePortValue = openCodePort.trim().toIntOrNull() ?: 4096
+                        val serverPortValue = serverPort.trim().toIntOrNull() ?: 4096
                         val scheme = if (useHttps) "https" else "http"
-                        val normalizedUrl = "$scheme://$trimmedHost:$openCodePortValue"
+                        val normalizedUrl = "$scheme://$trimmedHost:$serverPortValue"
                         val finalName = name.trim().ifBlank {
-                            deriveServerNameFromHost(trimmedHost, openCodePortValue)
+                            deriveServerNameFromHost(trimmedHost, serverPortValue)
                         }
                         val sshPortValue = sshPortText.trim().toIntOrNull() ?: 22
                         onSave(

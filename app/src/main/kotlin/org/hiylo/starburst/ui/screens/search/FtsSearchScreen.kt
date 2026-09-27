@@ -64,6 +64,7 @@ import org.hiylo.starburst.data.search.FtsHit
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppSearchShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 /**
@@ -237,7 +238,7 @@ private fun FtsHitCard(
     val isAmoled = isAmoledTheme()
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainerLow,
         ),

@@ -22,18 +22,17 @@ import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerAuthenticationException
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.ServerHealthHttpException
+import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.getProviders
 import org.hiylo.starburst.data.repository.ServerRepository
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.normalizeServerUrl
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.repository.DiagnosticLogRepository
-import org.hiylo.starburst.data.update.UpdateRepository
-import org.hiylo.starburst.data.update.UpdateState
-import org.hiylo.starburst.data.update.AvailableUpdate
 import org.hiylo.starburst.data.repository.favoriteSessionIds
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.service.StarBurstConnectionService
@@ -55,8 +54,10 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 private const val TAG = "HomeViewModel"
+/** 首页未读角标的轮询间隔（毫秒）。 */
+private const val UNREAD_POLL_INTERVAL_MS = 12_000L
 
-private const val RESTART_OPENCODE_COMMAND = "systemctl restart opencode"
+private const val RESTART_SERVER_COMMAND = "systemctl restart opencode"
 
 data class HomeUiState(
     val servers: List<ServerConfig> = emptyList(),
@@ -68,18 +69,20 @@ data class HomeUiState(
     val showAddServerDialog: Boolean = false,
     val editingServer: ServerConfig? = null,
     val isLoading: Boolean = true,
-    val updateState: UpdateState = UpdateState.Idle,
     val hasFavoriteSessions: Boolean? = null,
+    /** 各已连接服务器（配置了后端时）的未读会话数，用于首页入口角标。 */
+    val unreadCounts: Map<String, Int> = emptyMap(),
 )
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
     application: Application,
     private val serverRepository: ServerRepository,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
+    private val backendApi: BackendApi,
     private val settingsRepository: SettingsRepository,
     private val diagnosticLogRepository: DiagnosticLogRepository,
-    private val updateRepository: UpdateRepository,
+    private val connectionStateRepository: ServerConnectionStateRepository,
 ) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(HomeUiState())
@@ -90,6 +93,7 @@ class HomeViewModel @Inject constructor(
     private val serverSettingsCheckJobs = mutableMapOf<String, Job>()
     private val connectionAttemptJobs = mutableMapOf<String, Job>()
     private val connectionAttemptGenerations = mutableMapOf<String, Int>()
+    private var unreadPollJob: Job? = null
 
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
@@ -118,13 +122,6 @@ class HomeViewModel @Inject constructor(
         bindToService()
         observeSettings()
         observeFavoriteSessions()
-        viewModelScope.launch {
-            updateRepository.state.collect { state -> _uiState.update { it.copy(updateState = state) } }
-        }
-        viewModelScope.launch {
-            updateRepository.restore()
-            updateRepository.check(manual = false)
-        }
     }
 
     private fun observeSettings() {
@@ -176,6 +173,7 @@ class HomeViewModel @Inject constructor(
                         )
                     }
                     refreshServerSettingsAvailability(ids)
+                    startUnreadPolling(ids)
                 }
             }
             launch {
@@ -206,6 +204,34 @@ class HomeViewModel @Inject constructor(
         }
     }
 
+    /**
+     * 首页服务器入口未读角标：对每个已连接且配置了后端的服务器轮询 `GET /api/unread`，
+     * 得到该服务器的未读会话总数。未连接/无后端时清零。
+     */
+    private fun startUnreadPolling(serverIds: Set<String>) {
+        unreadPollJob?.cancel()
+        if (serverIds.isEmpty()) {
+            _uiState.update { it.copy(unreadCounts = emptyMap()) }
+            return
+        }
+        unreadPollJob = viewModelScope.launch {
+            while (true) {
+                val serversById = _uiState.value.servers.associateBy { it.id }
+                val counts = buildMap {
+                    serverIds.forEach { id ->
+                        val server = serversById[id] ?: return@forEach
+                        val url = server.backendResolvedUrl.takeIf { it.isNotBlank() } ?: return@forEach
+                        val token = server.backendResolvedToken.takeIf { it.isNotBlank() } ?: return@forEach
+                        val n = runCatching { backendApi.listUnread(url, token).size }.getOrDefault(0)
+                        put(id, n)
+                    }
+                }
+                _uiState.update { it.copy(unreadCounts = counts) }
+                delay(UNREAD_POLL_INTERVAL_MS)
+            }
+        }
+    }
+
     private fun refreshServerSettingsAvailability(connectedIds: Set<String>) {
         // Cancel checks for disconnected servers
         val disconnected = serverSettingsCheckJobs.keys - connectedIds
@@ -224,7 +250,8 @@ class HomeViewModel @Inject constructor(
                 }
 
                 try {
-                    val conn = ServerConnection.from(server.url, server.username, server.password)
+                    val conn = connectionStateRepository.resolvedConnectionFor(server.id, server.url)
+                        ?: ServerConnection.from(server.url, server.username, server.password)
                     api.getProviders(conn)
                     _uiState.update {
                         it.copy(
@@ -384,6 +411,8 @@ class HomeViewModel @Inject constructor(
                     putExtra("server_username", server.username)
                     putExtra("server_ssh_port", server.sshPort)
                     putExtra("server_ssh_username", server.sshUsername)
+                    server.backendToken?.let { putExtra("server_backend_token", it) }
+                    server.backendUrl?.let { putExtra("server_backend_url", it) }
                 }
 
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -414,17 +443,8 @@ class HomeViewModel @Inject constructor(
     private fun s(@StringRes id: Int, vararg args: Any): String =
         getApplication<Application>().getString(id, *args)
 
-    fun prepareInstall(release: AvailableUpdate) {
-        viewModelScope.launch { updateRepository.prepareInstall(release) }
-    }
 
-    fun installerLaunched() {
-        updateRepository.markInstallerLaunched()
-    }
 
-    fun checkForUpdates() {
-        viewModelScope.launch { updateRepository.check(manual = true) }
-    }
 
     /**
      * Disconnect from a specific server.
@@ -457,9 +477,9 @@ class HomeViewModel @Inject constructor(
     }
 
     /**
-     * 通过 SSH 远程重启 opencode 系统服务（用于 OpenCode 后端崩溃后仍能恢复服务）。
+     * 通过 SSH 远程重启 系统服务（用于 后端崩溃后仍能恢复服务）。
      *
-     * 独立于 OpenCode 的 HTTP 连接，仅依赖配置的 SSH 凭据。
+     * 独立于 服务器的 HTTP 连接，仅依赖配置的 SSH 凭据。
      */
     fun restartServerViaSsh(serverId: String) {
         if (serverId in _uiState.value.restartingServerIds) return
@@ -467,7 +487,7 @@ class HomeViewModel @Inject constructor(
             val server = serverRepository.getServer(serverId) ?: return@launch
             _uiState.update { it.copy(restartingServerIds = it.restartingServerIds + serverId) }
             try {
-                SshRunner.runCommand(server, RESTART_OPENCODE_COMMAND)
+                SshRunner.runCommand(server, RESTART_SERVER_COMMAND)
                 _uiState.update {
                     it.copy(
                         restartingServerIds = it.restartingServerIds - serverId,

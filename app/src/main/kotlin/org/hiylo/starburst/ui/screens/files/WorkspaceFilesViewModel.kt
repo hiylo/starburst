@@ -20,7 +20,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.FileContent
 import org.hiylo.starburst.data.api.FileNode
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SuggestionProvider
 import org.hiylo.starburst.data.api.listDirectory
@@ -193,7 +193,7 @@ internal fun workspaceFileMimeType(node: FileNode, content: FileContent): String
 @HiltViewModel
 class WorkspaceFilesViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val settingsRepository: SettingsRepository,
     private val shellRegistry: ServerShellRegistry,
     private val suggestionProvider: SuggestionProvider,
@@ -215,7 +215,7 @@ class WorkspaceFilesViewModel @Inject constructor(
      * 常不可达，会导致文件列表/编辑请求到不了服务器。
      */
     private val effectiveConn: ServerConnection
-        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: connection
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, connection.baseUrl) ?: connection
     private val _uiState = MutableStateFlow(WorkspaceFilesUiState(directory = directory))
     val uiState = _uiState.asStateFlow()
     private val _saveResults = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)

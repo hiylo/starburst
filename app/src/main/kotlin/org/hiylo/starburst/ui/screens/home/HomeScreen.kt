@@ -51,9 +51,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusWarning
-import org.hiylo.starburst.data.update.UpdateState
-import org.hiylo.starburst.data.update.UpdatePolicy
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.CartoonStickerIcon
@@ -65,7 +64,6 @@ import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
-import org.hiylo.starburst.ui.components.rememberUpdateInstallLauncher
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -153,12 +151,6 @@ fun HomeScreen(
     val uiState by viewModel.uiState.collectAsState()
     val context = LocalContext.current
     val clipboardManager = LocalClipboardManager.current
-    val launchInstaller = rememberUpdateInstallLauncher(viewModel::installerLaunched)
-
-    val readyUpdate = uiState.updateState as? UpdateState.ReadyToInstall
-    LaunchedEffect(readyUpdate?.apkPath) {
-        readyUpdate?.let { launchInstaller(it.apkPath) }
-    }
 
     LaunchedEffect(addServerRequest) {
         if (addServerRequest > 0) viewModel.showAddServerDialog()
@@ -261,29 +253,6 @@ fun HomeScreen(
                             }
                         }
 
-                        // 仅当确有新版本（Available）或存在可恢复的下载/安装失败（Error 且带 release）
-                        // 时才展示更新横幅；纯检查失败（网络错误、Error 且无 release）不提示「有可用更新」。
-                        val updateBanner = when (val s = uiState.updateState) {
-                            is UpdateState.Available -> true
-                            is UpdateState.Error -> s.release != null
-                            else -> false
-                        }
-                        if (updateBanner) {
-                            item(key = "__app_update") {
-                                UpdateAvailableCard(
-                                    updateState = uiState.updateState,
-                                    onPrepareInstall = viewModel::prepareInstall,
-                                    onOpenInstaller = launchInstaller,
-                                    onCheckUpdates = viewModel::checkForUpdates,
-                                    onOpenRelease = { releaseUrl ->
-                                        context.startActivity(
-                                            Intent(Intent.ACTION_VIEW, Uri.parse(releaseUrl)),
-                                        )
-                                    },
-                                )
-                            }
-                        }
-
                         if (uiState.hasFavoriteSessions == true) {
                             item(key = "__favorite_sessions") {
                                 FavoritesCard(onClick = onNavigateToCrossServerSessions)
@@ -307,6 +276,7 @@ fun HomeScreen(
                                 connectionError = uiState.connectionErrors[server.id],
                                 showServerSettings = server.id in uiState.serverSettingsReadyIds,
                                 isRestartingViaSsh = server.id in uiState.restartingServerIds,
+                                unreadCount = uiState.unreadCounts[server.id] ?: 0,
                                 onConnect = { requestNotificationPermissionAndConnect(server.id) },
                                 onDisconnect = { viewModel.disconnectFromServer(server.id) },
                                 onOpenSessions = {
@@ -399,118 +369,6 @@ private fun FavoritesCard(onClick: () -> Unit) {
 }
 
 @Composable
-private fun UpdateAvailableCard(
-    updateState: UpdateState,
-    onPrepareInstall: (org.hiylo.starburst.data.update.AvailableUpdate) -> Unit,
-    onOpenInstaller: (String) -> Unit,
-    onCheckUpdates: () -> Unit,
-    onOpenRelease: (String) -> Unit,
-) {
-    val release = when (updateState) {
-        is UpdateState.Available -> updateState.release
-        is UpdateState.Error -> updateState.release
-        else -> return
-    }
-    val isAmoled = isAmoledTheme()
-    Card(
-        modifier = Modifier.fillMaxWidth().cartoonChrome(AppCardShape),
-        shape = AppCardShape,
-        colors = CardDefaults.cardColors(
-            containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.primaryContainer,
-        ),
-        border = appAmoledBorder(),
-    ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                Icons.Default.SystemUpdate,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(stringResource(R.string.update_available_title), style = MaterialTheme.typography.titleSmall)
-                Text(
-                    when (updateState) {
-                        is UpdateState.Downloading -> updateState.progressPercent?.let {
-                            stringResource(R.string.update_downloading_percent, it)
-                        } ?: stringResource(R.string.update_downloading)
-
-                        is UpdateState.Error -> if (release != null) {
-                            stringResource(R.string.update_prepare_error)
-                        } else {
-                            stringResource(R.string.update_error)
-                        }
-
-                        else -> stringResource(R.string.update_available_message, requireNotNull(release).versionName)
-                    },
-                    style = MaterialTheme.typography.bodySmall,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (updateState is UpdateState.Downloading && updateState.progressPercent != null) {
-                    Spacer(Modifier.height(6.dp))
-                    LinearProgressIndicator(
-                        progress = { updateState.progressPercent / 100f },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
-            }
-            when (updateState) {
-                is UpdateState.Downloading -> TextButton(
-                    onClick = {},
-                    enabled = false,
-                ) { Text(stringResource(R.string.update_downloading)) }
-
-                is UpdateState.ReadyToInstall -> TextButton(
-                    onClick = { onOpenInstaller(updateState.apkPath) },
-                ) { Text(stringResource(R.string.update_opening_installer)) }
-
-                is UpdateState.Available -> TextButton(
-                    onClick = {
-                        val availableRelease = requireNotNull(release)
-                        if (UpdatePolicy.isInstallable(availableRelease)) onPrepareInstall(availableRelease)
-                        else onOpenRelease(availableRelease.releaseUrl)
-                    },
-                ) {
-                    Text(
-                        stringResource(
-                            if (UpdatePolicy.isInstallable(requireNotNull(release))) {
-                                R.string.update_download_and_install
-                            } else {
-                                R.string.update_open_release
-                            },
-                        ),
-                    )
-                }
-
-                is UpdateState.Error -> TextButton(
-                    onClick = {
-                        if (release == null) onCheckUpdates()
-                        else if (UpdatePolicy.isInstallable(release)) onPrepareInstall(release)
-                        else onOpenRelease(release.releaseUrl)
-                    },
-                ) {
-                    Text(
-                        stringResource(
-                            when {
-                                release == null -> R.string.about_check_updates
-                                UpdatePolicy.isInstallable(release) -> R.string.update_retry
-                                else -> R.string.update_open_release
-                            },
-                        ),
-                    )
-                }
-
-                else -> Unit
-            }
-        }
-    }
-}
-
-@Composable
 private fun EmptyServersView(
     onAddServer: () -> Unit,
     modifier: Modifier = Modifier
@@ -555,6 +413,7 @@ private fun ServerCard(
     connectionError: String?,
     showServerSettings: Boolean,
     isRestartingViaSsh: Boolean = false,
+    unreadCount: Int = 0,
     onConnect: () -> Unit,
     onDisconnect: () -> Unit,
     onOpenSessions: () -> Unit,
@@ -626,6 +485,20 @@ private fun ServerCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (unreadCount > 0) {
+                        Surface(
+                            color = StatusError,
+                            shape = CircleShape,
+                            modifier = Modifier.padding(end = 4.dp),
+                        ) {
+                            Text(
+                                text = if (unreadCount > 99) "99+" else "$unreadCount",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = Color.White,
+                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
+                            )
+                        }
+                    }
                     if (showServerSettings) {
                         IconButton(onClick = onServerSettings) {
                             Icon(Icons.Default.Settings, contentDescription = stringResource(R.string.server_settings_title))
