@@ -49,6 +49,48 @@ APK=app/build/outputs/apk/debug/app-debug.apk bash scripts/measure-startup.sh 5
   `./gradlew :baselineprofile:collectNonMinifiedReleaseBaselineProfile`，产物在
   `baselineprofile/build/outputs/connected_android_test_additional_output/.../BaselineProfileGenerator_generate-baseline-prof.txt`，复制到 `app/src/main/baseline-prof.txt`。
 
+## 真机基线（2026-09-27，release 包）
+
+> 补上此前缺失的「release + 真机」口径。上文 AVD 数字为 debug + swiftshader 软件渲染，
+> 仅供相对回归，不可与本节横向比较。
+
+### 测量环境
+
+| 项 | 值 |
+|---|---|
+| 构建 | `starburst-release-3.0.0-v2fix75.apk`（28,165,139 B），已签名 release |
+| 设备 | 小米 2308CPXD0C（Android 16 / MIUI，USB 调试，序列号 `7923efa2`） |
+| 采集 | `scripts/measure-startup.sh 5`（每次先 `force-stop` 再 `am start -W` 取 `TotalTime`）；内存为前台稳定 4s 后 `dumpsys meminfo` |
+
+### 冷启动（TotalTime）
+
+| 统计 | 值 |
+|---|---|
+| median | **272 ms** |
+| avg | 297 ms |
+| 原始 | 405 / 250 / 268 / 272 / 288 ms |
+
+与 AVD debug 的 1054 ms 相比快约 3.9 倍——差距主要来自真机硬件与 GPU 硬件加速，
+**不能据此推断 release 相对 debug 的收益**（两者构建类型与渲染路径都不同）。
+
+### 内存（前台稳定态）
+
+| 指标 | 值 |
+|---|---|
+| TOTAL PSS | **52,323 KB**（~51.1 MiB） |
+| TOTAL RSS | 172,824 KB（~168.8 MiB） |
+| TOTAL SWAP PSS | 240 KB |
+
+PSS 与 AVD 的 50,662 KB 基本持平（+1.6 MiB），符合真机后台服务更多的预期。
+
+### 帧率/卡顿：本次未取到有效样本
+
+`dumpsys gfxinfo` 在程序化滑动下只渲染出 3 帧（`Janky frames: 1 (33.33%)`），
+样本量不足且分位数只有一个取值（36ms / 4950ms），**不具统计意义，故不登记**。
+有效卡顿基线需在真机上做真实交互（会话列表滚动 + 长会话滚动 + 工具卡片展开），
+属真机交互测量项。
+
 ## 待办
 
-- [ ] release 包基线：签名 release + 真机（现有真机 2308CPXD0C）补测一次，对比 baseline profile 收益。
+- [x] release 包基线：签名 release + 真机（2308CPXD0C）补测一次 —— 见上节「真机基线」。
+- [ ] 帧率/卡顿基线：需真机真实交互采集（程序化滑动无法驱动本 App 的滚动视图）。
