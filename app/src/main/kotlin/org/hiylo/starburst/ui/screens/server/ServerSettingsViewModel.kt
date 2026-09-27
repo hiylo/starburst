@@ -116,7 +116,13 @@ data class ProviderToggle(
     val source: String? = null,
     val connected: Boolean = false,
     val hasPaidModels: Boolean = false,
-    val enabled: Boolean
+    val enabled: Boolean,
+    /**
+     * 该 provider 惯用的环境变量名（后端 `/provider` 的 `env` 字段，实测如
+     * `ANTHROPIC_API_KEY`）。仅作提示：告诉用户「添加后要把密钥填到哪里」，
+     * 不参与任何鉴权逻辑。
+     */
+    val envHint: String = "",
 )
 
 data class ModelOption(
@@ -773,7 +779,8 @@ class ServerSettingsViewModel @Inject constructor(
                     source = it.source,
                     connected = (it.id in _providerConnected.value) && (it.id !in disabled),
                     hasPaidModels = it.models.values.any { model -> model.costInput > 0.0 },
-                    enabled = it.id !in disabled
+                    enabled = it.id !in disabled,
+                    envHint = it.env.firstOrNull().orEmpty(),
                 )
             }
             .sortedWith(

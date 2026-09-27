@@ -36,6 +36,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -425,6 +427,9 @@ fun ServerProvidersScreen(
         AddProviderDialog(
             isAmoled = isAmoled,
             isSaving = uiState.isSaving,
+            // 后端 /provider 已下发全部已知服务商（agent 侧 225 个内置 + 已配置），
+            // 用户从列表里点选即可自动填好 id/名称，不必手敲。
+            presets = uiState.providers,
             onDismiss = { showAddProviderDialog = false },
             onSave = { id, name, baseUrl, models ->
                 viewModel.saveProvider(id, name, baseUrl, models)
@@ -653,6 +658,7 @@ private fun ProviderRow(
 private fun AddProviderDialog(
     isAmoled: Boolean,
     isSaving: Boolean,
+    presets: List<ProviderToggle>,
     onDismiss: () -> Unit,
     onSave: (providerId: String, name: String, baseUrl: String, models: Map<String, String>) -> Unit,
 ) {
@@ -660,6 +666,20 @@ private fun AddProviderDialog(
     var name by remember { mutableStateOf("") }
     var baseUrl by remember { mutableStateOf("") }
     var modelsText by remember { mutableStateOf("") }
+    // 预置选择器：默认展开一个可搜索的列表；点选后自动填 id/名称/env 提示。
+    // 只列「未配置」的（已配置的在主列表里已有，且可编辑/删除）。
+    var showPresets by remember { mutableStateOf(false) }
+    var presetQuery by remember { mutableStateOf("") }
+    val presetCandidates = remember(presets, presetQuery) {
+        val q = presetQuery.trim().lowercase()
+        presets.asSequence()
+            .filter { !it.connected }
+            .filter { q.isEmpty() || it.providerId.lowercase().contains(q) || it.providerName.lowercase().contains(q) }
+            .sortedBy { it.providerName.lowercase() }
+            .take(60)
+            .toList()
+    }
+    val selectedPreset = presets.firstOrNull { it.providerId == providerId }
 
     AppDialog(onDismissRequest = onDismiss, modifier = Modifier.fillMaxWidth()) {
         Column(
@@ -669,6 +689,83 @@ private fun AddProviderDialog(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(stringResource(R.string.server_settings_add_provider), style = MaterialTheme.typography.titleLarge)
+
+            // 预置服务商选择：从后端下发的已知列表里点选，自动填 id 与名称。
+            // 不预填 baseURL —— 各家端点差异大且我无法逐一核实，编造 URL 比让用户填更糟；
+            // 但会把该家惯用的环境变量名作为提示告诉用户密钥填到哪。
+            if (presetCandidates.isNotEmpty() || showPresets) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = presetQuery,
+                        onValueChange = { presetQuery = it },
+                        label = { Text(stringResource(R.string.server_settings_provider_presets)) },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        colors = outlinedTextFieldColors(isAmoled),
+                    )
+                    AppSecondaryButton(onClick = { showPresets = !showPresets }) {
+                        Text(
+                            stringResource(
+                                if (showPresets) R.string.server_settings_provider_presets_hide
+                                else R.string.server_settings_provider_presets_show,
+                            ),
+                        )
+                    }
+                }
+                if (showPresets) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 220.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp),
+                    ) {
+                        items(presetCandidates, key = { it.providerId }) { p ->
+                            val selected = p.providerId == providerId
+                            Surface(
+                                onClick = {
+                                    providerId = p.providerId
+                                    name = p.providerName
+                                    showPresets = false
+                                    presetQuery = ""
+                                },
+                                shape = RoundedCornerShape(8.dp),
+                                color = if (selected) {
+                                    MaterialTheme.colorScheme.secondaryContainer
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(p.providerName, style = MaterialTheme.typography.bodyMedium)
+                                        Text(
+                                            text = p.providerId +
+                                                if (p.envHint.isNotBlank()) " · ${p.envHint}" else "",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    if (selected) {
+                                        Icon(
+                                            Icons.Default.Check,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = providerId,
                 onValueChange = { providerId = it },

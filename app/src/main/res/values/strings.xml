@@ -1378,4 +1378,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="task_kind_ai_suggest">AI suggestion</string>
     <string name="task_kind_intel_run">Test intelligence run</string>
     <string name="task_kind_plan">Multi-step plan</string>
+    <string name="server_settings_provider_presets">Preset services</string>
+    <string name="server_settings_provider_presets_show">Browse</string>
+    <string name="server_settings_provider_presets_hide">Hide</string>
 </resources>

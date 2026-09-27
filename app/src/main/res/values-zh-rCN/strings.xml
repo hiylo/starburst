@@ -1346,4 +1346,7 @@
     <string name="task_kind_ai_suggest">AI 建议</string>
     <string name="task_kind_intel_run">测试智能运行</string>
     <string name="task_kind_plan">多步骤计划</string>
+    <string name="server_settings_provider_presets">预置服务商</string>
+    <string name="server_settings_provider_presets_show">浏览</string>
+    <string name="server_settings_provider_presets_hide">收起</string>
 </resources>
