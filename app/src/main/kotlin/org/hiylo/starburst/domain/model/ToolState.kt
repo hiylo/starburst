@@ -58,12 +58,13 @@ sealed class ToolState {
     @Serializable
     data class Completed(
         val input: Map<String, JsonElement> = emptyMap(),
-        val output: String = "",
+        val result: String = "",
         val title: String? = null,
         val metadata: Map<String, JsonElement>? = null,
         val time: Time? = null,
         val attachments: List<Attachment>? = null
     ) : ToolState() {
+        val output: String get() = result
         @Serializable
         data class Time(val start: Long, val end: Long, val compacted: Long? = null)
 

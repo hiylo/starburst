@@ -15,6 +15,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonContentPolymorphicSerializer
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -43,7 +45,7 @@ object PartSerializer : JsonContentPolymorphicSerializer<Part>(Part::class) {
 
 /**
  * Message Part - different types of content in a message.
- * Field names use @SerialName to match the OpenCode API convention (uppercase ID suffixes).
+ * Field names use @SerialName to match the server API convention (uppercase ID suffixes).
  */
 @Immutable
 @Serializable(with = PartSerializer::class)
@@ -208,8 +210,8 @@ sealed class Part {
         @Serializable
         data class Time(val created: Long)
 
-        val errorMessage: String
-            get() = error?.jsonObject?.get("message")?.jsonPrimitive?.content ?: "Unknown error"
+    val errorMessage: String
+        get() = (error as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull ?: "Unknown error"
     }
 
     @Immutable

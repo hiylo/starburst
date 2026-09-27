@@ -33,17 +33,19 @@ data class TimeInfo(
  */
 object MessageSerializer : JsonContentPolymorphicSerializer<Message>(Message::class) {
     override fun selectDeserializer(element: JsonElement): DeserializationStrategy<Message> {
-        return when (element.jsonObject["role"]?.jsonPrimitive?.content) {
+        val obj = element.jsonObject
+        val discriminator = obj["type"]?.jsonPrimitive?.content ?: obj["role"]?.jsonPrimitive?.content
+        return when (discriminator) {
             "user" -> Message.User.serializer()
             "assistant" -> Message.Assistant.serializer()
-            else -> Message.User.serializer() // fallback
+            else -> Message.User.serializer()
         }
     }
 }
 
 /**
  * Message - user or assistant message in a session.
- * Field names use @SerialName to match the OpenCode API convention (uppercase ID suffixes).
+ * Field names use @SerialName to match the server API convention (uppercase ID suffixes).
  */
 @Immutable
 @Serializable(with = MessageSerializer::class)
@@ -96,7 +98,7 @@ sealed class Message {
         @SerialName("sessionID") override val sessionId: String,
         override val role: String = "assistant",
         override val time: TimeInfo,
-        @SerialName("parentID") val parentId: String,
+        @SerialName("parentID") val parentId: String = "",
         @SerialName("modelID") val modelId: String? = null,
         @SerialName("providerID") val providerId: String? = null,
         val agent: String? = null,

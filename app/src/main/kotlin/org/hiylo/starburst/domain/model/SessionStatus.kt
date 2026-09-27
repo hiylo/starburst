@@ -28,6 +28,13 @@ sealed class SessionStatus {
     @Serializable
     data object Question : SessionStatus()
 
+    /**
+     * 会话有待用户授权/拒绝的权限请求（工具调用被 permission 拦截，等待用户在授权卡片中决定），
+     * 优先级高于 Busy——服务端在等待授权期间仍上报 busy，列表据此区别于「处理中」。
+     */
+    @Serializable
+    data object Permission : SessionStatus()
+
     @Serializable
     data class Retry(
         val attempt: Int,

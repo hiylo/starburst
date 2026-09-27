@@ -55,7 +55,7 @@ sealed class SseEvent {
     data class SessionUpdated(val info: Session) : SseEvent()
 
     @Serializable
-    data class SessionDeleted(val info: Session) : SseEvent()
+    data class SessionDeleted(val sessionId: String, val info: Session? = null) : SseEvent()
 
     @Serializable
     data class SessionDiff(
@@ -139,6 +139,43 @@ sealed class SseEvent {
     data class NextSynthetic(val sessionId: String, val messageId: String, val text: String, val timestamp: Long) : SseEvent()
 
     @Serializable
+    data class NextCompactionStarted(
+        val sessionId: String,
+        val messageId: String,
+        val reason: String,
+        val timestamp: Long,
+    ) : SseEvent()
+
+    @Serializable
+    data class NextCompactionEnded(
+        val sessionId: String,
+        val messageId: String,
+        val reason: String,
+        val text: String,
+        val recent: String,
+        val timestamp: Long,
+    ) : SseEvent()
+
+    /** 压缩摘要流式增量（agent `session.next.compaction.delta`）：逐段累积进压缩占位 part。 */
+    @Serializable
+    data class NextCompactionDelta(
+        val sessionId: String,
+        val messageId: String,
+        val delta: String,
+        val timestamp: Long,
+    ) : SseEvent()
+
+    /** 回合重试（agent `session.next.retried`）：携带 attempt 与错误消息，用于刷新重试状态。 */
+    @Serializable
+    data class NextRetried(
+        val sessionId: String,
+        val attempt: Int,
+        val message: String,
+        val isRetryable: Boolean,
+        val timestamp: Long,
+    ) : SseEvent()
+
+    @Serializable
     data class NextShellStarted(
         val sessionId: String,
         val messageId: String,
@@ -148,7 +185,7 @@ sealed class SseEvent {
     ) : SseEvent()
 
     @Serializable
-    data class NextShellEnded(val sessionId: String, val callId: String, val output: String, val timestamp: Long) : SseEvent()
+    data class NextShellEnded(val sessionId: String, val messageId: String, val callId: String, val output: String, val exitCode: Int? = null, val timestamp: Long) : SseEvent()
 
     @Serializable
     data class NextTextStarted(val sessionId: String, val messageId: String, val textId: String, val timestamp: Long) : SseEvent()
@@ -220,6 +257,7 @@ sealed class SseEvent {
         val callId: String,
         val structured: JsonElement,
         val content: JsonElement,
+        val result: String = "",
         val timestamp: Long,
     ) : SseEvent()
 
@@ -363,11 +401,12 @@ data class FileDiff(
     val after: String = "",
     val additions: Int = 0,
     val deletions: Int = 0,
-    val status: String? = null // "added", "deleted", "modified"
+    val status: String? = null, // "added", "deleted", "modified"
+    val patch: String = "", // 原始 unified diff（V2 REST diff 缺 before/after 时兜底渲染）
 )
 
 /**
- * Project - represents an OpenCode project.
+ * Project - represents a server project.
  * Server returns: id, worktree, vcs, name, icon, commands, time, sandboxes
  */
 @Serializable

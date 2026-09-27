@@ -148,7 +148,7 @@ object NetworkModule {
             }
         }
         
-        // Default headers will be set per-request in OpenCodeApi
+        // Default headers will be set per-request in StarBurstApi
     }
     
     @Provides

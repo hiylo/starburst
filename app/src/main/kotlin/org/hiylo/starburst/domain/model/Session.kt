@@ -13,8 +13,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 /**
- * Session - represents an OpenCode conversation session.
- * Field names match the OpenCode API convention (uppercase ID suffixes).
+ * Session - represents a server conversation session.
+ * Field names match the server API convention (uppercase ID suffixes).
  */
 @Serializable
 data class Session(

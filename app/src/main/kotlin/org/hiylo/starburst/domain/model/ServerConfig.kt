@@ -28,7 +28,7 @@ data class ServerConfig(
     val sshPort: Int = 22,
     val sshUsername: String = "",
     val sshPassword: String? = null,
-    // OpenCode Backend 扩展（可选）：配置后解锁任务中心 / 归档等扩展能力。
+    // Backend 扩展（可选）：配置后解锁任务中心 / 归档等扩展能力。
     val backendUrl: String? = null,
     val backendToken: String? = null,
 ) {
@@ -39,26 +39,26 @@ data class ServerConfig(
     val useSsh: Boolean
         get() = sshUsername.isNotBlank()
 
-    /** 是否配置了 OpenCode Backend 扩展（地址自动推导、token 有默认，故始终可用）。 */
+    /** 是否配置了 Backend 扩展（地址自动推导、token 有默认，故始终可用）。 */
     val useBackend: Boolean
         get() = true
 
-    /** 解析后的 Backend 地址：优先用显式 [backendUrl]，否则推导为 opencode 同主机的 18880 端口。 */
+    /** 解析后的 Backend 地址：优先用显式 [backendUrl]，否则推导为 服务器同主机的 18880 端口。 */
     val backendResolvedUrl: String
         get() = backendUrl?.takeIf { it.isNotBlank() }?.trimEnd('/') ?: "http://$host:18880"
 
     /**
      * 解析后的 Backend token：
      * - 显式配置则使用配置值（后端镜像启用）；
-     * - 未配置/空串时为**空串**，语义为「禁用后端」：后端入口隐藏、连接保持直连 opencode。
+     * - 未配置/空串时为**空串**，语义为「禁用后端」：后端入口隐藏、连接保持直连服务器。
      *   注意：不要回退到默认令牌 `ocb_default`——那是后端侧的默认值，客户端显式禁用
      *   时必须能表达「不连镜像」，回退会把禁用语义静默变成「用默认令牌连镜像」（401 误报）。
      */
     val backendResolvedToken: String
         get() = backendToken?.takeIf { it.isNotBlank() }?.trim() ?: ""
 
-    /** OpenCode 服务端口（显式端口，否则回退 http/https 默认端口）。 */
-    val openCodePort: Int
+    /** 服务端口（显式端口，否则回退 http/https 默认端口）。 */
+    val serverPort: Int
         get() = try {
             val parsed = java.net.URL(url)
             val explicitPort = parsed.port
@@ -75,7 +75,7 @@ data class ServerConfig(
         }
 
     val port: Int
-        get() = openCodePort
+        get() = serverPort
 }
 
 /**

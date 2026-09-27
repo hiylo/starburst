@@ -12,6 +12,7 @@ import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
 import android.util.Base64
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -294,7 +295,19 @@ class KbCollectionDetailViewModel @Inject constructor(
             }
             false
         } catch (e: Exception) {
-            _uiState.update { it.copy(ingestError = context.getString(R.string.kb_ingest_failed)) }
+            // 保留后端返回的失败详情（如 HTTP 413/422/500 的 error 文本），
+            // 否则用户只看到「摄入失败」，无法判断是超限、鉴权还是服务端异常。
+            Log.w(TAG, "kb ingest failed for $trimmedName", e)
+            val detail = e.message?.takeIf { it.isNotBlank() }
+            _uiState.update {
+                it.copy(
+                    ingestError = if (detail == null) {
+                        context.getString(R.string.kb_ingest_failed)
+                    } else {
+                        context.getString(R.string.kb_ingest_failed_detail, trimmedName, detail)
+                    },
+                )
+            }
             false
         }
     }
@@ -480,6 +493,9 @@ class KbCollectionDetailViewModel @Inject constructor(
     }
 
     private companion object {
+        /** 日志标签（摄入失败需可诊断，避免只留一句「摄入失败」）。 */
+        const val TAG = "KbCollectionDetail"
+
         /** 文档列表分页大小（服务端上限 200）。 */
         const val DOCUMENTS_PAGE_SIZE = 50
 

@@ -11,7 +11,7 @@ package org.hiylo.starburst.domain.model
 import kotlinx.serialization.Serializable
 
 /**
- * OpenCode 服务端的 skill（对应 `GET /skill` 返回的条目）。
+ * 服务端的 skill（对应 `GET /skill` 返回的条目）。
  */
 @Serializable
 data class Skill(

@@ -26,6 +26,7 @@ import io.ktor.client.statement.bodyAsChannel
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.utils.io.readUTF8Line
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import org.hiylo.starburst.domain.model.BackendArchive
@@ -79,6 +80,15 @@ internal data class BackendCreateTaskRequest(
     val dependsOn: String? = null,
     val scheduledAt: String? = null,
     val cron: String? = null,
+    /**
+     * 多步编排分组 id：同一次「创建多步骤计划」的所有步骤共用一个值。
+     *
+     * 后端 `store.Task.WorkflowID` 早就接受并持久化该字段（`internal/server/tasks.go`），
+     * 但 App 的 `createPlan` 此前只靠 `dependsOn` 串链、不传本字段，导致计划步骤在
+     * 任务列表里与独立任务无法区分。**注意**：本请求体刻意不含 `kind`——后端以
+     * `t.Kind != ""` 作为「不走 OpenCode prompt 路径」的开关，回传会让任务无法执行。
+     */
+    val workflowId: String? = null,
 )
 
 /** `POST /api/batch` 的响应。 */
@@ -172,10 +182,10 @@ internal data class BackendLlmGenerateResponse(
 )
 
 /**
- * OpenCode Backend 的 HTTP 客户端，对接后台任务 / 批量接口。
+ * Backend 的 HTTP 客户端，对接后台任务 / 批量接口。
  *
  * 认证使用 `Authorization: Bearer <ocb_...>`；所有端点均以「后端地址 + token」为参数，
- * 不依赖 ServerConnection（后端是独立的服务，与直连 OpenCode 的连接无关）。
+ * 不依赖 ServerConnection（后端是独立的服务，与直连服务器的连接无关）。
  *
  * @author Hsi Chu
  * @since V1.3.0
@@ -201,7 +211,7 @@ class BackendApi @Inject constructor(
     }
 
     /**
-     * 读取后端系统信息（`GET /api/system`）：后端自身版本 + 上游 opencode 版本。
+     * 读取后端系统信息（`GET /api/system`）：后端自身版本 + 上游服务版本。
      * 仅 2xx 视为成功；401（token 无效）或其它非 2xx 一律返回 null，避免把错误响应
      * 误反序列化成「版本为空」的可用结果（否则 token 失效时后端功能仍会被误判为可用）。
      */
@@ -269,10 +279,13 @@ class BackendApi @Inject constructor(
         dependsOn: String? = null,
         scheduledAt: String? = null,
         cron: String? = null,
+        workflowId: String? = null,
     ): BackendTask = httpClient.post("${backendUrl.trimEnd('/')}/api/tasks") {
         header("Authorization", "Bearer $token")
         contentType(ContentType.Application.Json)
-        setBody(BackendCreateTaskRequest(prompt, name, sessionId, directory, dependsOn, scheduledAt, cron))
+        setBody(
+            BackendCreateTaskRequest(prompt, name, sessionId, directory, dependsOn, scheduledAt, cron, workflowId),
+        )
     }.body()
 
     /** 查询单个任务。 */
@@ -845,8 +858,9 @@ data class BackendAuditEntry(
 data class BackendSystemInfo(
     val backend: String = "",
     val version: String = "",
-    val opencodeUrl: String = "",
-    val opencodeVersion: String = "",
+    // 线协议字段名沿用后端 /api/system 的 opencodeUrl（OpenCode 兼容面），属性名本地化。
+    @SerialName("opencodeUrl") val projectUrl: String = "",
+    @SerialName("opencodeVersion") val serverVersion: String = "",
     val db: String = "",
     val pgvector: Boolean = false,
     val vectorCapable: Boolean = false,

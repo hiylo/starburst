@@ -52,7 +52,7 @@ private const val RECONNECT_MAX_DELAY_MS = 30_000L
 private const val REFRESH_DEBOUNCE_MS = 500L
 
 /**
- * OpenCode Backend 的任务状态仓库。
+ * Backend 的任务状态仓库。
  *
  * 状态按 [serverId] 隔离：每个 server 拥有独立的任务列表、归档列表、连接态与
  * WebSocket 订阅，避免多服务器场景下串数据、互踩连接。
@@ -127,6 +127,10 @@ class BackendRepository @Inject constructor(
     ): List<BackendTask> {
         val created = mutableListOf<BackendTask>()
         var previousId: String? = null
+        // 同一次计划的所有步骤共用一个 workflowId：后端 store.Task.WorkflowID 早已支持
+        // （internal/server/tasks.go 接收并持久化），此前 App 只用 dependsOn 串链、不传该
+        // 字段，导致计划步骤在任务列表里与独立任务无法区分（也无法按计划聚合）。
+        val workflowId = "wf_" + java.util.UUID.randomUUID().toString().replace("-", "").take(24)
         steps.forEachIndexed { index, step ->
             val stepName = if (steps.size > 1) "$name · ${index + 1}/${steps.size} ${step.name}".trim() else name.ifBlank { step.name }
             val task = api.createTask(
@@ -138,6 +142,7 @@ class BackendRepository @Inject constructor(
                 dependsOn = previousId,
                 scheduledAt = if (index == 0) scheduledAt else null,
                 cron = if (index == 0) cron else null,
+                workflowId = workflowId,
             )
             created.add(task)
             previousId = task.id
