@@ -41,6 +41,35 @@ internal fun EventReducer.handleMessageUpdated(event: SseEvent.MessageUpdated) {
         
         current + (sessionId to sessionMessages)
     }
+    synthesizeUserTextPart(event)
+}
+
+/**
+ * `message.updated` 单独到达（重连错过 `session.next.prompted`、或事件顺序变化）时，
+ * 用户消息会进 `_messages` 却没有任何 part —— 而 starburst-agent 不为用户消息发 part
+ * 事件，历史合成（[mergeMessages]）又只在加载/轮询时跑。两者都不覆盖这条路径时，
+ * pending 记录已被对账清除，用户气泡就永久是空的（AI 回复照常显示）。
+ *
+ * 这里用事件自带的顶层 text 补一个文本 part（part id 与历史合成保持一致的
+ * `$id-text`，便于两条来源被 [org.hiylo.starburst.ui.screens.chat.dedupeUserMessageParts]
+ * 按内容折叠成一条）。已有文本 part 时不重复补。
+ */
+private fun EventReducer.synthesizeUserTextPart(event: SseEvent.MessageUpdated) {
+    val text = event.text?.takeIf { it.isNotBlank() } ?: return
+    val message = event.info
+    if (message !is Message.User) return
+    synchronized(deltaLock) {
+        val existing = _parts.value[message.id].orEmpty()
+        if (existing.any { it is Part.Text }) return
+        _parts.update { current ->
+            current + (message.id to (current[message.id].orEmpty() + Part.Text(
+                id = "${message.id}-text",
+                sessionId = message.sessionId,
+                messageId = message.id,
+                text = text,
+            )))
+        }
+    }
 }
 
 internal fun EventReducer.recordLastUserMessage(message: Message) {

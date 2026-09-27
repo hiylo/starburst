@@ -272,7 +272,12 @@ sealed class SseEvent {
 
     // Message events
     @Serializable
-    data class MessageUpdated(val info: Message) : SseEvent()
+    /**
+     * @param text V2 用户消息把正文放在顶层 `text`（`content` 恒空），不带 part。
+     *   starburst-agent 对用户消息**不发任何 part 事件**，故正文只能由此携带；
+     *   收到时若该消息还没有文本 part，reducer 会据此合成一个，避免用户气泡空着。
+     */
+    data class MessageUpdated(val info: Message, val text: String? = null) : SseEvent()
 
     @Serializable
     data class MessageRemoved(

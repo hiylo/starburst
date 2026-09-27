@@ -471,7 +471,13 @@ class SseClient @Inject constructor(
                 "message.updated" -> {
                     val infoObj = props["info"] as? JsonObject ?: return null
                     val message = parseMessage(enrichMessageInfo(infoObj, props)) ?: return null
-                    SseEvent.MessageUpdated(info = message)
+                    // 用户消息的正文在顶层 text（content 恒空），且 agent 不为用户消息发 part
+                    // 事件——把正文带上，由 reducer 在缺 part 时合成，否则这条路径单独到达时
+                    // 用户气泡会是空的（AI 回复照常显示，表现为「我发的消息不见了」）。
+                    val topText = infoObj["text"]
+                        ?.jsonPrimitive?.contentOrNull
+                        ?.takeIf { message is Message.User && it.isNotBlank() }
+                    SseEvent.MessageUpdated(info = message, text = topText)
                 }
 
                 "message.removed" -> {
