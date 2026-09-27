@@ -495,7 +495,7 @@ class ChatViewModel @Inject constructor(
                         val authoritativeParts = allParts[msg.id].orEmpty()
                         val rawParts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() }
                         ChatMessage(
-                            message = msg,
+                            message = msg.withAuthoringFallback(pending),
                             // 用户消息的同一个 part 会有 3 个不同 id 的副本（prompt/text/local），
                             // 按内容折叠；助手消息由 dedupeTurnParts 按 callID 归并。
                             parts = if (msg is Message.User) dedupeUserMessageParts(rawParts) else rawParts,
@@ -956,4 +956,24 @@ class ChatViewModel @Inject constructor(
         // （老会话累积会无界吃内存，让 app 内存水涨船高）。重新进入会话时会从服务器重新拉取。
         eventReducer.clearSessionHistory(sessionId)
     }
+}
+
+/**
+ * 权威消息缺 agent / 模型时，用发送时的 pending 记录回填。
+ *
+ * 气泡下方的「Agent 类型 + 模型名」取自 `Message.User.agent` / `.model`。部分后端
+ * （如 starburst-agent 早期版本）的用户消息不落这两个字段，权威消息一到就把乐观
+ * 消息里已有的值覆盖成空，那行元信息随之消失。此处按字段逐个回填（有值的不动），
+ * 使发送前后的显示保持一致。
+ */
+internal fun Message.withAuthoringFallback(pending: PendingPromptRecord?): Message {
+    if (pending == null) return this
+    if (this !is Message.User) return this
+    val needAgent = agent.isNullOrBlank()
+    val needModel = model == null
+    if (!needAgent && !needModel) return this
+    return copy(
+        agent = agent?.takeIf { it.isNotBlank() } ?: pending.agent,
+        model = model ?: pending.model?.let { Message.User.Model(providerId = it.providerId, modelId = it.modelId) },
+    )
 }
