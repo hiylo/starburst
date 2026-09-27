@@ -190,10 +190,16 @@ internal fun OpenProjectDialog(
         try { focusRequester.requestFocus() } catch (_: Exception) {}
     }
 
-    /** Shorten an absolute path by replacing home prefix with ~ */
+    /**
+     * Shorten an absolute path by replacing home prefix with `~`.
+     *
+     * 必须按 `home + "/"` 判断边界：原先用 `startsWith(home)`，`/home/hiylo-backup/x`
+     * 会被误判成 home 的子目录，折出 `~-backup/x` 这种越界路径。
+     */
     fun tildeReplace(path: String): String {
-        val home = homeDir ?: return path
-        return if (path.startsWith(home)) "~" + path.removePrefix(home) else path
+        val home = homeDir?.trimEnd('/') ?: return path
+        if (home.isEmpty()) return path
+        return if (path == home || path.startsWith("$home/")) "~" + path.removePrefix(home) else path
     }
 
     Dialog(

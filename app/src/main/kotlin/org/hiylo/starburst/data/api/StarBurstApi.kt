@@ -122,25 +122,50 @@ class StarBurstApi @Inject constructor(
 
     /**
      * 获取服务器路径（home 目录等）。
-     * V2 `GET /api/location`：真值源 1.18.30 返回 LocationInfo `{directory, workspaceID?, project}`，
-     * 从中派生 home；部分环境套 `{data:{directory,...}}` 信封，宽容解析。V2 无 `/path`，
-     * `home`/`directory` 取 location.directory，其余字段（state/config/worktree）V2 无等价，填空串。
+     *
+     * - `directory` 走 V2 `GET /api/location`（LocationInfo `{directory, workspaceID?, project}`，
+     *   部分环境套 `{data:{...}}` 信封，宽容解析）；
+     * - `home` 走 V1 `GET /path`（starburst-agent 与 opencode 都在这里返回 `home`）。
+     *
+     * 此前 V2 拿不到 home 就**拿 directory 顶替**，于是 `serverHomeDirectory` 变成工作区
+     * 目录，路径折叠（[org.hiylo.starburst.ui.screens.sessions.SessionPathFormatter.display]）
+     * 判定「目录 == home」把整条路径缩成一个 `~` —— 聊天顶栏只剩一个波浪号，信息全丢。
+     * 现在取不到真实 home 就**留空**：留空即不折叠，显示完整路径（信息多于错误的简写）。
      */
     suspend fun getServerPaths(conn: ServerConnection): ServerPaths {
-        val response = httpClient.get("${conn.baseUrl}/api/location") {
-            conn.authHeader?.let { header("Authorization", it) }
-        }
-        healthStatusException(response.status.value)?.let { throw it }
-        return try {
+        val location = runCatching {
+            val response = httpClient.get("${conn.baseUrl}/api/location") {
+                conn.authHeader?.let { header("Authorization", it) }
+            }
+            healthStatusException(response.status.value)?.let { throw it }
             val root = json.parseToJsonElement(response.bodyAsText()).jsonObject
             // 兼容 `{data:{...}}` 与顶层 LocationInfo 两种响应形状，directory 优先取信封内的值。
             val directoryElement = (root["data"] as? JsonObject)?.get("directory") ?: root["directory"]
-            val directory = directoryElement?.jsonPrimitive?.contentOrNull.orEmpty()
-            ServerPaths(home = directory, directory = directory)
-        } catch (e: Exception) {
-            Log.w(TAG, "getServerPaths: 解析 V2 /api/location 失败，返回空路径", e)
+            val homeElement = (root["data"] as? JsonObject)?.get("home") ?: root["home"]
+            ServerPaths(
+                home = homeElement?.jsonPrimitive?.contentOrNull.orEmpty(),
+                directory = directoryElement?.jsonPrimitive?.contentOrNull.orEmpty(),
+            )
+        }.getOrElse { e ->
+            Log.w(TAG, "getServerPaths: 解析 V2 /api/location 失败", e)
             ServerPaths()
         }
+        if (location.home.isNotBlank()) return location
+        // V2 的 LocationInfo 不含 home（starburst-agent 实测只有 directory/project），
+        // 回退 V1 /path 取真实 home；仍取不到就保持空串 → 上游不做 `~` 折叠。
+        val v1 = runCatching {
+            val response = httpClient.get("${conn.baseUrl}/path") {
+                conn.authHeader?.let { header("Authorization", it) }
+            }
+            if (!response.status.isSuccess()) return@runCatching null
+            json.parseToJsonElement(response.bodyAsText()).jsonObject
+        }.getOrNull() ?: return location
+        val v1Home = v1["home"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        val v1Dir = v1["directory"]?.jsonPrimitive?.contentOrNull.orEmpty()
+        return location.copy(
+            home = v1Home,
+            directory = location.directory.ifBlank { v1Dir },
+        )
     }
 
     // ============ Shared infrastructure helpers ============
