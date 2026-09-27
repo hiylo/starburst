@@ -493,9 +493,12 @@ class ChatViewModel @Inject constructor(
                     (visible.map { msg ->
                         val pending = pendingById[msg.id]
                         val authoritativeParts = allParts[msg.id].orEmpty()
+                        val rawParts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() }
                         ChatMessage(
                             message = msg,
-                            parts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() },
+                            // 用户消息的同一个 part 会有 3 个不同 id 的副本（prompt/text/local），
+                            // 按内容折叠；助手消息由 dedupeTurnParts 按 callID 归并。
+                            parts = if (msg is Message.User) dedupeUserMessageParts(rawParts) else rawParts,
                             delivery = pending?.let { deliveryFor(msg.id) },
                         )
                     } + optimisticMessages).sortedBy { it.message.time.created },

@@ -31,7 +31,7 @@ import org.hiylo.starburst.domain.model.ToolState
  * 3. **todowrite 任务计划卡**：一个回合内多次 `todowrite`（计划→更新）只保留最后一张，
  *    避免多张几乎相同的任务卡（与 `suppressRepeatedPatchCards` 同一思路）。
  *
- * 用户消息不参与（其 part 由 pending 乐观渲染与权威渲染二选一，不产生副本）。
+ * 用户消息不走本函数（见 [dedupeUserMessageParts]）。
  */
 internal fun dedupeTurnParts(messages: List<ChatMessage>): List<ChatMessage> {
     // 展平为 (消息序号, 消息内 part 序号, part)，供两趟算法定位。
@@ -110,4 +110,37 @@ private fun partTextLength(part: Part): Int = when (part) {
     is Part.Text -> part.text.length
     is Part.Reasoning -> part.text.length
     else -> 0
+}
+
+/**
+ * 折叠单条**用户**消息里内容重复的 part：修「自己发的话在气泡里显示两遍」。
+ *
+ * 同一个用户 part 会经三条路径进入本地状态，而三者 id 互不相同 ——
+ * `handleMessagePartUpdated` 只按 part id 归并，跨 id 的副本一律放过：
+ *
+ * | 来源 | part id |
+ * |---|---|
+ * | SSE `message.part.updated`（`handleNextPrompted`） | `msg_x-prompt` |
+ * | V2 `message.updated` 解析（content 空、用顶层 text 合成） | `msg_x-text` |
+ * | 发送时的乐观本地 part（`PendingPromptRecord.toLocalParts`） | `msg_x-local-0` |
+ *
+ * 后端只存一份，App 却按三个 id 各存一份，于是同一条消息的文本被渲染 2~3 遍
+ * （`groupChatTurns` 每条用户消息独立成 turn，turn 内不做去重）。
+ *
+ * 只对用户消息按「内容相同即重复」折叠：用户消息的每个 part 都是一次独立的用户输入，
+ * 不存在「模型故意把同一句话输出两遍」的情形，故按文本内容去重是安全的。
+ * 助手消息**不能**这么判——重复文本在助手输出里是合法内容，故助手消息仍走
+ * [dedupeTurnParts] 的 callID / part id 归并。
+ */
+internal fun dedupeUserMessageParts(parts: List<Part>): List<Part> {
+    if (parts.size < 2) return parts
+    val seenIds = HashSet<String>(parts.size)
+    val seenTexts = HashSet<String>()
+    val result = ArrayList<Part>(parts.size)
+    for (part in parts) {
+        if (!seenIds.add(part.id)) continue
+        if (part is Part.Text && !seenTexts.add(part.text)) continue
+        result += part
+    }
+    return result
 }

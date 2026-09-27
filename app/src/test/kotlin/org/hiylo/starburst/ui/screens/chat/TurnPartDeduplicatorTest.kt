@@ -134,4 +134,49 @@ class TurnPartDeduplicatorTest {
         )
         assertEquals(1, dedupeTurnParts(listOf(userMessage)).single().parts.size)
     }
+
+    /**
+     * 复现真机现象：手机发一条消息，气泡里同一句话显示两遍。
+     * 根因是同一个用户 part 落了三个不同 id 的副本（见 dedupeUserMessageParts 的表）。
+     */
+    @Test
+    fun `user text part from three id shapes collapses to one`() {
+        val text = "用 edit 工具把 difftest.txt 里的 line2 改成 line2-CHANGED，只改这一行。"
+        val parts = listOf(
+            textPart("msg_1-prompt", "msg_1", text),
+            textPart("msg_1-text", "msg_1", text),
+            textPart("msg_1-local-0", "msg_1", text),
+        )
+
+        val result = dedupeUserMessageParts(parts)
+
+        assertEquals(1, result.size)
+        assertEquals(text, (result[0] as Part.Text).text)
+    }
+
+    /** 用户一次输入多段文本是合法的（换行分段发送），内容不同不能被折叠掉。 */
+    @Test
+    fun `distinct user texts are preserved`() {
+        val parts = listOf(
+            textPart("msg_2-prompt", "msg_2", "第一段"),
+            textPart("msg_2-text", "msg_2", "第二段"),
+            textPart("msg_2-local-0", "msg_2", "第一段"),
+        )
+
+        val result = dedupeUserMessageParts(parts)
+
+        assertEquals(listOf("第一段", "第二段"), result.map { (it as Part.Text).text })
+    }
+
+    /** 助手消息里重复的文本是合法内容，不能被内容去重误伤。 */
+    @Test
+    fun `assistant repeated text is not collapsed by content`() {
+        val messages = listOf(
+            assistantMsg("asst_1", 1L, listOf(textPart("p1", "asst_1", "好的"), textPart("p2", "asst_1", "好的"))),
+        )
+
+        val result = dedupeTurnParts(messages)
+
+        assertEquals(2, result[0].parts.size)
+    }
 }
