@@ -10,11 +10,9 @@
 package org.hiylo.starburst.ui.screens.sessions
 
 import android.widget.Toast
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
@@ -98,7 +96,6 @@ import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSearchShape
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.SessionCardContent
-import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.appDialogContainerColor
 import org.hiylo.starburst.ui.components.appDialogElevation
@@ -262,7 +259,7 @@ internal fun OpenProjectDialog(
                         Icons.Default.Search,
                         contentDescription = null,
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     BasicTextField(
                         value = searchQuery,
@@ -280,7 +277,7 @@ internal fun OpenProjectDialog(
                                 Text(
                                     text = stringResource(R.string.sessions_search_folders),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                             innerTextField()
@@ -291,7 +288,7 @@ internal fun OpenProjectDialog(
                             Icon(
                                 Icons.Default.Close,
                                 contentDescription = stringResource(R.string.chat_clear),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     }
@@ -328,7 +325,7 @@ internal fun OpenProjectDialog(
                         Text(
                             text = tildeReplace(currentDir ?: "/"),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -361,7 +358,7 @@ internal fun OpenProjectDialog(
                                     Text(
                                         text = stringResource(R.string.sessions_no_folders),
                                         style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             } else {
@@ -450,7 +447,7 @@ internal fun OpenProjectDialog(
                                             Text(
                                                 text = stringResource(R.string.sessions_empty_directory),
                                                 style = MaterialTheme.typography.bodyMedium,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             )
                                         }
                                     }
@@ -688,12 +685,12 @@ private fun DirectoryRow(
             Icons.Default.Folder,
             contentDescription = null,
             modifier = Modifier.size(18.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
             text = buildAnnotatedString {
                 if (parent.isNotEmpty()) {
-                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))) {
+                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                         append(parent)
                     }
                 }
@@ -703,7 +700,7 @@ private fun DirectoryRow(
                 )) {
                     append(leaf)
                 }
-                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))) {
+                withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                     append(trailing)
                 }
             },
@@ -720,7 +717,7 @@ private fun DirectoryRow(
                         Icons.Default.ChevronRight,
                         contentDescription = stringResource(R.string.open),
                         modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -765,7 +762,7 @@ private fun SavedPathRow(
                 Icons.Default.Close,
                 contentDescription = stringResource(R.string.sessions_remove_saved_path),
                 modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

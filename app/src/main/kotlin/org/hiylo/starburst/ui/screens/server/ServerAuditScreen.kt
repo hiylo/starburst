@@ -52,6 +52,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendAuditEntry
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 /** 把后端 RFC3339 时间字符串裁剪为可读的 `yyyy-MM-dd HH:mm`。 */
@@ -144,7 +145,7 @@ private fun AuditEntryCard(entry: BackendAuditEntry, isAmoled: Boolean) {
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {

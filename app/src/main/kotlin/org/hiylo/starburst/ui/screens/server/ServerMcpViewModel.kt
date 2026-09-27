@@ -14,7 +14,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.McpStatus
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.connectMcp
 import org.hiylo.starburst.data.api.disconnectMcp
@@ -53,7 +53,7 @@ internal fun mcpItems(statuses: Map<String, McpStatus>): List<McpServerItem> = s
 @HiltViewModel
 class ServerMcpViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
 ) : ViewModel() {
     private val conn = ServerConnection.from(
         savedStateHandle.get<String>("serverUrl").orEmpty(),

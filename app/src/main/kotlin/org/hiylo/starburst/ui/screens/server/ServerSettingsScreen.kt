@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Hub
+import androidx.compose.material.icons.filled.InstallDesktop
 import androidx.compose.material.icons.filled.DeviceHub
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
@@ -49,13 +50,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -142,12 +141,13 @@ fun ServerSettingsScreen(
                 onClick = onOpenModels,
             )
 
-                        ServerNavCard(
-                icon = Icons.Default.DeviceHub,
-                title = stringResource(R.string.server_settings_mcp),
-                subtitle = stringResource(R.string.server_settings_mcp_desc),
-                onClick = onOpenMcp,
-            )
+            // MCP：V1-only 端点，V2 后端不支持，暂隐藏。
+            // ServerNavCard(
+            //     icon = Icons.Default.DeviceHub,
+            //     title = stringResource(R.string.server_settings_mcp),
+            //     subtitle = stringResource(R.string.server_settings_mcp_desc),
+            //     onClick = onOpenMcp,
+            // )
 
             ServerNavCard(
                 icon = Icons.Default.Schema,
@@ -554,7 +554,7 @@ private fun BackendStatusCard(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(Icons.Default.DeviceHub, contentDescription = null)
+                            Icon(Icons.Default.InstallDesktop, contentDescription = null)
                             Column(
                                 modifier = Modifier
                                     .weight(1f)

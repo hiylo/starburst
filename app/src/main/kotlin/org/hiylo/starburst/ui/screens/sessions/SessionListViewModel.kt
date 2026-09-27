@@ -18,7 +18,9 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import org.hiylo.starburst.data.api.FileNode
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
+import org.hiylo.starburst.data.api.PermissionRequest
+import org.hiylo.starburst.data.api.QuestionRequest
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.createSession
@@ -28,13 +30,14 @@ import org.hiylo.starburst.data.api.findFiles
 import org.hiylo.starburst.data.api.getProviders
 import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listDirectory
+import org.hiylo.starburst.data.api.listPendingPermissions
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.runShellCommand
-import org.hiylo.starburst.data.api.summarizeSession
+import org.hiylo.starburst.data.api.compactSessionV2
 import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.repository.BackendRepository
 import org.hiylo.starburst.data.repository.EventReducer
@@ -127,15 +130,8 @@ internal fun buildProjectSessionGroups(
     branches: Map<DirectoryScope, String?>,
     serverId: String,
 ): List<ProjectSessionGroup> {
-    fun normalized(path: String) = path.trimEnd('/').ifEmpty { "/" }
-    fun displayPath(path: String): String {
-        val dir = normalized(path)
-        return if (!homeDir.isNullOrBlank() && (dir == homeDir || dir.startsWith("$homeDir/"))) {
-            "~" + dir.removePrefix(homeDir)
-        } else {
-            dir
-        }
-    }
+    fun normalized(path: String) = SessionPathFormatter.normalize(path)
+    fun displayPath(path: String) = SessionPathFormatter.display(path, homeDir)
     fun projectFor(session: Session): Project? {
         projects.firstOrNull { it.id.isNotBlank() && it.id == session.projectId }?.let { return it }
         val directory = normalized(session.directory)
@@ -237,7 +233,7 @@ internal fun parseDirectoryPathQuery(query: String, homeDirectory: String): Dire
 class SessionListViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val eventReducer: EventReducer,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val settingsRepository: SettingsRepository,
     private val connectionStateRepository: ServerConnectionStateRepository,
     private val serverRepository: ServerRepository,
@@ -257,7 +253,10 @@ class SessionListViewModel @Inject constructor(
     private val _backendReady = MutableStateFlow(false)
     val backendReady: StateFlow<Boolean> = _backendReady.asStateFlow()
 
-    private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
+    /** 实际请求用连接：优先用连接服务解析后的连接（SSH 隧道 / 同主机直连型后端的 Bearer 版）。 */
+    private val conn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId]
+            ?: ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
     val groupSessionsByProject: StateFlow<Boolean> = settingsRepository.groupSessionsByProject.stateIn(
         viewModelScope,
@@ -345,10 +344,36 @@ class SessionListViewModel @Inject constructor(
         emptySet(),
     )
 
+    /** 周期性从服务器 REST 拉取的待决授权快照（有待用户授权/拒绝的权限请求的 sessionId 集合）。 */
+    private val _pendingPermissionSessionIds = MutableStateFlow<Set<String>>(emptySet())
+
+    /**
+     * 当前服务器有待决授权（待用户批准/拒绝工具权限请求）的会话 id 集合。
+     * 等待授权期间服务端仍上报 busy，仅靠状态无法与「处理中」区分，故独立跟踪：
+     * REST 快照为权威来源，另以 SSE 实时 [PendingInteraction.Permission] 兜底，保证授权后徽标即时消失。
+     */
+    val pendingPermissionSessionIds: StateFlow<Set<String>> = combine(
+        eventReducer.pendingInteractions,
+        _pendingPermissionSessionIds,
+    ) { interactions, restSnapshot ->
+        val realtime = interactions
+            .filterIsInstance<PendingInteraction.Permission>()
+            .mapTo(mutableSetOf<String>()) { it.sessionId }
+        realtime += restSnapshot
+        realtime
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptySet(),
+    )
+
     private val _error = MutableStateFlow<String?>(null)
     private val _isLoading = MutableStateFlow(true)
     private val _projects = MutableStateFlow<List<Project>>(emptyList())
     private val _homeDir = MutableStateFlow<String?>(null)
+
+    /** 服务器 home 目录（供置顶排序弹窗等展示位复用与列表一致的路径折叠规则）。 */
+    val homeDirectory: String? get() = _homeDir.value
     private val _selectedIds = MutableStateFlow<Set<String>>(emptySet())
     private val _navigateToSession = MutableSharedFlow<String>(extraBufferCapacity = 1)
     val navigateToSession: SharedFlow<String> = _navigateToSession.asSharedFlow()
@@ -374,6 +399,7 @@ class SessionListViewModel @Inject constructor(
             serverRepository.servers,
             connectionStateRepository.connectedServerIds,
             pendingQuestionSessionIds,
+            pendingPermissionSessionIds,
             eventReducer.sessionErrors,
         )
     ) { values ->
@@ -395,7 +421,8 @@ class SessionListViewModel @Inject constructor(
         val servers = values[15] as List<ServerConfig>
         val connectedServerIds = values[16] as Set<String>
         val pendingQuestionIds = values[17] as Set<String>
-        val sessionErrors = values[18] as Map<String, Message.Assistant.ErrorInfo>
+        val pendingPermissionIds = values[18] as Set<String>
+        val sessionErrors = values[19] as Map<String, Message.Assistant.ErrorInfo>
         val favoriteOrder = favoriteIds.withIndex().associate { (index, id) -> id to index }
         val pinnedOrder = pinnedIds.withIndex().associate { (index, id) -> id to index }
         val categoriesById = categories.associateBy { it.id }
@@ -408,10 +435,13 @@ class SessionListViewModel @Inject constructor(
         val childBusyByParent = mutableMapOf<String, SessionStatus>()
         // Sub-agent 有待决问题时，父会话同样标记为 Question（子会话被过滤不出现在列表里）。
         val parentWithPendingQuestion = mutableSetOf<String>()
+        // Sub-agent 有待决授权时，父会话同样标记为 Permission（等待授权期间服务端仍上报 busy）。
+        val parentWithPendingPermission = mutableSetOf<String>()
         for (child in allSessions) {
             val parentId = child.parentId ?: continue
             if (child.id !in serverSessionIds) continue
             if (child.id in pendingQuestionIds) parentWithPendingQuestion += parentId
+            if (child.id in pendingPermissionIds) parentWithPendingPermission += parentId
             val childStatus = statuses[child.id] ?: continue
             if (childStatus is SessionStatus.Busy || childStatus is SessionStatus.Retry) {
                 childBusyByParent[parentId] = childStatus
@@ -424,11 +454,16 @@ class SessionListViewModel @Inject constructor(
             .map { session ->
                 SessionItem(
                     session = session,
-                    status = if (session.id in pendingQuestionIds || session.id in parentWithPendingQuestion) {
-                        // 有待决问题优先：等待用户回答，优先级高于处理中/重试。
-                        SessionStatus.Question
-                    } else {
-                        when (val self = statuses[session.id]) {
+                    status = when {
+                        session.id in pendingPermissionIds || session.id in parentWithPendingPermission -> {
+                            // 有待决授权最高优先：等待用户批准/拒绝，服务端等待期间仍是 busy。
+                            SessionStatus.Permission
+                        }
+                        session.id in pendingQuestionIds || session.id in parentWithPendingQuestion -> {
+                            // 有待决问题优先：等待用户回答，优先级高于处理中/重试。
+                            SessionStatus.Question
+                        }
+                        else -> when (val self = statuses[session.id]) {
                             // 父会话自身正在忙/重试 → 直接用它。
                             is SessionStatus.Busy, is SessionStatus.Retry -> self
                             // 否则子会话忙 → 父会话视为忙（子会话被过滤不出现在列表里）。
@@ -497,7 +532,7 @@ class SessionListViewModel @Inject constructor(
                 val connected = connectionStateRepository.connectedServerIds.value.contains(serverId)
                 delay(if (connected) STATUS_POLL_INTERVAL_CONNECTED_MS else STATUS_POLL_INTERVAL_DISCONNECTED_MS)
                 refreshSessionStatuses()
-                refreshPendingQuestions()
+                refreshPendingInteractions()
             }
         }
     }
@@ -585,8 +620,10 @@ class SessionListViewModel @Inject constructor(
             _isLoading.value = true
             _error.value = null
             try {
-                // Load all projects first (for grouping/status refresh)
-                val projects = api.listProjects(conn)
+                // Load all projects first (for grouping/status refresh).
+                // V2 backend has no /project endpoint — wrap in runCatching so
+                // session listing survives even when projects fail to load.
+                val projects = runCatching { api.listProjects(conn) }.getOrDefault(emptyList())
                 _projects.value = projects
                 if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${projects.size} projects")
 
@@ -596,7 +633,7 @@ class SessionListViewModel @Inject constructor(
                 if (BuildConfig.DEBUG) Log.d(TAG, "Loaded ${sessions.size} sessions for server $serverId")
 
                 refreshSessionStatuses(projects)
-                refreshPendingQuestions()
+                refreshPendingInteractions()
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e(TAG, "Failed to load sessions", e)
@@ -627,7 +664,7 @@ class SessionListViewModel @Inject constructor(
     /**
      * 服务器 /session/status 只认 query 参数 `?directory=` 来路由到对应 workspace（不认
      * x-starburst-directory header，也不支持无 directory 的全量查询）。这里按会话目录分组聚合查询，
-     * 与 refreshPendingQuestions 的口径一致。
+     * 与 refreshPendingInteractions 的口径一致。
      */
     private suspend fun fetchSessionStatuses(serverSessionIds: Set<String>): Map<String, SessionStatus> {
         val directories = eventReducer.sessions.value.asSequence()
@@ -665,10 +702,10 @@ class SessionListViewModel @Inject constructor(
         }
     }
 
-    /** 拉取当前服务器全部待决问题，按 sessionId 分组后刷新「待回答」会话集合。 */
-    private suspend fun refreshPendingQuestions() {
+    /** 拉取当前服务器全部待决问题与待决授权，按 sessionId 分组后刷新「待回答 / 待授权」会话集合。 */
+    private suspend fun refreshPendingInteractions() {
         try {
-            // 服务器 /question 按 query 参数 directory 过滤，按会话目录分组聚合查询。
+            // /question 与 /permission 都按 query 参数 directory 过滤，按会话目录分组并发拉取。
             val serverSessionIds = eventReducer.serverSessions.value[serverId].orEmpty()
             val directories = eventReducer.sessions.value.asSequence()
                 .filter { it.id in serverSessionIds }
@@ -676,28 +713,36 @@ class SessionListViewModel @Inject constructor(
                 .filter { it.isNotBlank() }
                 .distinct()
                 .toList()
-            val requests = coroutineScope {
-                directories.map { dir ->
+            val (questions, permissions) = coroutineScope {
+                val deferred = directories.map { dir ->
                     async {
-                        runCatching { api.listPendingQuestions(conn, directory = dir) }
-                            .getOrElse { e ->
-                                if (e is CancellationException) throw e
-                                if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
-                                emptyList()
+                        runCatching {
+                            val q = api.listPendingQuestions(conn, directory = dir)
+                            val p = api.listPendingPermissions(conn, directory = dir)
+                            q to p
+                        }.getOrElse { e ->
+                            if (e is CancellationException) throw e
+                            if (BuildConfig.DEBUG) {
+                                Log.d(TAG, "Failed to load pending interactions for $dir: ${e.message}")
                             }
+                            emptyList<QuestionRequest>() to emptyList<PermissionRequest>()
+                        }
                     }
-                }.awaitAll().flatten()
+                }.awaitAll()
+                deferred.map { it.first }.flatten() to deferred.map { it.second }.flatten()
             }
-            _pendingQuestionSessionIds.value = requests.mapTo(mutableSetOf<String>()) { it.sessionId }
+            _pendingQuestionSessionIds.value = questions.mapTo(mutableSetOf<String>()) { it.sessionId }
+            _pendingPermissionSessionIds.value = permissions.mapTo(mutableSetOf<String>()) { it.sessionId }
             if (BuildConfig.DEBUG) {
                 Log.d(
                     TAG,
-                    "Pending questions: ${requests.size} requests across ${_pendingQuestionSessionIds.value.size} sessions",
+                    "Pending interactions: ${questions.size} questions across ${_pendingQuestionSessionIds.value.size} " +
+                        "sessions, ${permissions.size} permissions across ${_pendingPermissionSessionIds.value.size} sessions",
                 )
             }
         } catch (e: Exception) {
             if (e is CancellationException) throw e
-            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to refresh pending questions: ${e::class.java.simpleName}")
+            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to refresh pending interactions: ${e::class.java.simpleName}")
         }
     }
 
@@ -862,7 +907,6 @@ class SessionListViewModel @Inject constructor(
             val ids = _selectedIds.value
             if (ids.isEmpty()) return@launch
             try {
-                val defaults = runCatching { api.getProviders(conn).default }.getOrDefault(emptyMap())
                 val sessionsById = uiState.value.sessionGroups
                     .flatMap { it.sessions }
                     .associateBy { it.session.id }
@@ -870,19 +914,10 @@ class SessionListViewModel @Inject constructor(
                     ids.map { id ->
                         async {
                             val session = sessionsById[id]?.session
-                            val providerId = session?.model?.providerId
-                                ?.takeIf { it.isNotBlank() }
-                                ?: defaults.entries.firstOrNull()?.key
-                            val modelId = session?.model?.id
-                                ?.takeIf { it.isNotBlank() }
-                                ?: defaults.entries.firstOrNull()?.value
-                            if (providerId == null || modelId == null) {
-                                id to false
-                            } else {
-                                id to runCatching {
-                                    api.summarizeSession(conn, id, providerId, modelId)
-                                }.getOrDefault(false)
-                            }
+                            // V2 压缩不需要 provider/model（agent 自带 LLM），直接走 /compact。
+                            id to runCatching {
+                                api.compactSessionV2(conn, id, directory = session?.directory)
+                            }.getOrDefault(false)
                         }
                     }.awaitAll()
                 }

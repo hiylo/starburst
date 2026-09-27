@@ -49,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +64,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.Skill
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -152,6 +155,7 @@ fun SkillsScreen(
 private fun SkillCard(skill: Skill) {
     val isAmoled = isAmoledTheme()
     var expanded by remember { mutableStateOf(false) }
+    val expandStateDescription = stringResource(if (expanded) R.string.chat_collapse else R.string.chat_expand)
 
     Card(
         shape = AppCardShape,
@@ -160,7 +164,9 @@ private fun SkillCard(skill: Skill) {
         ),
         border = appAmoledBorder(0.65f),
         modifier = Modifier
+            .cartoonChrome(AppCardShape)
             .fillMaxWidth()
+            .semantics { stateDescription = expandStateDescription }
             .clickable { expanded = !expanded },
     ) {
         Column(modifier = Modifier.padding(14.dp)) {

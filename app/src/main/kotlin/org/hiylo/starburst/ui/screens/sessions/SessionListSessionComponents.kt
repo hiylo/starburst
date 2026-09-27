@@ -187,7 +187,7 @@ internal fun NewSessionQuickDialog(
                                 Text(
                                     text = entry.directory.trimEnd('/'),
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis
                                 )
@@ -195,7 +195,7 @@ internal fun NewSessionQuickDialog(
                             Text(
                                 text = "${entry.count}",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
@@ -220,7 +220,7 @@ internal fun NewSessionQuickDialog(
                         Icons.Default.FolderOpen,
                         contentDescription = null,
                         modifier = Modifier.size(20.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
                         text = stringResource(R.string.sessions_open_other_project),
@@ -239,6 +239,7 @@ internal fun PinnedSortDialog(
     pinnedSessions: List<SessionItem>,
     onReorder: (List<String>) -> Unit,
     onDismiss: () -> Unit,
+    homeDir: String? = null,
 ) {
     val isAmoled = isAmoledTheme()
     val haptic = LocalHapticFeedback.current
@@ -341,7 +342,8 @@ internal fun PinnedSortDialog(
                                     )
                                     if (item.session.directory.isNotBlank()) {
                                         Text(
-                                            text = item.session.directory,
+                                            // 与会话列表、聊天顶栏统一：home 前缀折叠为 `~/...`。
+                                            text = SessionPathFormatter.display(item.session.directory, homeDir),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
@@ -352,7 +354,7 @@ internal fun PinnedSortDialog(
                                 Icon(
                                     Icons.Default.Sort,
                                     contentDescription = stringResource(R.string.session_pin_sort),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }

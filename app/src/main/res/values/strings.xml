@@ -19,7 +19,7 @@
     <string name="home_server_auth_failed">Authentication failed. Check the server username and password.</string>
     <string name="home_server_health_http_error">Server health check failed (HTTP %1$d).</string>
     <string name="home_server_not_responding">Server is not responding.</string>
-    <string name="server_settings_oauth_proxy_hint">The local OpenCode server is running without a proxy. If this provider is unavailable on your network, configure a proxy in Local server launch options, then restart the server.</string>
+    <string name="server_settings_oauth_proxy_hint">The local server is running without a proxy. If this provider is unavailable on your network, configure a proxy in Local server launch options, then restart the server.</string>
     <string name="diagnostics_title">Diagnostics</string>
     <string name="diagnostics_settings_desc">View and share privacy-safe application logs without ADB</string>
     <string name="diagnostics_empty">No diagnostic events yet</string>
@@ -50,9 +50,9 @@
     
     <!-- Server Management -->
     <string name="server_name">Server Name</string>
-    <string name="server_name_hint">My OpenCode Server</string>
+    <string name="server_name_hint">My Server</string>
     <string name="server_username">Username</string>
-    <string name="server_username_hint">opencode</string>
+    <string name="server_username_hint">starburst</string>
     <string name="server_password">Password</string>
     <string name="server_save">Save</string>
     <string name="server_cancel">Cancel</string>
@@ -105,6 +105,7 @@
     <string name="sessions_delete_selected_confirm">Delete %1$d sessions? This cannot be undone.</string>
     <string name="session_status_busy">Working…</string>
     <string name="session_status_pending_question">Awaiting selection</string>
+    <string name="session_status_pending_permission">Authorization needed</string>
     <string name="session_rename">Rename Session</string>
     <string name="session_copy_id">Copy session ID</string>
     <string name="session_favorite_add">Add to favorites</string>
@@ -151,7 +152,7 @@
     <string name="chat_voice_release_to_send">Release to send</string>
     <string name="chat_voice_slide_up_cancel">Slide up to cancel</string>
     <string name="chat_stop">Stop</string>
-    <string name="chat_empty">Start a conversation with OpenCode</string>
+    <string name="chat_empty">Start a conversation with your server</string>
     <string name="chat_server_disconnected">Server disconnected</string>
     <string name="chat_copy">Copy</string>
     <string name="chat_revert">Revert</string>
@@ -188,7 +189,7 @@
     <string name="chat_attach_device_file">File from device</string>
     <string name="chat_attach_device_file_hint">Images, PDF, text, code, and configuration files</string>
     <string name="chat_attach_project_file">File from project</string>
-    <string name="chat_attach_project_file_hint">Reference a file available on the OpenCode server</string>
+    <string name="chat_attach_project_file_hint">Reference a file available on the server</string>
     <string name="chat_file_attachment_rejected">%1$d file(s) were unsupported or exceeded the size limit</string>
     <string name="chat_remove">Remove</string>
     <string name="chat_clear">Clear</string>
@@ -538,7 +539,7 @@
     <string name="server_mcp_title">MCP servers</string>
     <string name="server_mcp_refresh">Refresh MCP servers</string>
     <string name="server_mcp_empty">No MCP servers configured</string>
-    <string name="server_mcp_empty_desc">Add MCP servers to the OpenCode server configuration, then refresh this screen.</string>
+    <string name="server_mcp_empty_desc">Add MCP servers to the server configuration, then refresh this screen.</string>
     <string name="server_mcp_connect">Connect</string>
     <string name="server_mcp_disconnect">Disconnect</string>
     <string name="server_mcp_authenticate">Authenticate</string>
@@ -581,13 +582,13 @@
     
     <!-- Notifications -->
     <string name="notification_channel_connection">StarBurst Connection</string>
-    <string name="notification_channel_connection_desc">Persistent connection to OpenCode server</string>
+    <string name="notification_channel_connection_desc">Persistent connection to server</string>
     <string name="notification_channel_tasks">Task Notifications</string>
-    <string name="notification_channel_tasks_desc">Notifications when OpenCode tasks are completed</string>
+    <string name="notification_channel_tasks_desc">Notifications when tasks are completed</string>
     <string name="notification_channel_tasks_silent">Task Notifications (Silent)</string>
-    <string name="notification_channel_tasks_silent_desc">Silent notifications when OpenCode tasks are completed</string>
+    <string name="notification_channel_tasks_silent_desc">Silent notifications when tasks are completed</string>
     <string name="notification_channel_permissions">Permission Requests</string>
-    <string name="notification_channel_permissions_desc">Notifications when OpenCode needs permissions</string>
+    <string name="notification_channel_permissions_desc">Notifications when permissions are required</string>
     <string name="notification_connected">Connected to %1$s</string>
     <string name="notification_connecting">Connecting to %1$s…</string>
     <string name="notification_connected_count">Connected to %1$d of %2$d servers</string>
@@ -668,11 +669,18 @@
     <string name="shared_session_role_user">You</string>
     <string name="shared_session_role_assistant">Assistant</string>
     <string name="menu_rename_session">Rename session</string>
+    <string name="menu_open_shared_session">Open shared session…</string>
+    <string name="open_shared_session_title">Open shared session</string>
+    <string name="open_shared_session_hint">Paste share link or ID</string>
+    <string name="open_shared_session_open">Open</string>
+    <string name="open_shared_session_cancel">Cancel</string>
+    <string name="open_shared_session_invalid">Invalid share link or ID</string>
     <string name="menu_view_changes">View changes (%1$d)</string>
     <string name="session_changes_title">Session changes</string>
     <string name="session_changes_empty">No file changes in this session</string>
     <string name="session_changes_before">Before</string>
     <string name="session_changes_after">After</string>
+    <string name="session_changes_patch">Patch</string>
     <string name="menu_export_session">Export session</string>
     <string name="chat_session_exported">Session exported</string>
     <string name="chat_session_export_failed">Failed to export session</string>
@@ -741,14 +749,12 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <!-- About Screen -->
     <string name="about_title">About</string>
     <string name="about_version">Version %s</string>
-    <string name="about_description">Android client for OpenCode servers</string>
-    <string name="about_unofficial">This is an unofficial community project, not affiliated with the OpenCode team.</string>
-    <string name="about_github">GitHub</string>
-    <string name="about_github_url">https://github.com/hiylo/starburst</string>
-    <string name="about_opencode">OpenCode</string>
-    <string name="about_opencode_url">https://github.com/anomalyco/opencode</string>
-    <string name="about_license">License</string>
-    <string name="about_license_value">MIT</string>
+    <string name="about_description">AI-powered mobile development companion</string>
+    <string name="about_company">Company</string>
+    <string name="about_contact">Contact</string>
+    <string name="about_tech_stack">Technology</string>
+    <string name="about_copyright">Copyright © 2016–Present Clouds Studio Holding Limited.\nAll rights reserved.</string>
+
     <string name="about_check_updates">Check for updates</string>
     <string name="about_check_updates_desc">Check GitHub for a newer release</string>
 
@@ -842,7 +848,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="server_mgmt_restart">Restart server</string>
     <string name="server_mgmt_restarting">Restarting…</string>
     <string name="server_mgmt_restart_confirm_title">Restart server?</string>
-    <string name="server_mgmt_restart_confirm_message">This will restart the OpenCode server process. Active sessions may be interrupted.</string>
+    <string name="server_mgmt_restart_confirm_message">This will restart the server process. Active sessions may be interrupted.</string>
     <string name="server_mgmt_confirm">Confirm</string>
     <string name="server_mgmt_refresh">Refresh</string>
     <string name="chat_regenerate">Regenerate</string>
@@ -1009,8 +1015,8 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="chat_bookmark">Bookmark</string>
     <string name="menu_view_share">View share</string>
     <string name="menu_copy_share_link">Copy share link</string>
-    <string name="server_mgmt_process_cpu">opencode CPU</string>
-    <string name="server_mgmt_process_memory">opencode Memory</string>
+    <string name="server_mgmt_process_cpu">Server CPU</string>
+    <string name="server_mgmt_process_memory">Server Memory</string>
     <string name="confirm">Confirm</string>
     <string name="server_settings_rules">Automation rules</string>
     <string name="server_settings_rules_desc">Scheduled / git / webhook triggered agent tasks</string>
@@ -1080,6 +1086,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="workbench_decision_ai_reply">Latest AI reply</string>
     <string name="workbench_decision_no_reply">This session has no AI reply yet</string>
     <string name="workbench_decision_questions">Pending questions</string>
+    <string name="workbench_decision_permissions">Pending approvals</string>
     <string name="workbench_quick_reply_hint">Quick reply…</string>
     <string name="workbench_panel_processing">Working…</string>
     <string name="workbench_collapse_all">Collapse all</string>
@@ -1099,8 +1106,15 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="workbench_menu_unpin">Unpin</string>
     <string name="workbench_filter_all">All</string>
     <string name="workbench_filter_question">To answer</string>
+    <string name="workbench_filter_permission">To approve</string>
     <string name="workbench_filter_busy">Working</string>
     <string name="workbench_filter_idle">Idle</string>
+    <string name="workbench_filter_error">Error</string>
+    <string name="workbench_context_label">Context</string>
+    <string name="workbench_panel_tool">Tool</string>
+    <string name="workbench_panel_file">File</string>
+    <string name="workbench_panel_tool_running">running</string>
+    <string name="workbench_panel_tool_error">error</string>
     <string name="workbench_filter_empty">No sessions match the current filter</string>
     <string name="workbench_quick_reply_sent">Quick reply sent</string>
     <string name="workbench_quick_reply_failed">Failed to send quick reply</string>
@@ -1112,6 +1126,16 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="workbench_delete_session_failed">Failed to delete session</string>
     <string name="workbench_error_resolve_conn">Could not resolve server connection</string>
     <string name="workbench_error_sessions">Failed to load session list</string>
+    <string name="workbench_error_unknown">An error occurred</string>
+    <string name="workbench_view_all">View all messages</string>
+    <string name="workbench_view_all_collapse">Collapse</string>
+    <string name="workbench_retry">Retry</string>
+    <string name="workbench_save_as_template">Save as template</string>
+    <string name="workbench_saved_template">Saved as template</string>
+    <string name="workbench_saved_template_removed">Template removed</string>
+    <string name="workbench_insert_template">Insert template</string>
+    <string name="workbench_pinned_header">Pinned</string>
+    <string name="workbench_others_header">Sessions</string>
     <string name="test_intel">Test Intelligence</string>
     <string name="test_intel_enter">Test Intelligence</string>
     <string name="test_intel_project_title">Project detail</string>
@@ -1271,6 +1295,7 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="kb_ingest_file">File</string>
     <string name="kb_ingest_no_content">Enter a name and content</string>
     <string name="kb_ingest_failed">Ingest failed</string>
+    <string name="kb_ingest_failed_detail">Ingest failed: %1$s (%2$s)</string>
     <string name="kb_doc_name">Document name</string>
     <string name="kb_doc_content">Content</string>
     <string name="kb_doc_content_hint">Paste text or markdown to ingest</string>
@@ -1348,4 +1373,9 @@ Tokens: ~%4$d -&gt; ~%5$d</string>
     <string name="chat_kb_upload_progress">Uploading %1$d/%2$d</string>
     <string name="chat_kb_upload_done">Uploaded %1$d documents</string>
     <string name="chat_kb_upload_failed">Upload failed, %1$d of %2$d documents failed</string>
+    <string name="task_kind_test_run">Test run</string>
+    <string name="task_kind_doc_generate">Document generation</string>
+    <string name="task_kind_ai_suggest">AI suggestion</string>
+    <string name="task_kind_intel_run">Test intelligence run</string>
+    <string name="task_kind_plan">Multi-step plan</string>
 </resources>

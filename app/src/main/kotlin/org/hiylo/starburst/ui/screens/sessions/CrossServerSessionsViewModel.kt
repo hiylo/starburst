@@ -30,6 +30,7 @@ import org.hiylo.starburst.data.repository.setCrossServerFavoriteOrderItem
 import org.hiylo.starburst.data.repository.setCrossServerFavoriteOrder
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.FavoriteSessionSnapshot
+import org.hiylo.starburst.domain.model.PendingInteraction
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionCategory
 import org.hiylo.starburst.domain.model.SessionStatus
@@ -94,13 +95,30 @@ class CrossServerSessionsViewModel @Inject constructor(
         }
 
     private val sourceState = combine(
-        serverRepository.servers,
-        eventReducer.sessions,
-        eventReducer.serverSessions,
-        eventReducer.sessionStatuses,
-        settingsRepository.sessionCategories,
-    ) { servers, sessions, serverSessions, statuses, categories ->
-        SourceState(servers, sessions, serverSessions, statuses, categories)
+        listOf(
+            serverRepository.servers,
+            eventReducer.sessions,
+            eventReducer.serverSessions,
+            eventReducer.sessionStatuses,
+            eventReducer.pendingInteractions,
+            settingsRepository.sessionCategories,
+        )
+    ) { values ->
+        @Suppress("UNCHECKED_CAST")
+        val pendingInteractions = values[4] as List<PendingInteraction>
+        SourceState(
+            servers = values[0] as List<ServerConfig>,
+            sessions = values[1] as List<Session>,
+            serverSessions = values[2] as Map<String, Set<String>>,
+            statuses = values[3] as Map<String, SessionStatus>,
+            pendingQuestionSessionIds = pendingInteractions
+                .filterIsInstance<PendingInteraction.Question>()
+                .mapTo(mutableSetOf<String>()) { it.sessionId },
+            pendingPermissionSessionIds = pendingInteractions
+                .filterIsInstance<PendingInteraction.Permission>()
+                .mapTo(mutableSetOf<String>()) { it.sessionId },
+            categories = values[5] as List<SessionCategory>,
+        )
     }
 
     private val favoriteOrder = settingsRepository.crossServerFavoriteOrder.stateIn(
@@ -219,6 +237,10 @@ internal data class SourceState(
     val sessions: List<Session>,
     val serverSessions: Map<String, Set<String>>,
     val statuses: Map<String, SessionStatus>,
+    /** 有待决问题（待用户回答）的会话 id 集合，跨全部服务器。 */
+    val pendingQuestionSessionIds: Set<String> = emptySet(),
+    /** 有待决授权（待用户批准/拒绝权限请求）的会话 id 集合，跨全部服务器。 */
+    val pendingPermissionSessionIds: Set<String> = emptySet(),
     val categories: List<SessionCategory>,
 )
 
@@ -232,11 +254,14 @@ internal fun buildCrossServerSessionsState(
     val sessionsById = source.sessions.associateBy(Session::id)
     val categoriesById = source.categories.associateBy(SessionCategory::id)
     val serverIndices = source.servers.withIndex().associate { it.value.id to it.index }
-    // 子会话（subagent）忙/重试时父会话在列表中显示「处理中」，与
-    // SessionListViewModel / WorkbenchViewModel 的口径一致（子会话本身不出现在列表里）。
+    // 子会话（subagent）忙/重试/待决问题/待决授权时父会话在列表中显示对应状态（子会话本身不出现在列表里）。
     val childBusyByParent = mutableMapOf<String, SessionStatus>()
+    val parentWithPendingQuestion = mutableSetOf<String>()
+    val parentWithPendingPermission = mutableSetOf<String>()
     for (child in source.sessions) {
         val parentId = child.parentId ?: continue
+        if (child.id in source.pendingQuestionSessionIds) parentWithPendingQuestion += parentId
+        if (child.id in source.pendingPermissionSessionIds) parentWithPendingPermission += parentId
         val childStatus = source.statuses[child.id] ?: continue
         if (childStatus is SessionStatus.Busy || childStatus is SessionStatus.Retry) {
             childBusyByParent[parentId] = childStatus
@@ -263,10 +288,17 @@ internal fun buildCrossServerSessionsState(
                 CrossServerSessionItem(
                     server = server,
                     session = session,
-                    // 父会话自身 idle 但子会话忙时，借子会话状态显示「处理中」。
-                    status = when (val self = source.statuses[sessionId]) {
-                        is SessionStatus.Busy, is SessionStatus.Retry -> self
-                        else -> childBusyByParent[sessionId] ?: self ?: SessionStatus.Idle
+                    // 待决授权/问题优先（等待用户处理，服务端等待授权期间仍是 busy），
+                    // 其次父会话借子会话 busy 状态显示「处理中」。
+                    status = when {
+                        sessionId in source.pendingPermissionSessionIds || parentWithPendingPermission.contains(sessionId) ->
+                            SessionStatus.Permission
+                        sessionId in source.pendingQuestionSessionIds || parentWithPendingQuestion.contains(sessionId) ->
+                            SessionStatus.Question
+                        else -> when (val self = source.statuses[sessionId]) {
+                            is SessionStatus.Busy, is SessionStatus.Retry -> self
+                            else -> childBusyByParent[sessionId] ?: self ?: SessionStatus.Idle
+                        }
                     },
                     category = category,
                     isFavorite = true,

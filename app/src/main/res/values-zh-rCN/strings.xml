@@ -9,7 +9,7 @@
     <string name="home_not_connected">未连接</string>
     <!-- Server Management -->
     <string name="server_username">用户名</string>
-    <string name="server_username_hint">opencode</string>
+    <string name="server_username_hint">starburst</string>
     <string name="server_password">密码</string>
     <string name="server_save">保存</string>
     <string name="server_cancel">取消</string>
@@ -21,9 +21,10 @@
     <string name="sessions_empty">尚无会话</string>
     <string name="session_status_busy">处理中…</string>
     <string name="session_status_pending_question">待选择</string>
+    <string name="session_status_pending_permission">需要授权</string>
     <!-- Chat Screen -->
     <string name="chat_send">发送</string>
-    <string name="chat_empty">与 OpenCode 开始对话</string>
+    <string name="chat_empty">与服务器开始对话</string>
     <!-- Permissions -->
     <string name="permission_title">需要权限</string>
     <string name="permission_allow_once">仅一次</string>
@@ -63,7 +64,7 @@
     <string name="home_edit">编辑</string>
     <string name="home_fix">修复</string>
     <string name="server_name">服务器名称</string>
-    <string name="server_name_hint">我的 OpenCode 服务器</string>
+    <string name="server_name_hint">我的服务器</string>
     <string name="server_add">添加服务器</string>
     <string name="session_rename">重命名会话</string>
     <string name="session_rename_title">标题</string>
@@ -254,11 +255,18 @@
     <string name="shared_session_role_user">用户</string>
     <string name="shared_session_role_assistant">助手</string>
     <string name="menu_rename_session">重命名会话</string>
+    <string name="menu_open_shared_session">打开分享会话…</string>
+    <string name="open_shared_session_title">打开分享会话</string>
+    <string name="open_shared_session_hint">粘贴分享链接或 ID</string>
+    <string name="open_shared_session_open">打开</string>
+    <string name="open_shared_session_cancel">取消</string>
+    <string name="open_shared_session_invalid">分享链接或 ID 无效</string>
     <string name="menu_view_changes">查看变更（%1$d）</string>
     <string name="session_changes_title">会话变更</string>
     <string name="session_changes_empty">本次会话没有文件变更</string>
     <string name="session_changes_before">修改前</string>
     <string name="session_changes_after">修改后</string>
+    <string name="session_changes_patch">补丁</string>
     <string name="settings_dynamic_color">动态配色</string>
     <string name="settings_dynamic_color_desc">使用壁纸颜色（Material You）</string>
     <string name="settings_accent_color">强调色</string>
@@ -350,12 +358,12 @@
     <string name="settings_dnd_schedule_cancel">取消</string>
     <string name="settings_dnd_schedule_off">关闭</string>
     <string name="dialog_select_reconnect_mode">选择重连模式</string>
-    <string name="notification_channel_connection_desc">与 OpenCode 服务器保持连接</string>
-    <string name="notification_channel_tasks_desc">OpenCode 任务完成时通知</string>
+    <string name="notification_channel_connection_desc">与服务器保持连接</string>
+    <string name="notification_channel_tasks_desc">任务完成时通知</string>
     <string name="notification_channel_tasks_silent">任务通知（静默）</string>
-    <string name="notification_channel_tasks_silent_desc">OpenCode 任务完成时静默通知</string>
+    <string name="notification_channel_tasks_silent_desc">任务完成时静默通知</string>
     <string name="notification_channel_permissions">权限请求</string>
-    <string name="notification_channel_permissions_desc">OpenCode 需要权限时通知</string>
+    <string name="notification_channel_permissions_desc">需要权限时通知</string>
     <string name="notification_connecting">正在连接 %1$s…</string>
     <string name="notification_connected_count">已连接 %1$d/%2$d 个服务器</string>
     <string name="notification_inbox_title">StarBurst — 已连接 %1$d/%2$d</string>
@@ -386,14 +394,11 @@
     <string name="chat_session_export_failed">导出会话失败</string>
     <string name="about_title">关于</string>
     <string name="about_version">版本 %s</string>
-    <string name="about_description">OpenCode 服务器 Android 客户端</string>
-    <string name="about_unofficial">这是一个非官方社区项目，与 OpenCode 团队无关。</string>
-    <string name="about_github">GitHub</string>
-    <string name="about_github_url">https://github.com/hiylo/starburst</string>
-    <string name="about_opencode">OpenCode</string>
-    <string name="about_opencode_url">https://github.com/anomalyco/opencode</string>
-    <string name="about_license">许可证</string>
-    <string name="about_license_value">MIT</string>
+    <string name="about_description">AI 驱动的移动端开发助手</string>
+    <string name="about_company">公司</string>
+    <string name="about_contact">联系方式</string>
+    <string name="about_tech_stack">技术栈</string>
+    <string name="about_copyright">版权所有 © 2016–至今 Clouds Studio Holding Limited.\n保留所有权利。</string>
     <string name="server_settings_title">服务器设置</string>
     <string name="server_settings_search_placeholder">搜索模型</string>
     <string name="server_settings_empty">未找到模型</string>
@@ -545,7 +550,7 @@
     <string name="chat_attach_device_file">来自设备的文件</string>
     <string name="chat_attach_device_file_hint">图片、PDF、文本、代码和配置文件</string>
     <string name="chat_attach_project_file">来自项目的文件</string>
-    <string name="chat_attach_project_file_hint">引用 OpenCode 服务器上的文件</string>
+    <string name="chat_attach_project_file_hint">引用服务器上的文件</string>
     <string name="chat_file_attachment_rejected">%1$d 个文件不受支持或超出大小限制</string>
     <string name="chat_attach_photo_hint">从图库中选择一张或多张图片</string>
     <string name="attachment_count_single">1 个附件</string>
@@ -556,7 +561,7 @@
     <string name="share_manage_servers">前往服务器</string>
     <string name="share_no_sessions">暂无聊天</string>
     <string name="share_create_session_body">创建聊天以发送这些附件。</string>
-    <string name="server_settings_oauth_proxy_hint">本地 OpenCode 服务器正在无代理运行。如果您的网络无法访问 OpenAI，请在本地服务器启动选项中配置代理，然后重启服务器。</string>
+    <string name="server_settings_oauth_proxy_hint">本地服务器正在无代理运行。如果您的网络无法访问 OpenAI，请在本地服务器启动选项中配置代理，然后重启服务器。</string>
     <string name="diagnostics_title">诊断</string>
     <string name="diagnostics_settings_desc">无需 ADB 查看和分享隐私安全的应用日志</string>
     <string name="diagnostics_empty">暂无诊断事件</string>
@@ -579,6 +584,7 @@
     <string name="server_delete_confirm_message">删除“%1$s”？此操作无法撤销。</string>
     <string name="about_check_updates">检查更新</string>
     <string name="about_check_updates_desc">在 GitHub 上检查新版本</string>
+
     <string name="diagnostics_clear_confirm_title">清除诊断数据？</string>
     <string name="diagnostics_clear_confirm_message">所有已收集的诊断事件将被永久删除。</string>
     <string name="settings_background_wake_lock">保持后台连接唤醒</string>
@@ -644,7 +650,7 @@
     <string name="server_mcp_title">MCP 服务器</string>
     <string name="server_mcp_refresh">刷新 MCP 服务器</string>
     <string name="server_mcp_empty">未配置 MCP 服务器</string>
-    <string name="server_mcp_empty_desc">请在 OpenCode 服务器配置中添加 MCP 服务器，然后刷新此页面。</string>
+    <string name="server_mcp_empty_desc">请在服务器配置中添加 MCP 服务器，然后刷新此页面。</string>
     <string name="server_mcp_connect">连接</string>
     <string name="server_mcp_disconnect">断开连接</string>
     <string name="server_mcp_authenticate">认证</string>
@@ -810,7 +816,7 @@
     <string name="server_mgmt_restart">重启服务</string>
     <string name="server_mgmt_restarting">正在重启…</string>
     <string name="server_mgmt_restart_confirm_title">重启服务？</string>
-    <string name="server_mgmt_restart_confirm_message">这将重启 OpenCode 服务进程，正在进行的会话可能会中断。</string>
+    <string name="server_mgmt_restart_confirm_message">这将重启服务进程，正在进行的会话可能会中断。</string>
     <string name="server_mgmt_confirm">确认</string>
     <string name="server_mgmt_refresh">刷新</string>
     <string name="chat_regenerate">重新生成</string>
@@ -977,8 +983,8 @@
     <string name="chat_bookmark">书签</string>
     <string name="menu_view_share">查看分享</string>
     <string name="menu_copy_share_link">复制分享链接</string>
-    <string name="server_mgmt_process_cpu">opencode CPU</string>
-    <string name="server_mgmt_process_memory">opencode 内存</string>
+    <string name="server_mgmt_process_cpu">服务器 CPU</string>
+    <string name="server_mgmt_process_memory">服务器内存</string>
     <string name="confirm">确定</string>
     <string name="server_settings_rules">自动化规则</string>
     <string name="server_settings_rules_desc">定时 / git / webhook 触发的 agent 任务</string>
@@ -1048,6 +1054,7 @@
     <string name="workbench_decision_ai_reply">AI 最近回复</string>
     <string name="workbench_decision_no_reply">该会话暂无 AI 回复</string>
     <string name="workbench_decision_questions">待决问题</string>
+    <string name="workbench_decision_permissions">待决授权</string>
     <string name="workbench_quick_reply_hint">快捷回复…</string>
     <string name="workbench_panel_processing">正在处理…</string>
     <string name="workbench_collapse_all">收起全部</string>
@@ -1067,8 +1074,15 @@
     <string name="workbench_menu_unpin">取消置顶</string>
     <string name="workbench_filter_all">全部</string>
     <string name="workbench_filter_question">待回复</string>
+    <string name="workbench_filter_permission">待授权</string>
     <string name="workbench_filter_busy">处理中</string>
     <string name="workbench_filter_idle">空闲</string>
+    <string name="workbench_filter_error">出错</string>
+    <string name="workbench_context_label">上下文</string>
+    <string name="workbench_panel_tool">工具</string>
+    <string name="workbench_panel_file">文件</string>
+    <string name="workbench_panel_tool_running">处理中</string>
+    <string name="workbench_panel_tool_error">出错</string>
     <string name="workbench_filter_empty">当前筛选下无匹配会话</string>
     <string name="workbench_quick_reply_sent">已发送快捷回复</string>
     <string name="workbench_quick_reply_failed">快捷回复发送失败</string>
@@ -1080,6 +1094,16 @@
     <string name="workbench_delete_session_failed">删除会话失败</string>
     <string name="workbench_error_resolve_conn">无法解析服务器连接</string>
     <string name="workbench_error_sessions">会话列表加载失败</string>
+    <string name="workbench_error_unknown">操作失败</string>
+    <string name="workbench_view_all">查看全部消息</string>
+    <string name="workbench_view_all_collapse">收起</string>
+    <string name="workbench_retry">重试</string>
+    <string name="workbench_save_as_template">存为模板</string>
+    <string name="workbench_saved_template">已存为模板</string>
+    <string name="workbench_saved_template_removed">模板已删除</string>
+    <string name="workbench_insert_template">插入模板</string>
+    <string name="workbench_pinned_header">置顶</string>
+    <string name="workbench_others_header">会话</string>
     <string name="test_intel">测试智能</string>
     <string name="test_intel_enter">测试智能</string>
     <string name="test_intel_project_title">项目详情</string>
@@ -1239,6 +1263,7 @@
     <string name="kb_ingest_file">文件</string>
     <string name="kb_ingest_no_content">请填写名称和内容</string>
     <string name="kb_ingest_failed">摄入失败</string>
+    <string name="kb_ingest_failed_detail">摄入失败：%1$s（%2$s）</string>
     <string name="kb_doc_name">文档名称</string>
     <string name="kb_doc_content">内容</string>
     <string name="kb_doc_content_hint">粘贴要摄入的文本或 Markdown</string>
@@ -1316,4 +1341,9 @@
     <string name="chat_kb_upload_progress">上传中 %1$d/%2$d</string>
     <string name="chat_kb_upload_done">已上传 %1$d 个文档</string>
     <string name="chat_kb_upload_failed">上传失败，%1$d/%2$d 个文档失败</string>
+    <string name="task_kind_test_run">测试运行</string>
+    <string name="task_kind_doc_generate">文档生成</string>
+    <string name="task_kind_ai_suggest">AI 建议</string>
+    <string name="task_kind_intel_run">测试智能运行</string>
+    <string name="task_kind_plan">多步骤计划</string>
 </resources>

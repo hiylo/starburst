@@ -71,6 +71,7 @@ import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 private val RULE_KINDS = listOf("cron", "git", "http")
@@ -208,6 +209,7 @@ private fun RuleCard(
         ),
         border = appAmoledBorder(0.65f),
         modifier = Modifier
+            .cartoonChrome(AppCardShape)
             .fillMaxWidth()
             .clickable(onClick = onShowExecutions),
     ) {

@@ -17,7 +17,7 @@ class ProviderAuthErrorTest {
     private val json = Json { ignoreUnknownKeys = true }
 
     @Test
-    fun extractsOpenCodeUnknownErrorMessageWithoutStackTrace() {
+    fun extractsServerUnknownErrorMessageWithoutStackTrace() {
         val body = """{"name":"UnknownError","data":{"message":"Error: Failed to initiate device authorization\n    at authorize"}}"""
 
         assertEquals(

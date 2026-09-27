@@ -17,9 +17,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.listSkills
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.domain.model.Skill
 import org.hiylo.starburst.logging.AppLogger as Log
 import javax.inject.Inject
@@ -35,13 +36,19 @@ data class SkillsUiState(
 @HiltViewModel
 class SkillsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
+    private val connectionStateRepository: ServerConnectionStateRepository,
 ) : ViewModel() {
-    private val conn = ServerConnection.from(
-        savedStateHandle.get<String>("serverUrl").orEmpty(),
+    private val serverUrl = savedStateHandle.get<String>("serverUrl").orEmpty()
+    private val serverId = savedStateHandle.get<String>("serverId").orEmpty().ifBlank { serverUrl }
+    private val baseConn = ServerConnection.from(
+        serverUrl,
         savedStateHandle.get<String>("username").orEmpty(),
         savedStateHandle.get<String>("password").orEmpty().ifEmpty { null },
     )
+
+    private val conn: ServerConnection
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, baseConn.baseUrl) ?: baseConn
 
     private val _uiState = MutableStateFlow(SkillsUiState())
     val uiState: StateFlow<SkillsUiState> = _uiState.asStateFlow()

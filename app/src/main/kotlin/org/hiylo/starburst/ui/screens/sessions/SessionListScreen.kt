@@ -103,7 +103,6 @@ import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSearchShape
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.SessionCardContent
-import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
 import org.hiylo.starburst.ui.components.appDialogContainerColor
 import org.hiylo.starburst.ui.components.appDialogElevation
@@ -501,7 +500,7 @@ fun SessionListScreen(
                                                     style = MaterialTheme.typography.bodyMedium,
                                                     maxLines = 1,
                                                     overflow = TextOverflow.Ellipsis,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                             }
                                             innerTextField()
@@ -1077,6 +1076,7 @@ fun SessionListScreen(
             pinnedSessions = allSessions.filter { it.isPinned }.sortedBy { it.pinnedIndex },
             onReorder = { orderedIds -> viewModel.reorderPinned(orderedIds) },
             onDismiss = { showPinnedSortDialog = false },
+            homeDir = viewModel.homeDirectory,
         )
     }
 
@@ -1300,7 +1300,7 @@ private fun ServerSwitcherRow(
             Icons.Default.Dns,
             contentDescription = null,
             modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         servers.forEach { server ->
             val isCurrent = server.id == currentServerId

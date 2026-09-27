@@ -60,6 +60,7 @@ import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.AppSearchShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -166,6 +167,7 @@ fun ServerModelFilterScreen(
                     ) {
                         items(filteredGroups, key = { it.providerId }) { group ->
                             Card(
+                                modifier = Modifier.cartoonChrome(AppCardShape),
                                 shape = AppCardShape,
                                 colors = CardDefaults.cardColors(
                                     containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer

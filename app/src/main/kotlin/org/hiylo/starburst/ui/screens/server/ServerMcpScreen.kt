@@ -57,6 +57,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -176,6 +177,7 @@ private fun McpServerCard(
     onAuthenticate: () -> Unit,
 ) {
     Card(
+        modifier = Modifier.cartoonChrome(AppCardShape),
         shape = AppCardShape,
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,

@@ -19,7 +19,7 @@ import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.shell.ServerShellRegistry
@@ -70,7 +70,7 @@ data class LogTailUiState(
 @HiltViewModel
 class LogTailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val shellRegistry: ServerShellRegistry,
     private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
@@ -89,7 +89,7 @@ class LogTailViewModel @Inject constructor(
      * 否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl` 常不可达。
      */
     private val effectiveConn: ServerConnection
-        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, conn.baseUrl) ?: conn
 
     /** 连接级共享 PTY 会话：与服务器管理页、Git 页按 server 复用同一条 PTY。 */
     private var shellAcquired = false

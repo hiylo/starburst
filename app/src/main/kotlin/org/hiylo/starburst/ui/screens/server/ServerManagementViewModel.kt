@@ -22,7 +22,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConfigPatch
 import org.hiylo.starburst.data.api.ServerConfigResponse
 import org.hiylo.starburst.data.api.ServerConnection
@@ -112,7 +112,7 @@ data class AlertHistoryUiState(
 @HiltViewModel
 class ServerManagementViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val backendApi: BackendApi,
     private val shellRegistry: ServerShellRegistry,
     private val serverRepository: ServerRepository,
@@ -135,7 +135,7 @@ class ServerManagementViewModel @Inject constructor(
      * 否则回退到导航传入的 `serverUrl`。蜂窝/VPN 下裸 `serverUrl` 常不可达，会导致终端空白。
      */
     private val effectiveConn: ServerConnection
-        get() = connectionStateRepository.resolvedDirectConnections.value[serverId] ?: conn
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, conn.baseUrl) ?: conn
 
     /** 连接级共享 PTY 会话：与 Git 页按 server 复用同一条 PTY。 */
     private var shellAcquired = false
@@ -457,7 +457,7 @@ class ServerManagementViewModel @Inject constructor(
                     )
                 }
             }
-            .onFailure { e -> Log.w(TAG, "Failed to read opencode process", e) }
+            .onFailure { e -> Log.w(TAG, "Failed to read server process", e) }
     }
 
     /** 加载服务配置（GET /config）。 */
@@ -493,7 +493,7 @@ class ServerManagementViewModel @Inject constructor(
         }
     }
 
-    /** 重启 opencode 服务：配置了 SSH 时走 SSH，否则走共享 PTY。 */
+    /** 重启服务：配置了 SSH 时走 SSH，否则走共享 PTY。 */
     fun restartServer() {
         viewModelScope.launch {
             _uiState.update { it.copy(isRestarting = true, error = null, message = null) }
@@ -553,14 +553,14 @@ class ServerManagementViewModel @Inject constructor(
         return "${fields[0]} ${fields[1]} ${fields[2]}"
     }
 
-    /** 解析 `ps` 输出中 opencode 进程的 CPU 占用百分比。 */
+    /** 解析 `ps` 输出中 服务进程的 CPU 占用百分比。 */
     private fun parseProcessCpu(output: String): String? {
         val fields = output.trim().split(Regex("\\s+"))
         if (fields.size < 2) return null
         return "${fields[0]}%"
     }
 
-    /** 解析 `ps` 输出中 opencode 进程的常驻内存（RSS，单位自适应 KB/MB/GB）。 */
+    /** 解析 `ps` 输出中 服务进程的常驻内存（RSS，单位自适应 KB/MB/GB）。 */
     private fun parseProcessMemory(output: String): String? {
         val fields = output.trim().split(Regex("\\s+"))
         if (fields.size < 3) return null
@@ -573,7 +573,7 @@ class ServerManagementViewModel @Inject constructor(
     }
 
     private companion object {
-        /** 服务重启命令；可按部署方式调整（如 `sudo systemctl restart opencode`）。 */
+        /** 服务重启命令；可按部署方式调整（如 `sudo systemctl restart <服务名>`）。 */
         const val RESTART_COMMAND: String = "systemctl restart opencode"
 
         /** 系统资源信息自动刷新间隔（毫秒）。 */

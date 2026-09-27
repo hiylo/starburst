@@ -66,6 +66,7 @@ import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.SessionCardContent
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppSearchShape
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.sessionCategoryColor
 import org.hiylo.starburst.ui.components.sessionCategoryIcon
@@ -123,7 +124,7 @@ fun GlobalSearchScreen(
                                             style = MaterialTheme.typography.bodyMedium,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                     }
                                     innerTextField()
@@ -267,7 +268,7 @@ private fun GlobalSearchResultCard(
     val isAmoled = isAmoledTheme()
     Card(
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainerLow,
         ),

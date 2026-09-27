@@ -19,7 +19,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.AgentInfo
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ProviderAuthMethod
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ProviderModel
@@ -31,6 +31,7 @@ import org.hiylo.starburst.data.api.ModelCapabilities
 import org.hiylo.starburst.data.api.ServerConfigPatch
 import org.hiylo.starburst.data.api.ServerConfigResponse
 import org.hiylo.starburst.data.api.ServerConnection
+import org.hiylo.starburst.data.api.StarBurstGateway
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.authorizeProviderOauth
 import org.hiylo.starburst.data.api.completeProviderOauth
@@ -40,7 +41,12 @@ import org.hiylo.starburst.data.api.getGlobalConfig
 import org.hiylo.starburst.data.api.getProviderAuthMethods
 import org.hiylo.starburst.data.api.getProviders
 import org.hiylo.starburst.data.api.listAgents
+import org.hiylo.starburst.data.api.ProviderCatalogResponse
+import org.hiylo.starburst.data.api.costInput
+import org.hiylo.starburst.data.api.fetchV1ProviderRegistry
 import org.hiylo.starburst.data.api.listProviderCatalog
+import org.hiylo.starburst.data.api.listConnectedProviderCatalog
+import org.hiylo.starburst.data.api.mergeProviderRegistry
 import org.hiylo.starburst.data.api.removeProviderAuth
 import org.hiylo.starburst.data.api.setProviderApiKey
 import org.hiylo.starburst.data.api.updateGlobalConfig
@@ -48,12 +54,14 @@ import org.hiylo.starburst.data.api.updateProviderConfig
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.repository.DiagnosticLogRepository
 import org.hiylo.starburst.data.repository.ServerRepository
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.service.SshRunner
 import org.hiylo.starburst.ui.gate.BackendGate
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonPrimitive
@@ -146,11 +154,12 @@ data class ProviderConfigEntry(
 @HiltViewModel
 class ServerSettingsViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
     private val settingsRepository: SettingsRepository,
     private val diagnosticLogRepository: DiagnosticLogRepository,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     @ApplicationContext private val context: Context,
 ) : ViewModel() {
 
@@ -160,7 +169,37 @@ class ServerSettingsViewModel @Inject constructor(
     private val serverId: String = savedStateHandle.get<String>("serverId").orEmpty()
     private val serverName: String = savedStateHandle.get<String>("serverName").orEmpty()
 
-    private val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
+    @Volatile
+    private var fallbackConn: ServerConnection = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
+
+    init {
+        viewModelScope.launch {
+            serverRepository.getServer(serverId)?.let { server ->
+                fallbackConn = StarBurstGateway.applySelfBackendBearer(
+                    fallbackConn, server.backendResolvedUrl, server.backendResolvedToken,
+                )
+            }
+        }
+        // 连接服务解析出带 Bearer 的直连连接后自动刷新 Provider/模型目录：
+        // 设置屏可能先于连接解析打开，此时 conn 无 Bearer 会 401 导致列表为空。
+        // drop(1) 跳过 StateFlow collect 的首次同步发射——否则 init 阶段就会同步调
+        // loadProviders()，而 _allProviders 等字段声明在 init 之后仍为 null → NPE 闪退。
+        viewModelScope.launch {
+            connectionStateRepository.resolvedDirectConnections.drop(1).collect { resolved ->
+                if (resolved[serverId] != null) {
+                    loadProviders()
+                }
+            }
+        }
+    }
+
+    /**
+     * 实际请求用连接：优先连接服务已解析的直连连接（同主机直连型后端 starburst-agent 时
+     * 已带 Bearer），否则回退到配置地址派生连接。避免目录/provider 等 REST 调用因
+     * config 未带 token 而 401 导致 Provider/模型列表为空。
+     */
+    private val conn: ServerConnection
+        get() = connectionStateRepository.resolvedConnectionFor(serverId, fallbackConn.baseUrl) ?: fallbackConn
 
     private val _allProviders = MutableStateFlow<List<ProviderInfo>>(emptyList())
     private val _providerCatalog = MutableStateFlow<List<ProviderInfo>>(emptyList())
@@ -302,18 +341,56 @@ class ServerSettingsViewModel @Inject constructor(
         return bytes.joinToString("") { "%02x".format(it) }
     }
 
+    /**
+     * 后台补齐全量 provider 注册表（V1 `GET /provider`）。
+     *
+     * 该响应在 opencode 上实测 6.4MB / 225 个内置服务商，放在首屏路径会让「服务商」页
+     * 明显卡顿，故与已配置列表解耦：已配置项先渲染，这里再把内置项追加进来。
+     * 端点不存在（agent）或失败时静默保留已配置列表，不影响使用。
+     */
+    private fun loadFullProviderRegistry() {
+        viewModelScope.launch {
+            val registry = runCatching { api.fetchV1ProviderRegistry(conn) }.getOrNull()
+            if (registry == null || registry.all.isEmpty()) {
+                if (BuildConfig.DEBUG) Log.d(TAG, "loadFullProviderRegistry: no V1 registry, keep connected list")
+                return@launch
+            }
+            val merged = mergeProviderRegistry(
+                ProviderCatalogResponse(
+                    all = _providerCatalog.value,
+                    default = registry.default,
+                    connected = _providerConnected.value.toList(),
+                ),
+                registry,
+            )
+            if (BuildConfig.DEBUG) {
+                Log.d(TAG, "loadFullProviderRegistry: total=${merged.all.size} connected=${merged.connected}")
+            }
+            _providerCatalog.value = merged.all
+            rebuildUi()
+        }
+    }
+
     fun loadProviders() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
             try {
                 val response = api.getProviders(conn)
                 _allProviders.value = response.providers
-                val catalog = api.listProviderCatalog(conn)
-                if (BuildConfig.DEBUG) Log.d(TAG, "loadProviders: catalog.connected=${catalog.connected}")
-                _providerCatalog.value = catalog.all
-                _providerConnected.value = catalog.connected.toSet()
-                _config.value = api.getGlobalConfig(conn)
+                // 两段式加载服务商目录：
+                //  ① 先取「已配置」的少数几个（/config/providers + /api/provider，都很小），
+                //     立即渲染——首屏不再等大响应；
+                //  ② 再后台拉 V1 `GET /provider` 全量注册表（opencode 实测 6.4MB / 225 个
+                //     内置服务商），补齐 anthropic/google/groq 等未配置的内置项。
+                val connected = api.listConnectedProviderCatalog(conn)
+                if (BuildConfig.DEBUG) Log.d(TAG, "loadProviders: connected=${connected.connected}")
+                _providerCatalog.value = connected.all
+                _providerConnected.value = connected.connected.toSet()
                 rebuildUi()
+                // V2 后端无 /global/config，失败时保留默认配置不阻断 providers 加载
+                _config.value = runCatching { api.getGlobalConfig(conn) }.getOrDefault(_config.value)
+                rebuildUi()
+                loadFullProviderRegistry()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to load providers", e)
                 _uiState.update {
@@ -400,10 +477,17 @@ class ServerSettingsViewModel @Inject constructor(
                     _uiState.update { it.copy(isSaving = false, error = "Failed to connect provider") }
                     return@launch
                 }
-                // Ensure provider is enabled after successful connect
+                // 密钥已落库。把 provider 从「已禁用」列表里移除是**锦上添花**的一步：
+                // 它走 PATCH /global/config，而 starburst-agent 不提供该端点（404），
+                // 若不吞掉异常会让整步「连接」报失败——尽管密钥其实已经存好了。
                 val disabled = _config.value.disabledProviders.toSet() - providerId
-                api.updateGlobalConfig(conn, ServerConfigPatch(disabledProviders = disabled.toList().sorted()))
-                _config.value = api.getGlobalConfig(conn)
+                runCatching {
+                    api.updateGlobalConfig(conn, ServerConfigPatch(disabledProviders = disabled.toList().sorted()))
+                    _config.value = api.getGlobalConfig(conn)
+                }.onFailure { cause ->
+                    // 仅在 DEBUG 下记录，不阻断连接。
+                    Log.d(TAG, "enable provider $providerId after connect skipped: ${cause.message}")
+                }
                 loadProviders()
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to connect provider via API key", e)
@@ -688,7 +772,7 @@ class ServerSettingsViewModel @Inject constructor(
                     providerName = it.name.ifEmpty { it.id },
                     source = it.source,
                     connected = (it.id in _providerConnected.value) && (it.id !in disabled),
-                    hasPaidModels = it.models.values.any { model -> (model.cost?.input ?: 0.0) > 0.0 },
+                    hasPaidModels = it.models.values.any { model -> model.costInput > 0.0 },
                     enabled = it.id !in disabled
                 )
             }
@@ -713,7 +797,7 @@ class ServerSettingsViewModel @Inject constructor(
 
         val agentOptions = _agents.value
             .filter { it.mode != "subagent" && !it.hidden }
-            .map { it.name }
+            .map { it.displayName }
             .distinct()
             .sorted()
 

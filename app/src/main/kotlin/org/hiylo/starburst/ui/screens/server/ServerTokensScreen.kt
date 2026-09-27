@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -62,6 +61,7 @@ import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -182,7 +182,7 @@ private fun TokenCard(token: BackendToken, isAmoled: Boolean, onRevoke: () -> Un
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier.padding(14.dp),

@@ -72,6 +72,7 @@ import org.hiylo.starburst.ui.components.sessionCategoryColor
 import org.hiylo.starburst.ui.components.sessionCategoryIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.SessionCardContent
 import org.hiylo.starburst.ui.components.AppCardShape
@@ -370,6 +371,7 @@ private fun CrossServerSessionCard(
         onClick = onClick,
         interactionSource = interactionSource,
         modifier = modifier
+            .cartoonChrome(AppCardShape)
             .fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainerLow,

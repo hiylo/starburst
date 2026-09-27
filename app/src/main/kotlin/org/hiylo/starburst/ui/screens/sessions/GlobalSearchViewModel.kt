@@ -19,6 +19,7 @@ import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.data.repository.SettingsRepository
 import org.hiylo.starburst.data.repository.sessionCategories
 import org.hiylo.starburst.data.repository.sessionCategoryAssignments
+import org.hiylo.starburst.domain.model.PendingInteraction
 import org.hiylo.starburst.domain.model.Project
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.Session
@@ -101,6 +102,7 @@ class GlobalSearchViewModel @Inject constructor(
             settingsRepository.sessionCategories,
             preferencesByServer,
             connectionStateRepository.connectedServerIds,
+            eventReducer.pendingInteractions,
         )
     ) { values ->
         @Suppress("UNCHECKED_CAST")
@@ -114,6 +116,7 @@ class GlobalSearchViewModel @Inject constructor(
             categories = values[6] as List<SessionCategory>,
             preferences = values[7] as Map<String, GlobalSearchPreferences>,
             connectedIds = values[8] as Set<String>,
+            pendingInteractions = values[9] as List<PendingInteraction>,
         )
     }.stateIn(
         viewModelScope,
@@ -132,9 +135,24 @@ private fun buildGlobalSearchState(
     categories: List<SessionCategory>,
     preferences: Map<String, GlobalSearchPreferences>,
     connectedIds: Set<String>,
+    pendingInteractions: List<PendingInteraction>,
 ): GlobalSearchUiState {
     val sessionsById = sessions.associateBy(Session::id)
     val categoriesById = categories.associateBy(SessionCategory::id)
+    val pendingQuestionSessionIds = pendingInteractions
+        .filterIsInstance<PendingInteraction.Question>()
+        .mapTo(mutableSetOf<String>()) { it.sessionId }
+    val pendingPermissionSessionIds = pendingInteractions
+        .filterIsInstance<PendingInteraction.Permission>()
+        .mapTo(mutableSetOf<String>()) { it.sessionId }
+    // 子会话（subagent）有待决问题/授权时，父会话同样标记（子会话不出现在列表里）。
+    val parentWithPendingQuestion = mutableSetOf<String>()
+    val parentWithPendingPermission = mutableSetOf<String>()
+    for (child in sessions) {
+        val parentId = child.parentId ?: continue
+        if (child.id in pendingQuestionSessionIds) parentWithPendingQuestion += parentId
+        if (child.id in pendingPermissionSessionIds) parentWithPendingPermission += parentId
+    }
     val items = servers.asSequence()
         .flatMap { server ->
             val serverPreferences = preferences[server.id] ?: GlobalSearchPreferences(emptyMap())
@@ -150,7 +168,13 @@ private fun buildGlobalSearchState(
                     GlobalSearchItem(
                         server = server,
                         session = session,
-                        status = statuses[sessionId] ?: SessionStatus.Idle,
+                        status = when {
+                            sessionId in pendingPermissionSessionIds || sessionId in parentWithPendingPermission ->
+                                SessionStatus.Permission
+                            sessionId in pendingQuestionSessionIds || sessionId in parentWithPendingQuestion ->
+                                SessionStatus.Question
+                            else -> statuses[sessionId] ?: SessionStatus.Idle
+                        },
                         category = serverPreferences.categoryAssignments[sessionId]?.let(categoriesById::get),
                         projectName = projectName,
                         branch = branches[scope],

@@ -16,7 +16,7 @@ import androidx.datastore.preferences.core.MutablePreferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.jcraft.jsch.Session
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.domain.model.ServerConfig
 import org.hiylo.starburst.domain.model.ServerHealth
@@ -116,14 +116,14 @@ internal fun mergeServerConfigs(
 }
 
 /**
- * Server Repository - manages saved OpenCode servers
+ * Server Repository - manages saved servers
  * 
  * Uses DataStore to persist server configurations
  */
 @Singleton
 class ServerRepository @Inject constructor(
     private val dataStore: DataStore<Preferences>,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val json: Json,
     private val secretStore: LocalSyncSecretStore,
 ) {
@@ -181,12 +181,23 @@ class ServerRepository @Inject constructor(
     }
     
     /**
-     * Update a server
+     * Update a server. Preserves stored [backendToken]/[backendUrl] when the
+     * incoming value is null/blank, preventing accidental token loss from
+     * stale in-memory copies or sync-merge race conditions.
      */
     suspend fun updateServer(server: ServerConfig) {
         dataStore.edit { preferences ->
             preferences[serversKey] = encodeServers(readServersStrict(preferences).map {
-                if (it.id == server.id) server else it
+                if (it.id == server.id) {
+                    server.copy(
+                        backendToken = server.backendToken
+                            ?.takeIf { token -> token.isNotBlank() }
+                            ?: it.backendToken,
+                        backendUrl = server.backendUrl
+                            ?.takeIf { url -> url.isNotBlank() }
+                            ?: it.backendUrl,
+                    )
+                } else it
             })
         }
     }
@@ -235,11 +246,8 @@ class ServerRepository @Inject constructor(
             Result.success(health)
         } catch (e: Exception) {
             Log.e(TAG, "Server health check failed", e)
-
-            // Mark as unhealthy
-            val updatedServer = server.copy(isHealthy = false)
-            updateServer(updatedServer)
-
+            // 失败不写回：避免 in-memory server 对象在竞争条件下覆盖存储的 backendToken。
+            // 连接失败的 UI 状态由 HomeViewModel 维护，不需要持久化 isHealthy=false。
             Result.failure(e)
         } finally {
             try { sshSession?.disconnect() } catch (_: Exception) { }
@@ -250,10 +258,10 @@ class ServerRepository @Inject constructor(
     private suspend fun openSshTunnel(server: ServerConfig): Pair<ServerConnection, Session> =
         withContext(Dispatchers.IO) {
             val host = server.host
-            val openCodePort = server.openCodePort
+            val serverPort = server.serverPort
             val session = SshRunner.buildSession(server)
             session.connect(SSH_CONNECT_TIMEOUT_MS)
-            val localPort = session.setPortForwardingL(0, host, openCodePort)
+            val localPort = session.setPortForwardingL(0, host, serverPort)
             val connection = ServerConnection.from("http://127.0.0.1:$localPort", server.username, server.password)
             connection to session
         }
