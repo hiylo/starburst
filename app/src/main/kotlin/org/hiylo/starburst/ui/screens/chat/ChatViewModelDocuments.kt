@@ -34,7 +34,7 @@ private fun requireValidGenerated(doc: GeneratedDocument) {
 
 /**
  * 解析当前 server 对应的后端文档服务地址与 token（供 /api/documents 使用）。
- * 优先使用 init 阶段解析缓存的地址，缺失时按 opencode 同主机 18880 端口回退推导。
+ * 优先使用 init 阶段解析缓存的地址，缺失时按 服务器同主机 18880 端口回退推导。
  */
 private suspend fun ChatViewModel.resolveDocumentEndpoint(): Pair<String, String> {
     val cachedUrl = _documentBackendUrl.value

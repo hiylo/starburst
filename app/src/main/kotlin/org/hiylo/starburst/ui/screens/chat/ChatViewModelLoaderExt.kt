@@ -37,8 +37,8 @@ import kotlinx.coroutines.launch
 internal suspend fun ChatViewModel.loadPendingRequests() {
     try {
         val revision = eventReducer.pendingSnapshotRevision()
-        val allPermissions = api.listPendingPermissions(conn, directory = sessionDirectory)
-        val allQuestions = api.listPendingQuestions(conn, directory = sessionDirectory)
+        val allPermissions = api.listPendingPermissions(conn, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
+        val allQuestions = api.listPendingQuestions(conn, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
         val interactionSessionIds = descendantSessionIds(eventReducer.sessions.value, sessionId)
         val sessionPermissions = allPermissions
             .filter { it.sessionId in interactionSessionIds }

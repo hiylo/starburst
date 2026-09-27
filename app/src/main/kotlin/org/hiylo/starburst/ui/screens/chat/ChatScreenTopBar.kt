@@ -38,6 +38,7 @@ import org.hiylo.starburst.ui.components.CartoonInkIcon
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.appPopupContainerColor
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.screens.sessions.SessionPathFormatter
 import org.hiylo.starburst.ui.theme.StatusError
 import org.hiylo.starburst.ui.theme.StatusWarning
 import androidx.activity.result.ActivityResultLauncher
@@ -91,6 +92,8 @@ internal fun ChatScreenTopBar(
     var inputMode by inputModeState
     var showMenu by showMenuState
     var showRenameDialog by showRenameDialogState
+    var showSharedDialog by remember { mutableStateOf(false) }
+    var sharedInput by remember { mutableStateOf("") }
     var showSessionDiffDialog by showSessionDiffDialogState
     var showTimelineDialog by showTimelineDialogState
     var showProjectOverview by showProjectOverviewState
@@ -117,7 +120,10 @@ internal fun ChatScreenTopBar(
                 if (hasDirectory || hasTokenOrCost) {
                     val parts = mutableListOf<String>()
                     if (hasDirectory) {
-                        parts.add(uiState.sessionDirectory)
+                        // 与会话列表统一：home 前缀折叠为 `~/...`，避免两处路径显示不一致。
+                        parts.add(
+                            SessionPathFormatter.display(uiState.sessionDirectory, uiState.serverHomeDirectory),
+                        )
                     }
                     if (totalTokens > 0) {
                         parts.add(stringResource(R.string.chat_tokens_summary, formatTokenCount(totalTokens)))
@@ -300,6 +306,17 @@ internal fun ChatScreenTopBar(
                             Icon(Icons.Default.Edit, contentDescription = null)
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text(stringResource(R.string.menu_open_shared_session)) },
+                        onClick = {
+                            showMenu = false
+                            sharedInput = ""
+                            showSharedDialog = true
+                        },
+                        leadingIcon = {
+                            Icon(Icons.Default.Link, contentDescription = null)
+                        }
+                    )
                     if (sessionDiffs.isNotEmpty()) {
                         DropdownMenuItem(
                             text = { Text(stringResource(R.string.menu_view_changes, sessionDiffs.size)) },
@@ -341,120 +358,15 @@ internal fun ChatScreenTopBar(
                         }
                     )
                     DropdownMenuItem(
-                        text = { Text(stringResource(R.string.menu_fork_session)) },
-                        onClick = {
-                            showMenu = false
-                            viewModel.forkSession { session ->
-                                if (session != null) {
-                                    onNavigateToSession(session.id)
-                                } else {
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_fork_failed))
-                                    }
-                                }
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.CopyAll, contentDescription = null)
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f),
-                    )
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.menu_compact_session)) },
-                        onClick = {
-                            showMenu = false
-                            viewModel.compactSession { ok ->
-                                coroutineScope.launch {
-                                    snackbarHostState.showSnackbar(
-                                        if (ok) context.getString(R.string.chat_session_compacted) else context.getString(R.string.chat_session_compact_failed)
-                                    )
-                                }
-                            }
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.Compress, contentDescription = null)
-                        }
-                    )
-                    DropdownMenuItem(
                         text = { Text(stringResource(R.string.chat_summarize_session)) },
                         onClick = {
                             showMenu = false
                             viewModel.summarizeSession()
                         },
                         leadingIcon = {
-                            Icon(Icons.Default.AutoAwesome, contentDescription = null)
+                            Icon(Icons.Default.Summarize, contentDescription = null)
                         },
                     )
-                    // Show Share or Unshare depending on current share status
-                    if (uiState.shareUrl != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.cmd_unshare)) },
-                            onClick = {
-                                showMenu = false
-                                viewModel.unshareSession { ok ->
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(
-                                            if (ok) context.getString(R.string.chat_session_unshared) else context.getString(R.string.chat_session_unshare_failed)
-                                        )
-                                    }
-                                }
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.LinkOff, contentDescription = null)
-                            }
-                        )
-                    } else {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_share_session)) },
-                            onClick = {
-                                showMenu = false
-                                viewModel.shareSession { url ->
-                                    coroutineScope.launch {
-                                        if (url != null) {
-                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(url))
-                                            snackbarHostState.showSnackbar(context.getString(R.string.chat_share_url_copied))
-                                        } else {
-                                            snackbarHostState.showSnackbar(context.getString(R.string.chat_share_failed))
-                                        }
-                                    }
-                                }
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Share, contentDescription = null)
-                            }
-                        )
-                    }
-                    if (uiState.shareUrl != null) {
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_view_share)) },
-                            onClick = {
-                                showMenu = false
-                                val shareId = uiState.shareUrl.orEmpty().trimEnd('/').substringAfterLast('/')
-                                if (shareId.isNotBlank()) onOpenSharedSession(shareId)
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Visibility, contentDescription = null)
-                            },
-                        )
-                        DropdownMenuItem(
-                            text = { Text(stringResource(R.string.menu_copy_share_link)) },
-                            onClick = {
-                                showMenu = false
-                                uiState.shareUrl?.let { url ->
-                                    clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(url))
-                                    coroutineScope.launch {
-                                        snackbarHostState.showSnackbar(context.getString(R.string.chat_share_url_copied))
-                                    }
-                                }
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Link, contentDescription = null)
-                            },
-                        )
-                    }
                     DropdownMenuItem(
                         text = { Text(stringResource(R.string.menu_export_session)) },
                         onClick = {
@@ -522,4 +434,44 @@ internal fun ChatScreenTopBar(
         }
     }
     }
+    if (showSharedDialog) {
+        var field by remember(sharedInput) { mutableStateOf(sharedInput) }
+        AlertDialog(
+            onDismissRequest = { showSharedDialog = false },
+            title = { Text(stringResource(R.string.open_shared_session_title)) },
+            text = {
+                OutlinedTextField(
+                    value = field,
+                    onValueChange = { field = it },
+                    placeholder = { Text(stringResource(R.string.open_shared_session_hint)) },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val shareId = parseSharedSessionInput(field)
+                        showSharedDialog = false
+                        if (shareId != null) onOpenSharedSession(shareId)
+                    },
+                ) {
+                    Text(stringResource(R.string.open_shared_session_open))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSharedDialog = false }) {
+                    Text(stringResource(R.string.open_shared_session_cancel))
+                }
+            },
+        )
+    }
+}
+
+/** 从分享链接或裸 ID 提取 shareId：`https://opncd.ai/s/{id}`、任意以 `{id}` 结尾的 URL、裸 `ses_...`。 */
+private fun parseSharedSessionInput(input: String): String? {
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return null
+    // URL 形式取末段（含 query 剥离），裸 ID 原样
+    val candidate = trimmed.trimEnd('/').substringAfterLast('/').split('?', '#').first().trim()
+    return candidate.takeIf { it.startsWith("ses_") || it.startsWith("prt_") }
 }

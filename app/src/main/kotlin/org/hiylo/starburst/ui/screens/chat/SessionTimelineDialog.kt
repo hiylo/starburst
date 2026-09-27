@@ -63,6 +63,7 @@ import org.hiylo.starburst.domain.model.ToolState
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -426,7 +427,7 @@ private fun TimelineCard(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
@@ -472,8 +473,8 @@ private fun TimelineCard(
                 Spacer(Modifier.height(2.dp))
                 Text(
                     text = formatTimelineTime(timestamp),
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
             if (content != null) {

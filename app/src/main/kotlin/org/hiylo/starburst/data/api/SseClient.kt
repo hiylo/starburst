@@ -39,9 +39,43 @@ data class ScopedSseEvent(
 )
 
 internal fun sseEventData(payload: JsonObject): JsonObject =
-    payload["properties"]?.jsonObject
-        ?: payload["data"]?.jsonObject
-        ?: JsonObject(emptyMap())
+    payload["properties"] as? JsonObject
+        ?: payload["data"] as? JsonObject
+        ?: payload
+
+/** 内容对象缺 sessionID 时，回退取信封顶层的 sessionID（V2 事件可能把 sessionID 放在 data 外层）。 */
+private fun JsonObject.withEnvelopeSessionId(envelope: JsonObject): JsonObject {
+    if (this["sessionID"] != null) return this
+    val envelopeSessionId = envelope["sessionID"] ?: return this
+    return JsonObject(this.toMutableMap().apply { put("sessionID", envelopeSessionId) })
+}
+
+/**
+ * 归一化 V2 `message.updated` 的 info 对象后再交给 parseMessage：
+ * 1. V2 把 sessionID 放在事件 data 层而非 info 内 → 缺失时从 props 注入；
+ * 2. V2 的 model 是嵌套 {id, providerID}（无顶层 modelID）→ 摊平为顶层 modelID/providerID，
+ *    供 [Message.Assistant] 直接解码。
+ */
+internal fun enrichMessageInfo(info: JsonObject, props: JsonObject): JsonObject {
+    val mutable = info.toMutableMap()
+    var changed = false
+    if (mutable["sessionID"] == null && props["sessionID"] != null) {
+        mutable["sessionID"] = props["sessionID"]!!
+        changed = true
+    }
+    val model = info["model"] as? JsonObject
+    if (model != null) {
+        if (mutable["modelID"] == null && model["id"] != null) {
+            mutable["modelID"] = model["id"]!!
+            changed = true
+        }
+        if (mutable["providerID"] == null && model["providerID"] != null) {
+            mutable["providerID"] = model["providerID"]!!
+            changed = true
+        }
+    }
+    return if (changed) JsonObject(mutable) else info
+}
 
 internal fun isHighFrequencySseEvent(event: SseEvent): Boolean = when (event) {
     is SseEvent.MessagePartDelta,
@@ -77,7 +111,7 @@ class SseClient @Inject constructor(
         directory: String? = null,
         onOpen: suspend () -> Unit = {},
     ): Flow<ScopedSseEvent> = flow {
-        val sseUrl = "${conn.baseUrl}/global/event"
+        val sseUrl = "${conn.baseUrl}/api/event"
         Log.i(TAG, "Connecting to global SSE (auth=${conn.authHeader != null})")
 
         val statement = httpClient.prepareGet(sseUrl) {
@@ -171,15 +205,21 @@ class SseClient @Inject constructor(
 
     /**
      * Parse SSE event from raw JSON.
-     * Global endpoint wraps events: {directory, payload: {type, properties}}
-     * Per-instance endpoint sends directly: {type, properties}
+     * V1 global endpoint wraps events: {directory, payload: {type, properties}}
+     * V1 per-instance endpoint sends directly: {type, properties}
+     * V2 endpoint sends: {id, type, data, durable?, location?}
+     * V2 权限/问题事件为 permission.v2.* / question.v2.*（data 平铺字段），
+     * 在此映射到与 V1 相同的 SseEvent 模型。
+     * Content object resolves from payload.properties, or data, or the root;
+     * sessionID falls back to the envelope top level when absent from content.
      */
     private fun parseEvent(data: String): ScopedSseEvent? {
         val root = json.parseToJsonElement(data).jsonObject
 
-        val payload = root["payload"]?.jsonObject ?: root
-        val type = payload["type"]?.jsonPrimitive?.content ?: return null
-        val properties = sseEventData(payload)
+        val payload = (root["payload"] as? JsonObject) ?: root
+        val type = payload["type"]?.jsonPrimitive?.content
+            ?: root["type"]?.jsonPrimitive?.content ?: return null
+        val properties = sseEventData(payload).withEnvelopeSessionId(root)
         val directory = root["directory"]?.jsonPrimitive?.contentOrNull
 
         return ScopedSseEvent(
@@ -192,8 +232,9 @@ class SseClient @Inject constructor(
             directory = directory,
             projectId = root["project"]?.jsonPrimitive?.contentOrNull,
             workspaceId = root["workspace"]?.jsonPrimitive?.contentOrNull,
-            eventId = payload["id"]?.jsonPrimitive?.contentOrNull,
-            durableSeq = payload["durable"]?.jsonObject?.get("seq")?.jsonPrimitive?.longOrNull,
+            eventId = root["id"]?.jsonPrimitive?.contentOrNull ?: payload["id"]?.jsonPrimitive?.contentOrNull,
+            durableSeq = (payload["durable"] as? JsonObject)?.get("seq")?.jsonPrimitive?.longOrNull
+                ?: (root["durable"] as? JsonObject)?.get("seq")?.jsonPrimitive?.longOrNull,
         )
     }
 
@@ -271,14 +312,43 @@ class SseClient @Inject constructor(
                     props.str("sessionID"), props.str("messageID"), props.str("text"),
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
-                "session.next.shell.started" -> SseEvent.NextShellStarted(
-                    props.str("sessionID"), props.str("messageID"), props.str("callID"), props.str("command"),
+                "session.next.compaction.started" -> SseEvent.NextCompactionStarted(
+                    props.str("sessionID"), props.str("messageID"), props.str("reason"),
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
-                "session.next.shell.ended" -> SseEvent.NextShellEnded(
-                    props.str("sessionID"), props.str("callID"), props.str("output"),
+                "session.next.compaction.ended" -> SseEvent.NextCompactionEnded(
+                    props.str("sessionID"), props.str("messageID"), props.str("reason"),
+                    props.str("text"), props.str("recent"),
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
+                "session.next.compaction.delta" -> SseEvent.NextCompactionDelta(
+                    props.str("sessionID"), props.str("messageID"), props.str("delta"),
+                    props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
+                )
+                "session.next.retried" -> SseEvent.NextRetried(
+                    props.str("sessionID"),
+                    props["attempt"]?.jsonPrimitive?.intOrNull ?: 0,
+                    (props["error"] as? JsonObject)?.get("message")?.jsonPrimitive?.contentOrNull.orEmpty(),
+                    (props["error"] as? JsonObject)?.get("isRetryable")?.jsonPrimitive?.booleanOrNull ?: false,
+                    props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
+                )
+                "session.next.shell.started" -> {
+                    val msgId = props.str("messageID")
+                    SseEvent.NextShellStarted(
+                        props.str("sessionID"), msgId,
+                        props.str("callID").ifBlank { "shell-$msgId" }, props.str("command"),
+                        props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
+                    )
+                }
+                "session.next.shell.ended" -> {
+                    val msgId = props.str("messageID")
+                    SseEvent.NextShellEnded(
+                        props.str("sessionID"), msgId,
+                        props.str("callID").ifBlank { "shell-$msgId" }, props.str("output"),
+                        props["exitCode"]?.jsonPrimitive?.intOrNull,
+                        props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
+                    )
+                }
                 "session.next.text.started" -> SseEvent.NextTextStarted(
                     props.str("sessionID"), props.str("assistantMessageID"), props.str("textID"),
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
@@ -321,18 +391,21 @@ class SseClient @Inject constructor(
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
                 "session.next.tool.success" -> SseEvent.NextToolSuccess(
-                    props.str("sessionID"), props.str("assistantMessageID"), props.str("callID"),
+                    props.str("sessionID"), props.str("assistantMessageID"),
+                    props.str("callID").ifBlank { props.str("toolCallID") },
                     props["structured"] ?: JsonObject(emptyMap()), props["content"] ?: JsonArray(emptyList()),
+                    props.str("result"),
                     props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
                 "session.next.tool.failed" -> SseEvent.NextToolFailed(
-                    props.str("sessionID"), props.str("assistantMessageID"), props.str("callID"),
+                    props.str("sessionID"), props.str("assistantMessageID"),
+                    props.str("callID").ifBlank { props.str("toolCallID") },
                     props["error"] ?: JsonObject(emptyMap()), props["timestamp"]?.jsonPrimitive?.longOrNull ?: 0,
                 )
 
                 "session.status" -> {
                     val sessionId = props.str("sessionID")
-                    val statusObj = props["status"]?.jsonObject
+                    val statusObj = props["status"] as? JsonObject
                     val statusType = statusObj?.get("type")?.jsonPrimitive?.content ?: "idle"
 
                     if (statusType != "idle" && statusType != "busy" && statusType != "retry") {
@@ -363,21 +436,23 @@ class SseClient @Inject constructor(
                 "session.compacted" -> SseEvent.SessionCompacted(props.str("sessionID"))
 
                 "session.created" -> {
-                    val infoObj = props["info"]?.jsonObject ?: props
-                    val info = json.decodeFromJsonElement<Session>(infoObj)
+                    val infoObj = (props["info"] as? JsonObject) ?: props
+                    val info = json.decodeFromJsonElement<V2SessionInfo>(infoObj).toSession()
                     SseEvent.SessionCreated(info)
                 }
 
                 "session.updated" -> {
-                    val infoObj = props["info"]?.jsonObject ?: props
-                    val info = json.decodeFromJsonElement<Session>(infoObj)
+                    val infoObj = (props["info"] as? JsonObject) ?: props
+                    val info = json.decodeFromJsonElement<V2SessionInfo>(infoObj).toSession()
                     SseEvent.SessionUpdated(info)
                 }
 
                 "session.deleted" -> {
-                    val infoObj = props["info"]?.jsonObject ?: props
-                    val info = json.decodeFromJsonElement<Session>(infoObj)
-                    SseEvent.SessionDeleted(info)
+                    val sid = props.str("sessionID")
+                    val info = props["info"]?.let { itElement ->
+                        json.decodeFromJsonElement<V2SessionInfo>(itElement as? JsonObject ?: return@let null).toSession()
+                    }
+                    SseEvent.SessionDeleted(sid, info)
                 }
 
                 "session.error" -> {
@@ -386,14 +461,16 @@ class SseClient @Inject constructor(
 
                 "session.diff" -> {
                     val sessionId = props.str("sessionID")
-                    val diffArr = props["diff"]?.jsonArray
-                    val diffs = diffArr?.map { json.decodeFromJsonElement<FileDiff>(it) } ?: emptyList()
+                    val diffArr = props["diff"] as? JsonArray
+                    val diffs = diffArr?.mapNotNull { element ->
+                        runCatching { json.decodeFromJsonElement<FileDiff>(element) }.getOrNull()
+                    } ?: emptyList()
                     SseEvent.SessionDiff(sessionId = sessionId, diff = diffs)
                 }
 
                 "message.updated" -> {
-                    val infoObj = props["info"]?.jsonObject ?: return null
-                    val message = parseMessage(infoObj) ?: return null
+                    val infoObj = props["info"] as? JsonObject ?: return null
+                    val message = parseMessage(enrichMessageInfo(infoObj, props)) ?: return null
                     SseEvent.MessageUpdated(info = message)
                 }
 
@@ -404,7 +481,7 @@ class SseClient @Inject constructor(
                 }
 
                 "message.part.updated" -> {
-                    val partObj = props["part"]?.jsonObject ?: return null
+                    val partObj = props["part"] as? JsonObject ?: return null
                     val part = parsePart(partObj) ?: return null
                     SseEvent.MessagePartUpdated(part = part)
                 }
@@ -439,14 +516,14 @@ class SseClient @Inject constructor(
                     val id = props.str("id")
                     val sessionId = props.str("sessionID")
                     val permission = props.str("permission")
-                    val patterns = props["patterns"]?.jsonArray
-                        ?.map { it.jsonPrimitive.content } ?: emptyList()
-                    val always = props["always"]?.jsonArray
-                        ?.map { it.jsonPrimitive.content } ?: emptyList()
-                    val metadata = props["metadata"]?.jsonObject?.let {
+                    val patterns = (props["patterns"] as? JsonArray)
+                        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+                    val always = (props["always"] as? JsonArray)
+                        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+                    val metadata = (props["metadata"] as? JsonObject)?.let {
                         it.mapValues { (_, v) -> v }
                     }
-                    val toolRef = props["tool"]?.jsonObject?.let { toolObj ->
+                    val toolRef = (props["tool"] as? JsonObject)?.let { toolObj ->
                         ToolRef(
                             messageId = toolObj.str("messageID"),
                             callId = toolObj.str("callID")
@@ -465,27 +542,31 @@ class SseClient @Inject constructor(
                     )
                 }
 
-                "permission.replied" -> {
+                // V2 权限事件：字段为平铺 {id,sessionID,action,resources,save?,metadata?,source?}，
+                // 与 V1 的 permission/patterns/tool 命名不同，需单独映射到同一 SseEvent 模型。
+                "permission.v2.asked" -> parsePermissionV2Asked(props)
+
+                "permission.replied", "permission.v2.replied" -> {
                     val sessionId = props.str("sessionID")
                     val requestId = props.str("requestID")
                     SseEvent.PermissionReplied(sessionId = sessionId, requestId = requestId)
                 }
 
-                "question.asked", "question.updated" -> {
+                "question.asked", "question.updated", "question.v2.asked" -> {
                     val id = props.str("id")
                     val sessionId = props.str("sessionID")
-                    val toolRef = props["tool"]?.jsonObject?.let { toolObj ->
+                    val toolRef = (props["tool"] as? JsonObject)?.let { toolObj ->
                         ToolRef(
                             messageId = toolObj.str("messageID"),
                             callId = toolObj.str("callID")
                         )
                     }
-                    val questionsArr = props["questions"]?.jsonArray
-                    val questions = questionsArr?.map { qElement ->
-                        val qObj = qElement.jsonObject
-                        val optionsArr = qObj["options"]?.jsonArray ?: JsonArray(emptyList())
-                        val options = optionsArr.map { oElement ->
-                            val oObj = oElement.jsonObject
+                    val questionsArr = props["questions"] as? JsonArray
+                    val questions = questionsArr?.mapNotNull { qElement ->
+                        val qObj = qElement as? JsonObject ?: return@mapNotNull null
+                        val optionsArr = qObj["options"] as? JsonArray ?: JsonArray(emptyList())
+                        val options = optionsArr.mapNotNull { oElement ->
+                            val oObj = oElement as? JsonObject ?: return@mapNotNull null
                             SseEvent.QuestionAsked.Option(
                                 label = oObj.str("label"),
                                 description = oObj.str("description")
@@ -511,13 +592,13 @@ class SseClient @Inject constructor(
                     )
                 }
 
-                "question.replied" -> {
+                "question.replied", "question.v2.replied" -> {
                     val sessionId = props.str("sessionID")
                     val requestId = props.str("requestID")
                     SseEvent.QuestionReplied(sessionId = sessionId, requestId = requestId)
                 }
 
-                "question.rejected" -> {
+                "question.rejected", "question.v2.rejected" -> {
                     val sessionId = props.str("sessionID")
                     val requestId = props.str("requestID")
                     SseEvent.QuestionRejected(sessionId = sessionId, requestId = requestId)
@@ -525,9 +606,9 @@ class SseClient @Inject constructor(
 
                 "todo.updated" -> {
                     val sessionId = props.str("sessionID")
-                    val todosArr = props["todos"]?.jsonArray
-                    val todos = todosArr?.map { tElement ->
-                        val tObj = tElement.jsonObject
+                    val todosArr = props["todos"] as? JsonArray
+                    val todos = todosArr?.mapNotNull { tElement ->
+                        val tObj = tElement as? JsonObject ?: return@mapNotNull null
                         SseEvent.TodoUpdated.Todo(
                             content = tObj.str("content"),
                             status = tObj.str("status", "pending"),
@@ -545,7 +626,7 @@ class SseClient @Inject constructor(
                 "lsp.updated" -> SseEvent.LspUpdated
 
                 "project.updated" -> {
-                    val infoObj = props["info"]?.jsonObject ?: props
+                    val infoObj = (props["info"] as? JsonObject) ?: props
                     val info = json.decodeFromJsonElement<Project>(infoObj)
                     SseEvent.ProjectUpdated(info)
                 }
@@ -569,12 +650,12 @@ class SseClient @Inject constructor(
      * Parse a Message from JSON, dispatching on "role" field.
      */
     private fun parseMessage(obj: JsonObject): Message? {
-        val role = obj["role"]?.jsonPrimitive?.content ?: return null
-        return when (role) {
+        val discriminator = obj["type"]?.jsonPrimitive?.content ?: obj["role"]?.jsonPrimitive?.content ?: return null
+        return when (discriminator) {
             "user" -> json.decodeFromJsonElement<Message.User>(obj)
             "assistant" -> json.decodeFromJsonElement<Message.Assistant>(obj)
             else -> {
-                Log.w(TAG, "Unknown message role: $role")
+                Log.w(TAG, "Unknown message type: $discriminator")
                 null
             }
         }
@@ -599,6 +680,13 @@ class SseClient @Inject constructor(
                 "compaction" -> json.decodeFromJsonElement<Part.Compaction>(obj)
                 "retry" -> json.decodeFromJsonElement<Part.Retry>(obj)
                 "agent" -> json.decodeFromJsonElement<Part.Agent>(obj)
+                // 与 V2ContentItem.toPart 对齐：permission/question/abort 此前落到 else
+                // 变成 Part.Unknown，于是流式期间不可见、历史重载后却显示为内联摘要——
+                // 同一个请求在屏幕上出现两种表现。
+                "permission" -> json.decodeFromJsonElement<Part.Permission>(obj)
+                "question" -> json.decodeFromJsonElement<Part.Question>(obj)
+                "abort" -> json.decodeFromJsonElement<Part.Abort>(obj)
+                "session-turn" -> json.decodeFromJsonElement<Part.SessionTurn>(obj)
                 else -> {
                     Log.w(TAG, "Unknown part type: $type")
                     // Return an Unknown part so it's at least tracked
@@ -622,10 +710,44 @@ class SseClient @Inject constructor(
         this[key]?.jsonPrimitive?.content ?: default
 }
 
+/**
+ * V2 `permission.v2.asked` 事件 data → [SseEvent.PermissionAsked]。
+ * V2 字段平铺且命名与 V1 不同：action→permission、resources→patterns、save→always、source→tool。
+ */
+internal fun parsePermissionV2Asked(props: JsonObject): SseEvent.PermissionAsked {
+    val resources = (props["resources"] as? JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+    val save = (props["save"] as? JsonArray)
+        ?.mapNotNull { (it as? JsonPrimitive)?.contentOrNull } ?: emptyList()
+    val metadata = (props["metadata"] as? JsonObject)?.let { obj ->
+        obj.mapValues { (_, v) -> v }
+    }
+    val toolRef = (props["source"] as? JsonObject)?.let { src ->
+        ToolRef(
+            messageId = src["messageID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+            callId = src["callID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        )
+    }
+    return SseEvent.PermissionAsked(
+        id = props["id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        sessionId = props["sessionID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        permission = props["action"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+        patterns = resources,
+        always = save,
+        metadata = metadata,
+        tool = toolRef,
+    )
+}
+
 internal fun parseSessionError(props: JsonObject, json: Json): SseEvent.SessionError {
     val sessionId = props["sessionID"]?.jsonPrimitive?.contentOrNull
     val error = when (val value = props["error"]) {
-        is JsonObject -> json.decodeFromJsonElement<Message.Assistant.ErrorInfo>(value)
+        is JsonObject -> {
+            val name = value["name"]?.jsonPrimitive?.contentOrNull
+                ?: value["type"]?.jsonPrimitive?.contentOrNull
+                ?: "Unknown error"
+            Message.Assistant.ErrorInfo(name = name, data = value["message"] ?: value["data"])
+        }
         is JsonPrimitive -> Message.Assistant.ErrorInfo(name = value.content)
         else -> Message.Assistant.ErrorInfo(name = "Unknown error")
     }

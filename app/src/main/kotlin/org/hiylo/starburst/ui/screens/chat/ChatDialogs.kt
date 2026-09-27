@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.sp
 import org.hiylo.starburst.domain.model.*
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ProviderModel
+import org.hiylo.starburst.data.api.costInput
 import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.ProviderIcon
@@ -230,21 +231,25 @@ internal fun ModelPickerDialog(
     val listState = rememberLazyListState()
     fun isModelFree(providerId: String, model: ProviderModel): Boolean {
         if (providerId != "opencode") return false
-        val cost = model.cost ?: return true
-        return cost.input == 0.0
+        // 无 cost 信息（V2 数组形态或字段缺失）视为免费，与原逻辑一致。
+        return model.cost == null || model.costInput == 0.0
     }
 
     val popularProviders = remember {
         listOf("opencode", "anthropic", "github-copilot", "openai", "google", "openrouter", "vercel")
     }
-    val modelGroups = remember(providers, search) {
+    val modelGroups = remember(providers, search, selectedProviderId) {
         val query = search.trim().lowercase()
         providers
             .filter { it.models.isNotEmpty() }
             .sortedWith(
-                compareBy<ProviderInfo> {
-                    popularProviders.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE
-                }.thenBy { it.name.lowercase() },
+                // 当前选中的 provider 置顶（用户在多 provider 下容易找到正在用的模型），
+                // 其次热门 provider，最后按名称。
+                compareBy<ProviderInfo> { if (it.id == selectedProviderId) 0 else 1 }
+                    .thenBy {
+                        popularProviders.indexOf(it.id).takeIf { index -> index >= 0 } ?: Int.MAX_VALUE
+                    }
+                    .thenBy { it.name.lowercase() },
             )
             .mapNotNull { provider ->
                 val providerMatches = provider.name.lowercase().contains(query) || provider.id.lowercase().contains(query)
@@ -309,7 +314,7 @@ internal fun ModelPickerDialog(
                                 Text(
                                     text = stringResource(R.string.server_settings_search_placeholder),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                             innerTextField()
@@ -358,12 +363,12 @@ internal fun ModelPickerDialog(
                             ProviderIcon(
                                 providerId = provider.id,
                                 size = 14.dp,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
                                 text = (provider.name.ifEmpty { provider.id }).uppercase(),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 letterSpacing = 1.sp
                             )
                         }

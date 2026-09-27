@@ -43,6 +43,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import java.util.Locale
 
@@ -170,7 +171,7 @@ private fun OverviewContent(state: ProjectOverviewState.Loaded) {
         Text(
             text = stringResource(R.string.project_overview_approximate_note),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(start = 4.dp, top = 4.dp),
         )
         // 最大的文件 TopN
@@ -240,7 +241,7 @@ private fun OverviewCountTable(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
@@ -295,7 +296,7 @@ private fun OverviewLineTable(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(
@@ -365,7 +366,7 @@ private fun OverviewLargestFiles(files: List<LargeFile>) {
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
             Text(

@@ -51,7 +51,7 @@ class ChatBubblePureFunctionsTest {
 
     @Test
     fun extractToolOutput_readsCompletedOutput() {
-        assertEquals("done", extractToolOutput(tool(ToolState.Completed(output = "done"))))
+        assertEquals("done", extractToolOutput(tool(ToolState.Completed(result = "done"))))
     }
 
     @Test

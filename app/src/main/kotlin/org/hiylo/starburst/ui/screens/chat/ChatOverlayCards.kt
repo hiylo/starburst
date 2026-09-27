@@ -61,9 +61,9 @@ internal fun TodoListCard(tool: Part.Tool) {
         }
         if (source != null) {
             try {
-                source.jsonArray.mapNotNull { element ->
+                (source as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { element ->
                     try {
-                        val obj = element.jsonObject
+                        val obj = element as? kotlinx.serialization.json.JsonObject ?: return@mapNotNull null
                         val content = obj["content"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
                         val status = obj["status"]?.jsonPrimitive?.contentOrNull ?: "pending"
                         val priority = obj["priority"]?.jsonPrimitive?.contentOrNull ?: "medium"
@@ -89,7 +89,7 @@ internal fun TodoListCard(tool: Part.Tool) {
     val hapticOn = LocalHapticFeedbackEnabled.current
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface,
         border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)) else null,
         tonalElevation = if (isAmoled) 0.dp else 1.dp,

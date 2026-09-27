@@ -80,12 +80,16 @@ internal fun EventReducer.handleMessagePartUpdated(event: SseEvent.MessagePartUp
     val messageId = event.part.messageId
     if (isMessageRemoved(messageId)) return
     val key = PendingDeltaKey(event.part.sessionId, messageId, event.part.id)
-    // message.part.updated 携带的是 part 的权威全量文本，未刷的流式 delta 已包含其中，
-    // 不能叠加（否则结尾重复）；只有 part 尚不存在时早到的 delta（pendingDeltas）才需要合并。
+    // message.part.updated 携带的是 part 的权威全量文本。
+    //
+    // 早到的 delta（part 尚未建立时进了 pendingDeltas）**只有在权威全量里还没有它时**
+    // 才补上：agent 的 part.updated 往往已经包含这些字符（它由服务端同一份文本生成），
+    // 无条件 append 会在结尾重复一遍——这正是「同一条消息显示两遍」的成因之一。
+    // 判定用「权威文本是否已以该 delta 结尾」：已包含则丢弃，否则补齐。
     synchronized(deltaLock) {
         val pending = pendingDeltas.remove(key)?.toString().orEmpty()
         deltaAccumulator.remove(key)
-        val updatedPart = if (pending.isNotEmpty()) {
+        val updatedPart = if (pending.isNotEmpty() && !partTextEndsWith(event.part, pending)) {
             applyTextDelta(event.part, pending)
         } else {
             event.part
@@ -193,6 +197,21 @@ internal fun EventReducer.handleMessagePartRemoved(event: SseEvent.MessagePartRe
     }
 }
 
+/**
+ * 权威全量文本是否已以 [delta] 结尾（即已包含这段缓冲内容）。
+ *
+ * 为空文本视为「尚未包含」——此时必须补上，否则早到的 delta 会整段丢失。
+ */
+internal fun partTextEndsWith(part: Part, delta: String): Boolean {
+    val text = when (part) {
+        is Part.Text -> part.text
+        is Part.Reasoning -> part.text
+        else -> return false
+    }
+    if (delta.isEmpty()) return true
+    return text.endsWith(delta)
+}
+
 internal fun EventReducer.applyTextDelta(part: Part, delta: String): Part = when (part) {
     is Part.Text -> part.copy(text = part.text + delta)
     is Part.Reasoning -> part.copy(text = part.text + delta)
@@ -208,5 +227,91 @@ internal fun EventReducer.bufferDelta(event: SseEvent.MessagePartDelta) {
         val buffer = pendingDeltas.getOrPut(key) { StringBuilder() }
         val available = MAX_PENDING_DELTA_CHARS - buffer.length
         if (available > 0) buffer.append(event.delta.take(available))
+    }
+}
+
+// ============ Compaction Events（V2 /api/session/{id}/compact） ============
+
+/**
+ * 压缩开始：为一个压缩消息建立占位（避免 ended 到达前 UI 抖动），无实质内容。
+ * 压缩完成后会立刻收到 [SseEvent.NextCompactionEnded] 并写入分隔条。
+ */
+internal fun EventReducer.handleNextCompactionStarted(event: SseEvent.NextCompactionStarted) {
+    val messageId = event.messageId
+    if (messageId.isBlank()) return
+    val existing = _parts.value[messageId]?.filterIsInstance<Part.Text>()
+        ?.any { it.id == "$messageId-compacting" } ?: false
+    if (existing) return
+    handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Text(
+        "$messageId-compacting", event.sessionId, messageId, "",
+        time = Part.Text.Time(event.timestamp),
+    )))
+}
+
+/**
+ * 压缩摘要流式增量：逐段累积进「正在压缩」占位 part（$messageId-compacting），
+ * 让用户在压缩期间看到实时摘要文本，而非空白占位；ended 到达后分隔条覆盖。
+ */
+internal fun EventReducer.handleNextCompactionDelta(event: SseEvent.NextCompactionDelta) {
+    if (event.messageId.isBlank() || event.delta.isBlank()) return
+    handleNextCompactionStarted(SseEvent.NextCompactionStarted(event.sessionId, event.messageId, "auto", event.timestamp))
+    handleMessagePartDelta(SseEvent.MessagePartDelta(
+        sessionId = event.sessionId,
+        messageId = event.messageId,
+        partId = "${event.messageId}-compacting",
+        field = "text",
+        delta = event.delta,
+    ))
+}
+
+/**
+ * 回合重试事件：与 `session.status{retry}` 并存，用于补齐重试消息文案。
+ * 已是 Retry 时仅刷新 message（保留 attempt/next 时序），否则以 attempt 建立 Retry。
+ */
+internal fun EventReducer.handleNextRetried(event: SseEvent.NextRetried) {
+    if (event.sessionId.isBlank()) return
+    _sessionStatuses.update { statuses ->
+        val current = statuses[event.sessionId]
+        val retry = when (current) {
+            is SessionStatus.Retry ->
+                current.copy(message = event.message.takeIf { it.isNotBlank() } ?: current.message)
+            else -> SessionStatus.Retry(event.attempt, event.message, 0)
+        }
+        statuses + (event.sessionId to retry)
+    }
+}
+
+/**
+ * 压缩完成：在会话中插入「已总结」分隔条（User 消息 + [Part.Compaction]），
+ * 供 ChatScreenMessageBody 渲染 divider + 回退入口，与 V1 压缩体验一致。
+ */
+internal fun EventReducer.handleNextCompactionEnded(event: SseEvent.NextCompactionEnded) {
+    val messageId = event.messageId
+    if (messageId.isBlank()) return
+    _messages.update { current ->
+        val sessionMessages = current[event.sessionId]?.toMutableList() ?: mutableListOf()
+        val exists = sessionMessages.any { it.id == messageId }
+        if (!exists) {
+            sessionMessages.add(Message.User(
+                id = messageId,
+                sessionId = event.sessionId,
+                time = TimeInfo(event.timestamp),
+            ))
+            sessionMessages.sortBy { it.time.created }
+            current + (event.sessionId to sessionMessages)
+        } else {
+            current
+        }
+    }
+    _parts.update { current ->
+        val parts = (current[messageId] ?: emptyList())
+            .filterNot { it.id == "$messageId-compacting" } // 移除流式摘要占位，避免与分隔条重复
+            .toMutableList()
+        if (parts.none { it is Part.Compaction }) {
+            parts.add(0, Part.Compaction(id = "$messageId-compaction", sessionId = event.sessionId, messageId = messageId))
+            current + (messageId to parts)
+        } else {
+            current
+        }
     }
 }

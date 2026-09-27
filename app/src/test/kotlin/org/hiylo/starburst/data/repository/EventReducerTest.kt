@@ -107,7 +107,7 @@ class EventReducerTest {
         val session = session("deleted")
         reducer.processEvent(SseEvent.SessionCreated(session), "server")
 
-        reducer.processEvent(SseEvent.SessionDeleted(session), "server")
+        reducer.processEvent(SseEvent.SessionDeleted(session.id, session), "server")
 
         assertTrue(reducer.sessions.value.isEmpty())
         assertNull(reducer.sessionStatuses.value[session.id])
@@ -215,6 +215,7 @@ class EventReducerTest {
             "call",
             buildJsonObject { put("exit", 0) },
             buildJsonArray { add(buildJsonObject { put("type", "text"); put("text", "/tmp") }) },
+            "",
             6,
         ), "server")
 
@@ -223,6 +224,62 @@ class EventReducerTest {
         assertEquals("answer", reducer.parts.value["assistant"]?.filterIsInstance<Part.Text>()?.single()?.text)
         val tool = reducer.parts.value["assistant"]?.filterIsInstance<Part.Tool>()?.single()
         assertEquals("/tmp", (tool?.state as ToolState.Completed).output)
+    }
+
+    @Test
+    fun compactionEnded_insertsDividerMessageWithCompactionPart() {
+        val reducer = reducer()
+        reducer.processEvent(
+            SseEvent.NextCompactionEnded("session", "msg_compact", "manual", "summary", "", 100L),
+            "server",
+        )
+
+        val messages = reducer.messages.value["session"] ?: emptyList()
+        assertEquals(listOf("msg_compact"), messages.map { it.id })
+        assertTrue(messages.single() is Message.User)
+
+        val parts = reducer.parts.value["msg_compact"] ?: emptyList()
+        assertTrue(parts.single() is Part.Compaction)
+    }
+
+    @Test
+    fun compactionEnded_twiceDoesNotDuplicateDivider() {
+        val reducer = reducer()
+        reducer.processEvent(SseEvent.NextCompactionEnded("session", "msg_compact", "manual", "s", "", 1L), "server")
+        reducer.processEvent(SseEvent.NextCompactionEnded("session", "msg_compact", "manual", "s", "", 2L), "server")
+
+        assertEquals(1, reducer.messages.value["session"]?.size)
+        assertEquals(1, reducer.parts.value["msg_compact"]?.size)
+    }
+
+    @Test
+    fun sessionCompacted_clearsMessagesAndKeyedParts() {
+        val reducer = reducer()
+        reducer.processEvent(SseEvent.MessagePartUpdated(Part.Text(
+            id = "p1", sessionId = "session", messageId = "m1", text = "hi",
+        )), "server")
+        reducer.processEvent(SseEvent.MessagePartUpdated(Part.Text(
+            id = "p2", sessionId = "session", messageId = "m2", text = "yo",
+        )), "server")
+
+        assertEquals(setOf("m1", "m2"), reducer.parts.value.keys)
+        reducer.processEvent(SseEvent.SessionCompacted("session"), "server")
+
+        assertEquals(0, reducer.messages.value["session"]?.size ?: 0)
+        assertEquals(0, reducer.parts.value.size)
+    }
+
+    @Test
+    fun sessionDeleted_clearsOrphanedParts() {
+        val reducer = reducer()
+        // 仅 parts 到达（消息对象未入 _messages）的孤儿场景。
+        reducer.processEvent(SseEvent.MessagePartUpdated(Part.Text(
+            id = "orphan-p1", sessionId = "session", messageId = "orphan-m1", text = "x",
+        )), "server")
+        reducer.processEvent(SseEvent.SessionDeleted("session"), "server")
+
+        assertEquals(0, reducer.parts.value.size)
+        assertEquals(0, reducer.messages.value["session"]?.size ?: 0)
     }
 
     @Test
@@ -407,7 +464,7 @@ class EventReducerTest {
         reducer.processEvent(request, "server")
         val revision = reducer.pendingSnapshotRevision()
 
-        reducer.processEvent(SseEvent.SessionDeleted(session), "server")
+        reducer.processEvent(SseEvent.SessionDeleted(session.id, session), "server")
 
         assertFalse(
             reducer.replacePendingRequests(
@@ -451,7 +508,7 @@ class EventReducerTest {
             "server",
         )
 
-        reducer.processEvent(SseEvent.SessionDeleted(session), "server")
+        reducer.processEvent(SseEvent.SessionDeleted(session.id, session), "server")
 
         assertNull(reducer.messages.value[session.id])
         assertNull(reducer.parts.value[message.id])
@@ -617,6 +674,70 @@ class EventReducerTest {
     }
 
     @Test
+    fun agentDualEmission_textDeltaAndPartDeltaWithSameContent_doesNotDoubleText() {
+        val reducer = reducer()
+        // starburst-agent 对每个文本块同时发 session.next.text.delta 与 message.part.delta
+        // （内容相同，partID 相同），后续 message.part.updated 带权威全量。
+        reducer.processEvent(SseEvent.NextTextStarted("session", "assistant", "prt_x", 1), "server")
+        reducer.processEvent(SseEvent.NextTextDelta("session", "assistant", "prt_x", "1"), "server")
+        reducer.processEvent(SseEvent.MessagePartDelta("session", "assistant", "prt_x", "text", "1"), "server")
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text("prt_x", "session", "assistant", text = "1")),
+            "server",
+        )
+        reducer.processEvent(SseEvent.NextTextDelta("session", "assistant", "prt_x", "2"), "server")
+        reducer.processEvent(SseEvent.MessagePartDelta("session", "assistant", "prt_x", "text", "2"), "server")
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text("prt_x", "session", "assistant", text = "12")),
+            "server",
+        )
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("12", part.text)
+    }
+
+    @Test
+    fun compactionDelta_accumulatesIntoCompactingPlaceholder() {
+        val reducer = reducer()
+        reducer.processEvent(SseEvent.NextCompactionStarted("session", "comp", "auto", 1), "server")
+        reducer.processEvent(SseEvent.NextCompactionDelta("session", "comp", "已总结前", 2), "server")
+        reducer.processEvent(SseEvent.NextCompactionDelta("session", "comp", "两段话", 3), "server")
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["comp"]?.single() as Part.Text
+        assertEquals("已总结前两段话", part.text)
+    }
+
+    @Test
+    fun compactionEnded_removesStreamingPlaceholderAndKeepsDivider() {
+        val reducer = reducer()
+        reducer.processEvent(SseEvent.NextCompactionStarted("session", "comp", "auto", 1), "server")
+        reducer.processEvent(SseEvent.NextCompactionDelta("session", "comp", "partial", 2), "server")
+        reducer.flushAccumulatedDeltasForTest()
+        reducer.processEvent(
+            SseEvent.NextCompactionEnded("session", "comp", "auto", "full summary", "", 3),
+            "server",
+        )
+
+        val parts = reducer.parts.value["comp"].orEmpty()
+        assertEquals(1, parts.size)
+        assertTrue(parts.single() is Part.Compaction)
+        assertFalse(parts.any { it.id == "comp-compacting" })
+    }
+
+    @Test
+    fun retried_preservesExistingRetryTimingAndUpdatesMessage() {
+        val reducer = reducer()
+        reducer.processEvent(
+            SseEvent.SessionStatus("s", SessionStatus.Retry(1, "old", next = 12345)),
+            "server",
+        )
+        reducer.processEvent(SseEvent.NextRetried("s", attempt = 1, message = "new msg", isRetryable = true, timestamp = 5), "server")
+        assertEquals(SessionStatus.Retry(1, "new msg", 12345), reducer.sessionStatuses.value["s"])
+    }
+
+    @Test
     fun statusSnapshot_keepsOmittedSessionsWhileConnected() {
         val reducer = reducer()
         reducer.processEvent(SseEvent.SessionStatus("busy", SessionStatus.Busy), "server")
@@ -682,4 +803,75 @@ class EventReducerTest {
             ),
         ),
     )
+
+    @Test
+    fun pendingDeltaBeforePartExists_authoritativeTextAlreadyContainsIt_doesNotDuplicate() {
+        val reducer = reducer()
+        // 真实时序：delta 早于 part 建立 → 进 pendingDeltas；随后 agent 发来的
+        // message.part.updated 已包含这段字符（服务端同一份文本）。此前无条件 append
+        // 导致结尾重复一次，这里断言不重复。
+        reducer.processEvent(SseEvent.MessagePartDelta("session", "assistant", "prt_y", "text", "尾巴"), "server")
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text("prt_y", "session", "assistant", text = "正文尾巴")),
+            "server",
+        )
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("正文尾巴", part.text)
+    }
+
+    @Test
+    fun pendingDeltaBeforePartExists_authoritativeTextBlank_stillMergesSoTextIsNotLost() {
+        val reducer = reducer()
+        // 反向边界：part.updated 文本为空时，早到的 delta 必须补上，否则整段丢失。
+        reducer.processEvent(SseEvent.MessagePartDelta("session", "assistant", "prt_z", "text", "早到的内容"), "server")
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text("prt_z", "session", "assistant", text = "")),
+            "server",
+        )
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("早到的内容", part.text)
+    }
+
+    @Test
+    fun pendingDeltaBeforePartExists_authoritativeTextShorter_doesNotLoseBufferedTail() {
+        val reducer = reducer()
+        // 权威全量尚未覆盖到缓冲内容（结尾不含）→ 仍需补齐。
+        reducer.processEvent(SseEvent.MessagePartDelta("session", "assistant", "prt_w", "text", "BC"), "server")
+        reducer.processEvent(
+            SseEvent.MessagePartUpdated(Part.Text("prt_w", "session", "assistant", text = "A")),
+            "server",
+        )
+        reducer.flushAccumulatedDeltasForTest()
+
+        val part = reducer.parts.value["assistant"]?.single() as Part.Text
+        assertEquals("ABC", part.text)
+    }
+
+    @Test
+    fun mergeMessages_loadedWithDuplicatePartIds_collapsesToLongestText() {
+        val reducer = reducer()
+        // V2 content item 逐条映射无归并，同一 id 出现两次会留两条 → 重载后凭空多内容。
+        val message = Message.User(id = "msg_dup", sessionId = "session", time = TimeInfo(1L))
+        reducer.mergeMessages(
+            "session",
+            listOf(
+                MessageWithParts(
+                    info = message,
+                    parts = listOf(
+                        Part.Text("prt_dup", "session", "msg_dup", text = "短"),
+                        Part.Text("prt_dup", "session", "msg_dup", text = "更长的完整内容"),
+                    ),
+                ),
+            ),
+        )
+
+        val parts = reducer.parts.value["msg_dup"].orEmpty()
+        assertEquals(1, parts.size)
+        assertEquals("更长的完整内容", (parts.single() as Part.Text).text)
+    }
+
 }

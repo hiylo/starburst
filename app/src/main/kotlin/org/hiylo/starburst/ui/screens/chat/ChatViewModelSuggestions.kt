@@ -27,7 +27,7 @@ import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.CommandInfo
 import org.hiylo.starburst.data.api.ModelSelection
 import org.hiylo.starburst.data.api.MessageIdGenerator
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
@@ -58,7 +58,6 @@ import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.api.revertSession
 import org.hiylo.starburst.data.api.runShellCommand
 import org.hiylo.starburst.data.api.shareSession
-import org.hiylo.starburst.data.api.summarizeSession
 import org.hiylo.starburst.data.api.unrevertSession
 import org.hiylo.starburst.data.api.unshareSession
 import org.hiylo.starburst.data.api.updateSession
@@ -236,7 +235,7 @@ internal fun ChatViewModel.generateSuggestions() {
 }
 
 /**
- * 通过 OpenCode Backend 已配置的编排 LLM 生成下一步建议。
+ * 通过 Backend 已配置的编排 LLM 生成下一步建议。
  * 后端未配置 LLM（503）或请求失败时抛异常，由调用方回退到 App 设置 provider / MNN。
  */
 private suspend fun ChatViewModel.generateViaBackendLlm(prompt: String): List<String>? {
@@ -374,7 +373,7 @@ internal fun ChatViewModel.clearSuggestions() {
 
 /**
  * 重新生成：回退到该 assistant 消息之前最近的一条用户消息，再自动重发其文本与附件。
- * 复用 [OpenCodeApi.revertSession] 与 [sendParts]，与 /undo 后再发送等价。
+ * 复用 [StarBurstApi.revertSession] 与 [sendParts]，与 /undo 后再发送等价。
  *
  * @param assistantMessageId 要重新生成的 assistant 消息 ID
  * @param onResult 完成回调，true 表示已触发重发

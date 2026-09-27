@@ -10,7 +10,7 @@
 package org.hiylo.starburst.ui.screens.chat
 
 import org.hiylo.starburst.logging.AppLogger as Log
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.PtySocket
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.createPty
@@ -69,7 +69,7 @@ data class TerminalTabUi(
 }
 
 internal class ServerTerminalWorkspace(
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val conn: ServerConnection,
 ) {
     private data class RuntimeTab(
@@ -599,7 +599,7 @@ internal object ServerTerminalRegistry {
     private val lock = Any()
     private val byServer = mutableMapOf<String, ServerTerminalWorkspace>()
 
-    fun workspaceFor(serverId: String, api: OpenCodeApi, conn: ServerConnection): ServerTerminalWorkspace {
+    fun workspaceFor(serverId: String, api: StarBurstApi, conn: ServerConnection): ServerTerminalWorkspace {
         synchronized(lock) {
             return byServer.getOrPut(serverId) { ServerTerminalWorkspace(api, conn) }
         }

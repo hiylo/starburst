@@ -27,7 +27,7 @@ import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.CommandInfo
 import org.hiylo.starburst.data.api.ModelSelection
 import org.hiylo.starburst.data.api.MessageIdGenerator
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
@@ -51,7 +51,7 @@ import org.hiylo.starburst.data.api.listPendingPermissions
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.listProjects
 import org.hiylo.starburst.data.api.listSessionStatuses
-import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.sendPrompt
 import org.hiylo.starburst.data.api.resolveSendingConnection
 import org.hiylo.starburst.data.api.rejectQuestion
 import org.hiylo.starburst.data.api.replyToPermission
@@ -59,7 +59,7 @@ import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.api.revertSession
 import org.hiylo.starburst.data.api.runShellCommand
 import org.hiylo.starburst.data.api.shareSession
-import org.hiylo.starburst.data.api.summarizeSession
+import org.hiylo.starburst.data.api.compactSessionV2
 import org.hiylo.starburst.data.api.unrevertSession
 import org.hiylo.starburst.data.api.unshareSession
 import org.hiylo.starburst.data.api.updateSession
@@ -198,8 +198,8 @@ internal fun ChatViewModel.getSessionDirectory(): String? = sessionDirectory
 
 /**
  * 刷新当前项目是否为 Git 仓库的状态。
- * 依据 [Project.vcs] 是否为 "git" 判定，优先按会话目录匹配 [OpenCodeApi.listProjects] 结果，
- * 未匹配时回退到 [OpenCodeApi.getCurrentProject]。
+ * 依据 [Project.vcs] 是否为 "git" 判定，优先按会话目录匹配 [StarBurstApi.listProjects] 结果，
+ * 未匹配时回退到 [StarBurstApi.getCurrentProject]。
  */
 internal suspend fun ChatViewModel.refreshGitRepositoryState() {
     val directory = sessionDirectory
@@ -208,15 +208,15 @@ internal suspend fun ChatViewModel.refreshGitRepositoryState() {
         return
     }
     try {
-        val projects = api.listProjects(conn)
         val normalized = directory.trimEnd('/')
-        val project = projects.firstOrNull {
-            it.worktree.trimEnd('/') == normalized ||
-                it.path.trimEnd('/') == normalized ||
-                it.directory?.trimEnd('/') == normalized
-        }
-        val vcs = project?.vcs
-            ?: runCatching { api.getCurrentProject(conn).vcs }.getOrNull()
+        val vcs = runCatching {
+            val projects = api.listProjects(conn)
+            projects.firstOrNull {
+                it.worktree.trimEnd('/') == normalized ||
+                    it.path.trimEnd('/') == normalized ||
+                    it.directory?.trimEnd('/') == normalized
+            }?.vcs
+        }.getOrNull() ?: runCatching { api.getCurrentProject(conn).vcs }.getOrNull()
         _isGitRepository.value = vcs == "git"
     } catch (e: Exception) {
         e.rethrowCancellation()
@@ -284,17 +284,16 @@ internal fun ChatViewModel.sendParts(parts: List<PromptPart>): Boolean {
                 null
             }
             // 发送走后端镜像（知识库 RAG 注入的通道）：后端可用时经 {backendUrl}/api/opencode，
-            // 探测失败/未配置回退直连；镜像结果缓存避免每次发送都探测。
+            // 探测失败/未配置回退直连；首次解析后缓存（含直连结果），避免每条消息都探测。
             val server = serverRepository.getServer(serverId)
-            val sendConn = resolveSendingConnection(
+            val sendConn = sendingConnCache ?: resolveSendingConnection(
                 backendApi = backendApi,
                 backendUrl = server?.backendResolvedUrl,
                 backendToken = server?.backendResolvedToken,
                 direct = conn,
-                cached = sendingConnCache,
-            )
-            if (sendConn !== conn) sendingConnCache = sendConn
-            api.promptAsync(
+                cached = null,
+            ).also { sendingConnCache = it }
+            api.sendPrompt(
                 conn = sendConn,
                 sessionId = sessionId,
                 messageId = messageId,
@@ -303,9 +302,16 @@ internal fun ChatViewModel.sendParts(parts: List<PromptPart>): Boolean {
                 agent = uiState.value.selectedAgent,
                 variant = _selectedVariant.value,
                 directory = sessionDirectory,
+                workspaceId = sessionWorkspaceId,
                 system = systemPrompt
             )
             eventReducer.updateSessionStatus(sessionId, SessionStatus.Busy)
+            // 首条用户消息后自动生成会话标题（V2 后端恒为 "New session - <ISO8601>"）。
+            // 延迟到首个回合 idle 再 PATCH：V2 agent 的 finishTurn 会用回合开始时的旧 title
+            // 回写会话（立即 PATCH 会被并发覆盖）。用 sendConn（带 Bearer），直连 conn 无鉴权。
+            if (injectSystemPrompt) {
+                pendingAutoTitle = sendConn to parts
+            }
             // 新消息覆盖之前的待决提问：服务端驳回 + 本地移除，避免重进会话又出现。
             dismissPendingQuestions()
             if (BuildConfig.DEBUG) Log.d(TAG, "Sent prompt to session $sessionId (${parts.size} parts)")
@@ -329,6 +335,30 @@ internal fun ChatViewModel.sendParts(parts: List<PromptPart>): Boolean {
         }
     }
     return true
+}
+
+/**
+ * 首条用户消息后自动生成会话标题：V2 后端不会为新会话生成标题（恒为
+ * "New session - <ISO8601>"），此处取首条文本截断 40 字符补位；
+ * 不覆盖用户已手动重命名的标题。
+ */
+internal suspend fun ChatViewModel.autoTitleFromParts(conn: ServerConnection, parts: List<PromptPart>) {
+    val currentTitle = eventReducer.sessions.value.firstOrNull { it.id == sessionId }?.title
+    if (currentTitle != null && !currentTitle.startsWith("New session")) return
+    val text = parts.asSequence()
+        .filter { it.type == "text" && !it.text.isNullOrBlank() }
+        .joinToString(" ") { it.text!!.trim() }
+        .replace(Regex("\\s+"), " ")
+        .trim()
+    if (text.isBlank()) return
+    val title = text.take(40)
+    runCatching {
+        api.updateSession(conn, sessionId, title = title)
+        if (BuildConfig.DEBUG) Log.d(TAG, "Auto-title applied: $title")
+    }.onFailure {
+        Log.e(TAG, "Auto-title failed for $sessionId: ${it.message}")
+    }
+    runCatching { eventReducer.upsertSession(serverId, api.getSession(conn, sessionId)) }
 }
 
 private suspend fun ChatViewModel.reconcilePendingMessage(messageId: String) {
@@ -412,9 +442,11 @@ internal fun ChatViewModel.replyToPermission(
         try {
             val success = api.replyToPermission(
                 conn = conn,
+                sessionId = requestSessionId,
                 requestId = requestId,
                 reply = reply,
                 directory = requestDirectory(requestSessionId),
+                workspaceId = sessionWorkspaceId,
             )
             if (success) eventReducer.removePermission(requestSessionId, requestId)
             onResult(success)
@@ -430,7 +462,7 @@ internal fun ChatViewModel.replyToPermission(
 internal fun ChatViewModel.abortSession() {
     viewModelScope.launch {
         try {
-            api.abortSession(conn, sessionId, directory = sessionDirectory)
+            api.abortSession(conn, sessionId, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
             if (BuildConfig.DEBUG) Log.d(TAG, "Aborted session $sessionId")
             // Optimistically update session status to Idle so UI reflects change immediately
             eventReducer.updateSessionStatus(sessionId, SessionStatus.Idle)
@@ -467,6 +499,7 @@ private suspend fun ChatViewModel.dismissPendingQuestions() {
         runCatching {
             api.rejectQuestion(
                 conn = conn,
+                sessionId = question.sessionId,
                 requestId = question.id,
                 directory = requestDirectory(question.sessionId),
             )
@@ -492,9 +525,11 @@ internal fun ChatViewModel.replyToQuestion(
         try {
             val success = api.replyToQuestion(
                 conn = conn,
+                sessionId = requestSessionId,
                 requestId = requestId,
                 answers = answers,
                 directory = requestDirectory(requestSessionId),
+                workspaceId = sessionWorkspaceId,
             )
             if (success) {
                 // Optimistically remove the question card — SSE event may arrive late or not at all
@@ -521,6 +556,7 @@ internal fun ChatViewModel.rejectQuestion(
         try {
             val success = api.rejectQuestion(
                 conn = conn,
+                sessionId = requestSessionId,
                 requestId = requestId,
                 directory = requestDirectory(requestSessionId),
             )
@@ -549,8 +585,7 @@ private fun ChatViewModel.requestDirectory(requestSessionId: String): String? =
 internal fun ChatViewModel.shareSession(onResult: (String?) -> Unit) {
     viewModelScope.launch {
         try {
-            val session = api.shareSession(conn, sessionId)
-            val url = session.share?.url
+            val url = api.shareSession(conn, sessionId)
             if (BuildConfig.DEBUG) Log.d(TAG, "Session share completed")
             onResult(url)
         } catch (e: Exception) {
@@ -579,17 +614,10 @@ internal fun ChatViewModel.unshareSession(onResult: (Boolean) -> Unit) {
 internal fun ChatViewModel.compactSession(onResult: (Boolean) -> Unit) {
     viewModelScope.launch {
         try {
-            val state = uiState.value
-            val providerId = state.selectedProviderId
-            val modelId = state.selectedModelId
-            if (providerId == null || modelId == null) {
-                Log.e(TAG, "Cannot compact: no model selected")
-                onResult(false)
-                return@launch
-            }
-            api.summarizeSession(conn, sessionId, providerId, modelId)
-            if (BuildConfig.DEBUG) Log.d(TAG, "Compacted session $sessionId")
-            onResult(true)
+            // V2：走 /api/session/{id}/compact（真正的上下文压缩），不再依赖 summarize。
+            val ok = api.compactSessionV2(conn, sessionId, directory = sessionDirectory)
+            if (BuildConfig.DEBUG) Log.d(TAG, "Compacted session $sessionId: $ok")
+            onResult(ok)
         } catch (e: Exception) {
             e.rethrowCancellation()
             Log.e(TAG, "Failed to compact session", e)
@@ -672,7 +700,7 @@ internal fun ChatViewModel.undoMessage(onResult: (Boolean) -> Unit) {
                 onResult(false)
                 return@launch
             }
-            val revertedSession = api.revertSession(conn, sessionId, lastUser.message.id)
+            val revertedSession = api.revertSession(conn, sessionId, lastUser.message.id, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
             eventReducer.upsertSession(serverId, revertedSession)
             pendingPromptRepository.remove(lastUser.message.id)
             _pendingPrompts.value = _pendingPrompts.value.filterNot { it.messageId == lastUser.message.id }
@@ -692,7 +720,7 @@ internal fun ChatViewModel.undoMessage(onResult: (Boolean) -> Unit) {
 internal fun ChatViewModel.revertMessage(messageId: String, revertedText: String? = null, onResult: (Boolean) -> Unit) {
     viewModelScope.launch {
         try {
-            val revertedSession = api.revertSession(conn, sessionId, messageId)
+            val revertedSession = api.revertSession(conn, sessionId, messageId, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
             eventReducer.upsertSession(serverId, revertedSession)
             pendingPromptRepository.remove(messageId)
             _pendingPrompts.value = _pendingPrompts.value.filterNot { it.messageId == messageId }
@@ -739,7 +767,7 @@ internal fun ChatViewModel.restoreRevertedDraft(payload: RevertedDraftPayload) {
 internal fun ChatViewModel.redoMessage(onResult: (Boolean) -> Unit) {
     viewModelScope.launch {
         try {
-            api.unrevertSession(conn, sessionId)
+            api.unrevertSession(conn, sessionId, directory = sessionDirectory, workspaceId = sessionWorkspaceId)
             if (BuildConfig.DEBUG) Log.d(TAG, "Unreverted session $sessionId")
             onResult(true)
         } catch (e: Exception) {

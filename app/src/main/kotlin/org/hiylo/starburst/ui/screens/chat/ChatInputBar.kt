@@ -98,31 +98,6 @@ private val placeholderHintResIds = listOf(
     R.string.chat_hint_help,
 )
 
-/** 对话式文档生成意图：[type] 为后端 docType（pptx/docx/xlsx），[prompt] 为原始描述文本。 */
-internal data class DocumentIntent(val type: String, val prompt: String)
-
-/**
- * 从输入文本识别「生成文档」意图：需**同时**命中「生成动作词」与「文档类型词」才触发，
- * 避免误伤普通消息（如「生成一段代码」不含类型词 → 不触发）。命中返回 [DocumentIntent]，
- * 否则返回 null，由调用方按普通消息发送。
- */
-internal fun detectDocumentIntent(text: String): DocumentIntent? {
-    val trimmed = text.trim()
-    if (trimmed.isEmpty()) return null
-    val actionRegex = Regex(
-        "生成|制作|创建|写一份|写个|做个|做一个|来个|出个|帮我做|generate|create|make",
-        RegexOption.IGNORE_CASE,
-    )
-    if (!actionRegex.containsMatchIn(trimmed)) return null
-    val type = when {
-        Regex("ppt|幻灯片|演示文稿|powerpoint", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "pptx"
-        Regex("excel|电子表格|表格|xlsx", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "xlsx"
-        Regex("word|文档|docx|document|报告|周报|月报", RegexOption.IGNORE_CASE).containsMatchIn(trimmed) -> "docx"
-        else -> return null
-    }
-    return DocumentIntent(type, trimmed)
-}
-
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatInputBar(
@@ -137,9 +112,6 @@ internal fun ChatInputBar(
     attachments: List<ImageAttachment> = emptyList(),
     onAttach: () -> Unit = {},
     onTemplateClick: () -> Unit = {},
-    onDocumentGenerateClick: () -> Unit = {},
-    showDocumentGenerate: Boolean = false,
-    onDocumentIntentDetected: (type: String, prompt: String) -> Unit = { _, _ -> },
     isListening: Boolean = false,
     voiceLevel: Float = 0f,
     onMicPress: () -> Unit = {},
@@ -293,7 +265,7 @@ internal fun ChatInputBar(
                             Text(
                                 text = cmd.description,
                                 style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 modifier = Modifier.weight(1f)
@@ -368,12 +340,12 @@ internal fun ChatInputBar(
                             tint = if (isDir)
                                 MaterialTheme.colorScheme.tertiary
                             else
-                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         Text(
                             text = buildAnnotatedString {
                                 if (dirPart.isNotEmpty()) {
-                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))) {
+                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                                         append(dirPart)
                                     }
                                 }
@@ -381,7 +353,7 @@ internal fun ChatInputBar(
                                     append(namePart)
                                 }
                                 if (isDir) {
-                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))) {
+                                    withStyle(SpanStyle(color = MaterialTheme.colorScheme.onSurfaceVariant)) {
                                         append("/")
                                     }
                                 }
@@ -458,7 +430,7 @@ internal fun ChatInputBar(
                         Text(
                             text = statusText,
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -496,16 +468,16 @@ internal fun ChatInputBar(
                                     .clip(RoundedCornerShape(6.dp))
                                     .background(agentColor.copy(alpha = 0.18f))
                                     .clickable {
-                                        val currentIndex = agents.indexOfFirst { it.name == selectedAgent }
+                                        val currentIndex = agents.indexOfFirst { it.displayName == selectedAgent }
                                         val nextIndex = (currentIndex + 1) % agents.size
-                                        onAgentSelect(agents[nextIndex].name)
+                                        onAgentSelect(agents[nextIndex].displayName)
                                     }
                                     .padding(horizontal = 6.dp, vertical = 3.dp)
                             ) {
                                 // Invisible ghost texts for all agent names — fixes width to the widest
                                 agents.forEach { agent ->
                                     Text(
-                                        text = agent.name.replaceFirstChar { it.uppercase() },
+                                        text = agent.displayName.replaceFirstChar { it.uppercase() },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.Transparent
                                     )
@@ -533,19 +505,19 @@ internal fun ChatInputBar(
                                     ProviderIcon(
                                         providerId = selectedProviderId,
                                         size = 13.dp,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 Text(
                                     text = displayModelLabel(modelLabel),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                                 Icon(
                                     Icons.Default.UnfoldMore,
                                     contentDescription = null,
                                     modifier = Modifier.size(14.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -568,14 +540,14 @@ internal fun ChatInputBar(
                                         color = if (selectedVariant != null) {
                                             MaterialTheme.colorScheme.tertiary
                                         } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                            MaterialTheme.colorScheme.onSurfaceVariant
                                         },
                                     )
                                     Icon(
                                         Icons.Default.ArrowDropDown,
                                         contentDescription = null,
                                         modifier = Modifier.size(14.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
                                 }
                                 DropdownMenu(
@@ -853,21 +825,6 @@ internal fun ChatInputBar(
                         )
                     }
                 }
-                // Document generation entry — shown when the server has a backend
-                // token configured (document endpoints require it).
-                if (!isShellMode && showDocumentGenerate) {
-                    IconButton(
-                        onClick = onDocumentGenerateClick,
-                        modifier = Modifier.size(44.dp),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = stringResource(R.string.document_generate),
-                            modifier = Modifier.size(22.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                        )
-                    }
-                }
                 // Text field — minimal style, no heavy outline
                 val mentionHighlightColor = MaterialTheme.colorScheme.primary
                 val mentionBgColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
@@ -955,7 +912,7 @@ internal fun ChatInputBar(
                                     Text(
                                         text = placeholder,
                                         style = MaterialTheme.typography.bodyLarge,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                                 innerTextField()
@@ -1046,11 +1003,6 @@ internal fun ChatInputBar(
                                     ComposerAction.DISABLED -> Unit
                                 }
                             },
-                            onLongClick = {
-                                onInputModeChange(
-                                    if (isShellMode) ChatInputMode.NORMAL else ChatInputMode.SHELL
-                                )
-                            }
                         ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -1198,7 +1150,7 @@ private fun VoiceHoldToTalkCapsule(
                     Text(
                         text = stringResource(R.string.chat_voice_slide_up_cancel),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
                     )
                     Row(

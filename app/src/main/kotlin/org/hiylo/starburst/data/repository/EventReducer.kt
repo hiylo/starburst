@@ -23,6 +23,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -78,6 +79,20 @@ class EventReducer @Inject constructor(
 
     /** 流式 delta 累积缓冲：把高频 text delta 合并后定期 flush，避免每个 delta 都复制整段已累计文本（O(n²)）。 */
     internal val deltaAccumulator = ConcurrentHashMap<PendingDeltaKey, StringBuilder>()
+
+    /**
+     * 已被 V2 通道（`session.next.text.*`）认领的文本 partId 集合。
+     *
+     * starburst-agent 对同一段文本会**同时**发 `session.next.text.delta`（V2）与
+     * `message.part.delta`（V1），两者的 (sessionId, messageId, partId) 完全相同，
+     * 于是同一 chunk 被追加两次，文本出现重复。既有 `agentDualEmission` 用例之所以
+     * 绿，是因为它后面紧跟一次 `message.part.updated` 全量覆盖把重复冲掉——流式
+     * 期间（50ms flush 先于全量事件）仍会肉眼可见重复。
+     *
+     * 这里让 V2 通道认领 partId：V2 通道一旦开始写某个 partId，V1 通道对同一 partId
+     * 的 delta 一律忽略。V2 是 App 的主通道，优先级高于 V1，符合「双发时以 V2 为准」。
+     */
+    internal val v2OwnedTextPartIds = ConcurrentHashMap.newKeySet<PendingDeltaKey>()
 
     init {
         // 定期 flush 累积的 delta（与 UI 的 50ms 节流采样对齐）。
@@ -165,6 +180,14 @@ class EventReducer @Inject constructor(
      * @param serverId The server this event came from (used for session tracking)
      */
     fun processEvent(event: SseEvent, serverId: String, directory: String? = null, workspaceId: String? = null) {
+        try {
+            processEventInternal(event, serverId, directory, workspaceId)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to process SSE event ${event::class.simpleName}: ${e.message}", e)
+        }
+    }
+
+    private fun processEventInternal(event: SseEvent, serverId: String, directory: String? = null, workspaceId: String? = null) {
         when (event) {
             is SseEvent.ServerConnected -> handleServerConnected()
             is SseEvent.ServerHeartbeat -> { /* No-op */ }
@@ -186,11 +209,22 @@ class EventReducer @Inject constructor(
             is SseEvent.SessionDeleted -> handleSessionDeleted(event)
             is SseEvent.SessionStatus -> handleSessionStatus(event, serverId)
             is SseEvent.SessionIdle -> handleSessionIdle(event, serverId)
-            is SseEvent.SessionCompacted -> Unit
+            is SseEvent.SessionCompacted -> {
+                // 服务端压缩了会话历史，本地缓存已过期，清除以避免显示旧消息。
+                // _parts 按 messageId 键控：按 part 自身的 sessionId 过滤（parts 可能先于
+                // messages 存在），否则按 sessionId 删是 no-op、parts 残留（内存泄漏）。
+                _messages.update { it - event.sessionId }
+                _parts.update { current ->
+                    current.filterNot { (_, parts) -> parts.any { it.sessionId == event.sessionId } }
+                }
+            }
             is SseEvent.SessionDiff -> handleSessionDiff(event)
             is SseEvent.SessionError -> handleSessionError(event)
-            is SseEvent.PromptAdmitted -> _promptDeliveries.update {
-                it + (event.messageId to PromptDeliveryInfo(event.sessionId, PromptDeliveryState.ADMITTED))
+            is SseEvent.PromptAdmitted -> {
+                trackSession(serverId, event.sessionId)
+                _promptDeliveries.update {
+                    it + (event.messageId to PromptDeliveryInfo(event.sessionId, PromptDeliveryState.ADMITTED))
+                }
             }
             is SseEvent.Prompted -> handleNextPrompted(event, serverId)
             is SseEvent.NextStepStarted -> handleNextStepStarted(event, serverId)
@@ -202,19 +236,21 @@ class EventReducer @Inject constructor(
                     is Message.Assistant -> message.copy(agent = event.agent)
                 }
             }
-            is SseEvent.NextModelSwitched -> updateMessage(event.sessionId, event.messageId) { message ->
-                val model = event.model.jsonObject
+                is SseEvent.NextModelSwitched -> updateMessage(event.sessionId, event.messageId) { message ->
+                val model = event.model as? JsonObject ?: JsonObject(emptyMap())
                 when (message) {
                     is Message.User -> message.copy(
                         model = Message.User.Model(
                             model["providerID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                            model["modelID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                            model["id"]?.jsonPrimitive?.contentOrNull
+                                ?: model["modelID"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                         ),
                         variant = model["variant"]?.jsonPrimitive?.contentOrNull,
                     )
                     is Message.Assistant -> message.copy(
                         providerId = model["providerID"]?.jsonPrimitive?.contentOrNull,
-                        modelId = model["modelID"]?.jsonPrimitive?.contentOrNull,
+                        modelId = model["id"]?.jsonPrimitive?.contentOrNull
+                            ?: model["modelID"]?.jsonPrimitive?.contentOrNull,
                         variant = model["variant"]?.jsonPrimitive?.contentOrNull,
                     )
                 }
@@ -227,11 +263,19 @@ class EventReducer @Inject constructor(
                 "${event.messageId}-synthetic", event.sessionId, event.messageId, event.text, synthetic = true,
                 time = Part.Text.Time(event.timestamp, event.timestamp),
             )))
+            is SseEvent.NextCompactionStarted -> handleNextCompactionStarted(event)
+            is SseEvent.NextCompactionDelta -> handleNextCompactionDelta(event)
+            is SseEvent.NextCompactionEnded -> handleNextCompactionEnded(event)
+            is SseEvent.NextRetried -> handleNextRetried(event)
             is SseEvent.NextShellStarted -> handleNextShellStarted(event)
             is SseEvent.NextShellEnded -> handleNextShellEnded(event)
-            is SseEvent.NextTextStarted -> handleMessagePartFinal(SseEvent.MessagePartUpdated(
-                Part.Text(event.textId, event.sessionId, event.messageId, time = Part.Text.Time(event.timestamp)),
-            ))
+            is SseEvent.NextTextStarted -> {
+                // 认领该 partId：后续 V1 message.part.delta 不再重复写入（见 v2OwnedTextPartIds）。
+                v2OwnedTextPartIds.add(PendingDeltaKey(event.sessionId, event.messageId, event.textId))
+                handleMessagePartFinal(SseEvent.MessagePartUpdated(
+                    Part.Text(event.textId, event.sessionId, event.messageId, time = Part.Text.Time(event.timestamp)),
+                ))
+            }
             is SseEvent.NextTextDelta -> handleMessagePartDelta(SseEvent.MessagePartDelta(
                 event.sessionId, event.messageId, event.textId, "text", event.delta,
             ))
@@ -259,7 +303,19 @@ class EventReducer @Inject constructor(
             is SseEvent.MessageRemoved -> handleMessageRemoved(event)
 
             is SseEvent.MessagePartUpdated -> handleMessagePartUpdated(event)
-            is SseEvent.MessagePartDelta -> handleMessagePartDelta(event)
+            is SseEvent.MessagePartDelta -> {
+                // 双发去重：该 partId 若已被 V2 通道认领，忽略 V1 delta，避免同一 chunk 追加两次。
+                val owned = v2OwnedTextPartIds.contains(
+                    PendingDeltaKey(event.sessionId, event.messageId, event.partId),
+                )
+                if (owned) {
+                    if (BuildConfig.DEBUG) {
+                        Log.d(TAG, "skip V1 message.part.delta for V2-owned part=${event.partId}")
+                    }
+                } else {
+                    handleMessagePartDelta(event)
+                }
+            }
             is SseEvent.MessagePartRemoved -> handleMessagePartRemoved(event)
 
             is SseEvent.PermissionAsked -> handlePermissionAsked(event, serverId)
@@ -333,7 +389,7 @@ class EventReducer @Inject constructor(
     }
 
     private fun handleSessionDeleted(event: SseEvent.SessionDeleted) {
-        val sessionId = event.info.id
+        val sessionId = event.info?.id ?: event.sessionId
         removeSession(sessionId)
     }
 
@@ -343,7 +399,6 @@ class EventReducer @Inject constructor(
      * not linger in the session list after a successful delete.
      */
     fun removeSession(sessionId: String) {
-        val messageIds = _messages.value[sessionId].orEmpty().map { it.id }.toSet()
         _serverSessions.update { current ->
             current.mapValues { (_, sessionIds) -> sessionIds - sessionId }
                 .filterValues { it.isNotEmpty() }
@@ -351,16 +406,21 @@ class EventReducer @Inject constructor(
         _sessions.update { it.filter { session -> session.id != sessionId } }
         _sessionStatuses.update { it - sessionId }
         _messages.update { it - sessionId }
-        _parts.update { current -> current.filterKeys { it !in messageIds } }
+        // _parts 按 messageId 键控：按 part 自身 sessionId 过滤（覆盖消息未落表的孤儿 parts）。
+        _parts.update { current ->
+            current.filterNot { (_, parts) -> parts.any { it.sessionId == sessionId } }
+        }
         _sessionDiffs.update { it - sessionId }
         _sessionErrors.update { it - sessionId }
         _unconfirmedCompletedSessions.update { it - sessionId }
         _lastUserMessageAt.update { it - sessionId }
         removePendingForSessions(setOf(sessionId))
         _todos.update { it - sessionId }
+        _promptDeliveries.update { current -> current.filterValues { it.sessionId != sessionId } }
         synchronized(deltaLock) {
             pendingDeltas.keys.removeAll { it.sessionId == sessionId }
             deltaAccumulator.keys.removeAll { it.sessionId == sessionId }
+            v2OwnedTextPartIds.removeAll { it.sessionId == sessionId }
         }
         synchronized(removedMessageLock) {
             removedMessageSessions.entries.removeAll { it.value == sessionId }
@@ -386,6 +446,27 @@ class EventReducer @Inject constructor(
         if (previous is SessionStatus.Busy) {
             markUnconfirmedCompleted(event.sessionId)
         }
+        // 回合结束（busy→idle）时把本会话已加载的消息重新写入 FTS 索引：
+        // 实时消息此前只随会话重开时的批量加载入库，增量回合完成后在此补齐，
+        // 使全局搜索能立刻命中本轮新消息。
+        indexSessionMessages(serverId, event.sessionId)
+    }
+
+    /**
+     * 把当前缓存的会话消息按文本 part 内容写入 FTS（幂等：同 messageId 覆盖更新）。
+     * 仅索引非空文本消息，工具/文件等非文本 part 不参与（与批量加载路径一致）。
+     */
+    private fun indexSessionMessages(serverId: String, sessionId: String) {
+        if (serverId.isBlank() || sessionId.isBlank()) return
+        val messages = _messages.value[sessionId].orEmpty()
+        if (messages.isEmpty()) return
+        val title = _sessions.value.firstOrNull { it.id == sessionId }?.title ?: ""
+        val withParts = messages.mapNotNull { msg ->
+            (_parts.value[msg.id] ?: emptyList()).let { parts ->
+                if (parts.isEmpty()) null else MessageWithParts(info = msg, parts = parts)
+            }
+        }
+        indexMessages(serverId, sessionId, withParts)
     }
 
     /** Marks a session as confirmed once the user has opened/acknowledged it. */
@@ -760,15 +841,35 @@ class EventReducer @Inject constructor(
 
     private fun mergeLoadedParts(current: List<Part>, loaded: List<Part>): List<Part> {
         val currentById = current.associateBy { it.id }
-        val merged = loaded.map { loadedPart ->
+        // loaded 自身可能含同 id 的重复条目（V2 content item 逐条映射，无归并；同一
+        // content item 出现两次就会留两条）。先按 id 折叠，保留文本更长的一条，
+        // 否则「同一条内容显示两遍」。
+        val loadedById = LinkedHashMap<String, Part>()
+        for (part in loaded) {
+            if (part.id.isBlank()) continue
+            val existing = loadedById[part.id]
+            loadedById[part.id] = when {
+                existing == null -> part
+                partTextLength(part) > partTextLength(existing) -> part
+                else -> existing
+            }
+        }
+        val merged = loadedById.values.map { loadedPart ->
             when (val currentPart = currentById[loadedPart.id]) {
                 is Part.Text -> if (loadedPart is Part.Text && currentPart.text.length > loadedPart.text.length) currentPart else loadedPart
                 is Part.Reasoning -> if (loadedPart is Part.Reasoning && currentPart.text.length > loadedPart.text.length) currentPart else loadedPart
                 else -> loadedPart
             }
         }
-        val loadedIds = loaded.asSequence().map { it.id }.toSet()
+        val loadedIds = loadedById.keys
         return merged + current.filterNot { it.id in loadedIds }
+    }
+
+    /** part 的可比较文本长度（用于同 id 多条目时保留信息量最大的一条）。 */
+    private fun partTextLength(part: Part): Int = when (part) {
+        is Part.Text -> part.text.length
+        is Part.Reasoning -> part.text.length
+        else -> 0
     }
 
     /**
@@ -836,6 +937,7 @@ class EventReducer @Inject constructor(
         _lastUserMessageAt.update { it - sessionIds }
         synchronized(deltaLock) {
             pendingDeltas.keys.removeAll { it.sessionId in sessionIds }
+            v2OwnedTextPartIds.removeAll { it.sessionId in sessionIds }
         }
         synchronized(removedMessageLock) {
             removedMessageSessions.entries.removeAll { it.value in sessionIds }

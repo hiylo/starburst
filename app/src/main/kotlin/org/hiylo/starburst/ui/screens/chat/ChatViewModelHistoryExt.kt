@@ -86,7 +86,14 @@ internal suspend fun ChatViewModel.loadSession() {
         sessionPromptable = sessionAcceptsPrompts(session)
         if (session.directory.isNotBlank()) {
             sessionDirectory = session.directory
+            sessionWorkspaceId = session.workspaceId
             if (BuildConfig.DEBUG) Log.d(TAG, "Session directory resolved")
+        }
+        // 取服务器 home 目录：把顶栏路径折叠成 `~/...`，与会话列表显示保持一致。
+        if (serverHomeDirectory.isBlank()) {
+            runCatching { api.getServerPaths(conn).home }
+                .onSuccess { home -> if (home.isNotBlank()) serverHomeDirectory = home }
+                .onFailure { if (BuildConfig.DEBUG) Log.d(TAG, "Failed to resolve home dir: ${it.message}") }
         }
         // 子会话 BFS、git 状态、文件变更列表互不依赖，且都不影响首屏消息，
         // 并行执行以缩短打开会话的串行等待（原先 BFS→git→diff 串行）。

@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.semantics.text
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import org.hiylo.starburst.domain.model.*
@@ -35,7 +36,10 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.ui.components.AppSecondaryButton
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
+import org.hiylo.starburst.ui.theme.StatusConnected
+import org.hiylo.starburst.ui.theme.StatusError
 
 /**
  * Session diff dialog: the changed-file list and the per-file before/after view.
@@ -95,7 +99,7 @@ private fun FileDiffCard(
 ) {
     val isAmoled = isAmoledTheme()
     val statusColor = when (diff.status) {
-        "added" -> Color(0xFF2E7D32)
+        "added" -> StatusConnected
         "deleted" -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.primary
     }
@@ -105,7 +109,7 @@ private fun FileDiffCard(
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
@@ -123,7 +127,7 @@ private fun FileDiffCard(
                         Text(
                             text = "+${diff.additions}",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFF2E7D32),
+                            color = StatusConnected,
                         )
                         Text(
                             text = "-${diff.deletions}",
@@ -151,33 +155,33 @@ private fun FileDiffCard(
             }
             if (expanded) {
                 Spacer(Modifier.height(8.dp))
-                SessionFileDiffContent(before = diff.before, after = diff.after)
+                SessionFileDiffContent(before = diff.before, after = diff.after, patch = diff.patch)
             }
         }
     }
 }
 
 @Composable
-private fun SessionFileDiffContent(before: String, after: String) {
+private fun SessionFileDiffContent(before: String, after: String, patch: String = "") {
     val lineColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (before.isNotBlank()) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0x1AEF5350), RoundedCornerShape(6.dp))
+                    .background(StatusError.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                     .padding(8.dp),
             ) {
                 Text(
                     text = stringResource(R.string.session_changes_before),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error,
+                    color = StatusError,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = before,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }
@@ -185,19 +189,41 @@ private fun SessionFileDiffContent(before: String, after: String) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color(0x1A66BB6A), RoundedCornerShape(6.dp))
+                    .background(StatusConnected.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
                     .padding(8.dp),
             ) {
                 Text(
                     text = stringResource(R.string.session_changes_after),
                     style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF2E7D32),
+                    color = StatusConnected,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = after,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
+        }
+        // V2 REST diff 只有原始 unified patch：before/after 均缺失时直接渲染 patch。
+        if (before.isBlank() && after.isBlank() && patch.isNotBlank()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(lineColor, RoundedCornerShape(6.dp))
+                    .padding(8.dp),
+            ) {
+                Text(
+                    text = stringResource(R.string.session_changes_patch),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = patch,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface,
                 )
             }
         }

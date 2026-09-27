@@ -27,7 +27,7 @@ import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.CommandInfo
 import org.hiylo.starburst.data.api.ModelSelection
 import org.hiylo.starburst.data.api.MessageIdGenerator
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
@@ -58,7 +58,6 @@ import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.api.revertSession
 import org.hiylo.starburst.data.api.runShellCommand
 import org.hiylo.starburst.data.api.shareSession
-import org.hiylo.starburst.data.api.summarizeSession
 import org.hiylo.starburst.data.api.unrevertSession
 import org.hiylo.starburst.data.api.unshareSession
 import org.hiylo.starburst.data.api.updateSession
@@ -105,7 +104,7 @@ internal fun Throwable.rethrowCancellation() {
 /**
  * 把异常 message 翻译为面向用户的友好文案（国际化）。
  *
- * 打开已删除/不存在的会话时，opencode 返回 404 + `{"name":"NotFoundError",...}` 之类的错误体，
+ * 打开已删除/不存在的会话时，服务端返回 404 + `{"name":"NotFoundError",...}` 之类的错误体，
  * 反序列化失败后的 message 会带着原始 JSON 直接上屏；这里统一识别并替换为「会话不存在」。
  * 若无法识别则回退到原始 message，保留其它错误信息可见。
  */
@@ -172,6 +171,11 @@ data class ChatUiState(
     val sessionTitle: String = "",
     /** 项目路径（会话所属项目目录），显示在标题栏副标题。 */
     val sessionDirectory: String = "",
+    /**
+     * 服务器 home 目录（`GET /path/home`），用于把会话目录折叠成 `~/...`，
+     * 与会话列表的展示规则保持一致（见 `SessionPathFormatter`）。
+     */
+    val serverHomeDirectory: String = "",
     val sessionLoaded: Boolean = false,
     val parentSessionId: String? = null,
     /** 当前会话 fork 出的直接子会话列表（用于分支切换对比）。 */
@@ -294,7 +298,7 @@ data class ContextUsageDetails(
 
 /**
  * 估算上下文 token 在各类别中的分布（system / user / assistant / tool / other）。
- * 参考 OpenCode Web UI 的 estimateSessionContextBreakdown 逻辑。
+ * 参考 Web UI 的 estimateSessionContextBreakdown 逻辑。
  */
 internal fun computeContextBreakdown(
     messages: List<ChatMessage>,
@@ -385,19 +389,47 @@ internal fun estimateContextTokens(messages: List<ChatMessage>): Int {
     var cjkChars = 0
     for (msg in messages) {
         for (part in msg.parts) {
-            val text = when (part) {
-                is Part.Text -> part.text
-                is Part.Reasoning -> part.text
-                is Part.Snapshot -> part.snapshot
-                is Part.StepStart -> part.snapshot ?: ""
-                else -> ""
-            }
+            val text = partTextForEstimate(part)
             for (c in text) {
                 if (isCjk(c)) cjkChars++ else asciiChars++
             }
         }
     }
     return Math.ceil(asciiChars / ASCII_CHARS_PER_TOKEN + cjkChars / CJK_CHARS_PER_TOKEN).toInt()
+}
+
+/**
+ * 提取用于上下文估算的 part 文本。覆盖全部 Part 类型：
+ * 工具 part 计入 input/raw/result/error（bash 输出、文件补丁是上下文大头），
+ * file/patch/subtask/step-finish/retry/agent 计入各自文本字段。
+ * 仅 [Part.Compaction]（分隔条标记）与 Unknown 不计。
+ */
+private fun partTextForEstimate(part: Part): String = when (part) {
+    is Part.Text -> part.text
+    is Part.Reasoning -> part.text
+    is Part.Snapshot -> part.snapshot
+    is Part.StepStart -> part.snapshot ?: ""
+    is Part.StepFinish -> part.reason + (part.snapshot ?: "")
+    is Part.Tool -> {
+        val input = when (val s = part.state) {
+            is ToolState.Pending -> s.raw.orEmpty() + s.input.values.joinToString(" ") { it.toString() }
+            is ToolState.Running -> s.input.values.joinToString(" ") { it.toString() }
+            is ToolState.Completed -> s.result + s.input.values.joinToString(" ") { it.toString() }
+            is ToolState.Error -> s.error + s.input.values.joinToString(" ") { it.toString() }
+        }
+        input + part.metadata.orEmpty().values.joinToString(" ")
+    }
+    is Part.File -> listOfNotNull(part.url, part.filename).joinToString(" ")
+    is Part.Patch -> part.files.joinToString(" ") + " " + part.hash
+    is Part.Subtask -> part.prompt + (part.description ?: "") + (part.command ?: "")
+    is Part.Compaction -> ""
+    is Part.Retry -> part.errorMessage
+    is Part.Agent -> part.name
+    is Part.Permission -> part.message
+    is Part.Question -> part.question
+    is Part.Abort -> part.reason
+    is Part.SessionTurn -> ""
+    is Part.Unknown -> ""
 }
 
 /** 粗略判定 CJK 字符（中日韩统一表意文字 + 假名 + 谚文），用于区分 token 密度。 */

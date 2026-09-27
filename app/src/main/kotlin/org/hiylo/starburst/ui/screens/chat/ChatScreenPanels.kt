@@ -228,7 +228,7 @@ internal fun SuggestionRow(
                     Text(
                         text = stringResource(R.string.chat_suggestions_generating),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -291,7 +291,7 @@ internal fun SuggestionRow(
                                     }
                                 ),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                         suggestions.take(3).forEach { suggestion ->
@@ -338,7 +338,7 @@ internal fun SuggestionRow(
                             Icons.Default.Close,
                             contentDescription = stringResource(R.string.close),
                             modifier = Modifier.size(16.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }

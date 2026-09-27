@@ -330,7 +330,7 @@ private fun ContextBreakdownBar(segments: List<ContextBreakdownSegment>) {
         Text(
             text = stringResource(R.string.chat_context_breakdown_note),
             style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
 }

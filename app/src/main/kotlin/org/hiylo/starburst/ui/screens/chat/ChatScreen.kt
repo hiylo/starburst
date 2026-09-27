@@ -139,10 +139,9 @@ fun ChatScreen(
     var showTemplatePicker by showTemplatePickerState
     val showDocumentGenerateDialogState = remember { mutableStateOf(false) }
     var showDocumentGenerateDialog by showDocumentGenerateDialogState
-    val documentGenerateIntent = remember { mutableStateOf<DocumentIntent?>(null) }
     // 对话框关闭后清空意图，避免下次打开时残留旧预填值。
     LaunchedEffect(showDocumentGenerateDialogState.value) {
-        if (!showDocumentGenerateDialogState.value) documentGenerateIntent.value = null
+        Unit
     }
     val showSubagentContextDetailsState = remember { mutableStateOf(false) }
     var showSubagentContextDetails by showSubagentContextDetailsState
@@ -914,10 +913,6 @@ fun ChatScreen(
                 showAttachmentOptionsState = showAttachmentOptionsState,
                 showTemplatePickerState = showTemplatePickerState,
 showDocumentGenerateDialogState = showDocumentGenerateDialogState,
-                onDocumentIntentDetected = { type, prompt ->
-                    documentGenerateIntent.value = DocumentIntent(type, prompt)
-                    showDocumentGenerateDialogState.value = true
-                },
                 showSendConfirmDialogState = showSendConfirmDialogState,
                 pendingSendActionState = pendingSendActionState,
             )
@@ -956,8 +951,8 @@ showDocumentGenerateDialogState = showDocumentGenerateDialogState,
             hasUnreadMessagesState = hasUnreadMessagesState,
             isAtBottom = isAtBottom,
             showDocumentGenerateDialogState = showDocumentGenerateDialogState,
-            documentGenerateInitialType = documentGenerateIntent.value?.type,
-            documentGenerateInitialPrompt = documentGenerateIntent.value?.prompt.orEmpty(),
+            documentGenerateInitialType = null,
+            documentGenerateInitialPrompt = "",
             pendingInteractions = pendingInteractions,
             isBusy = isBusy,
             onNavigateToChildSession = onNavigateToChildSession,

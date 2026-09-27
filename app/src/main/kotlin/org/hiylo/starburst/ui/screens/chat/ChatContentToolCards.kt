@@ -188,7 +188,7 @@ internal fun WriteToolCard(tool: Part.Tool) {
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -234,7 +234,7 @@ internal fun BashToolCard(tool: Part.Tool) {
         ?.jsonPrimitive
         ?.contentOrNull
         ?: extractToolOutput(tool)
-    val cleanedOutput = output.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "")
+    val cleanedOutput = cleanToolOutputText(output)
     val displayText = buildString {
         if (command.isNotBlank()) {
             append("$ $command")
@@ -737,7 +737,7 @@ internal fun TaskToolCard(
     val durationText = if (isRunning) runningDurationText else baseDurationText
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface,
         border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)) else null,
         tonalElevation = if (isAmoled) 0.dp else 1.dp,
@@ -753,7 +753,7 @@ internal fun TaskToolCard(
                                 performHaptic(hapticView, hapticOn)
                                 onNavigateToChildSession(childSessionId)
                             }
-                            hasOutput && !isRunning -> mod.clickable {
+                            hasOutput && !isRunning -> mod.expandableToolHeader(expanded) {
                                 performHaptic(hapticView, hapticOn)
                                 expanded = !expanded
                             }
@@ -810,7 +810,7 @@ internal fun TaskToolCard(
                                 Text(
                                     text = durationText,
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
                         }
@@ -835,7 +835,7 @@ internal fun TaskToolCard(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
@@ -870,4 +870,16 @@ internal fun formatDurationText(durationMs: Long): String {
     } else {
         String.format(Locale.getDefault(), "%.1fs", durationMs / 1000.0)
     }
+}
+
+/**
+ * 清洗 bash 工具输出文本：
+ *  - ANSI 转义序列（`\x1b[...m` 等）；
+ *  - `<shell_metadata>...</shell_metadata>` 块（bash.go 追加的退出码/元数据，退出码
+ *    已由结构化事件携带，文本内标签属内部协议不应展示）。
+ */
+internal fun cleanToolOutputText(output: String): String {
+    var out = output.replace(Regex("\u001B\\[[0-9;]*[a-zA-Z]"), "")
+    out = out.replace(Regex("(?s)<shell_metadata>.*?</shell_metadata>"), "")
+    return out.trim()
 }

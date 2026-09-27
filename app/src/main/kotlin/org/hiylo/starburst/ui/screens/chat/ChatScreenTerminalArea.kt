@@ -160,7 +160,7 @@ internal fun ChatScreenTerminalArea(
                                                 if (!tab.connected) {
                                                     val statusText = stringResource(terminalTabStateLabel(tab.state))
                                                     Surface(
-                                                        shape = RoundedCornerShape(999.dp),
+                                                        shape = RoundedCornerShape(50),
                                                         color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                                                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f))
                                                     ) {

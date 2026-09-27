@@ -60,6 +60,16 @@ import org.hiylo.starburst.logging.AppLogger as Log
  * local arrives as a parameter (mutable ones as MutableState so the writes stay
  * on the same state object).
  */
+
+/**
+ * 是否在对话流里展示「已生成文档」卡片。
+ *
+ * 2026-09-27 起对用户隐藏：文档生成入口暂不对外暴露，卡片没有触发点，隐藏后
+ * 预览/下载/重新生成/修订等动作自然一并不可达。生成能力本身（ViewModel、
+ * DocumentGenerateDialog、regenerate/revise 后端接口）全部保留未删，改回 true 即可恢复。
+ */
+private const val SHOW_DOCUMENT_GENERATION = false
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 internal fun ChatScreenMessageBody(
@@ -103,6 +113,8 @@ internal fun ChatScreenMessageBody(
     serverBaseUrl: String,
     onOpenChatLink: (String) -> Unit,
 ) {
+    val hasPendingPermission = pendingInteractions.any { it is PendingInteraction.Permission }
+    val hasPendingQuestion = pendingInteractions.any { it is PendingInteraction.Question }
     var inputText by inputTextState
     var isTerminalMode by isTerminalModeState
     var terminalCtrlLatched by terminalCtrlLatchedState
@@ -300,18 +312,25 @@ internal fun ChatScreenMessageBody(
                     }
 
                     // 本会话生成的文档卡片（聊天气泡之外的本地展示）。
-                    generatedDocuments.forEach { document ->
-                        item(key = "generated_doc_${document.id}") {
-                            GeneratedDocumentCard(
-                                document = document,
-                                backendUrl = documentBackendUrl,
-                                isDownloading = downloadingDocId == document.id,
-                                onDownload = { requestDownloadDocument(document) },
-                                onPreview = { previewDocument = document },
-                                onRegenerate = { viewModel.regenerateDocument(document.id) },
-                                onRevise = { reviseDocument = document },
-                                onRemove = { viewModel.removeGeneratedDocument(document.id) },
-                            )
+                    //
+                    // 文档生成入口当前对用户隐藏：对话流里不再展示已生成文档卡片，
+                    // 预览/下载等动作也就没有触发点。生成能力本身（ViewModel、
+                    // DocumentGenerateDialog、regenerate/revise 接口）全部保留，
+                    // 改回 SHOW_DOCUMENT_GENERATION 即可恢复展示。
+                    if (SHOW_DOCUMENT_GENERATION) {
+                        generatedDocuments.forEach { document ->
+                            item(key = "generated_doc_${document.id}") {
+                                GeneratedDocumentCard(
+                                    document = document,
+                                    backendUrl = documentBackendUrl,
+                                    isDownloading = downloadingDocId == document.id,
+                                    onDownload = { requestDownloadDocument(document) },
+                                    onPreview = { previewDocument = document },
+                                    onRegenerate = { viewModel.regenerateDocument(document.id) },
+                                    onRevise = { reviseDocument = document },
+                                    onRemove = { viewModel.removeGeneratedDocument(document.id) },
+                                )
+                            }
                         }
                     }
 
@@ -451,7 +470,7 @@ internal fun ChatScreenMessageBody(
                                 Text(
                                     text = stringResource(R.string.chat_summarized),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     modifier = Modifier.padding(horizontal = 12.dp)
                                 )
                                 Box(
@@ -478,6 +497,10 @@ internal fun ChatScreenMessageBody(
                         ChatLinkHandlerProvider(serverBaseUrl, onOpenChatLink) {
                         ChatMessageBubble(
                             chatMessages = chatTurn.messages,
+                            // 有可交互卡片时抑制消息 part 内的只读内联摘要，
+                            // 避免同一个权限/提问在屏幕上出现两遍。
+                            suppressInlinePermission = hasPendingPermission,
+                            suppressInlineQuestion = hasPendingQuestion,
                             onNavigateToChildSession = onNavigateToChildSession,
                             onRevert = if (chatMessage.isUser) {
                                 {

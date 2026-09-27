@@ -12,12 +12,13 @@ package org.hiylo.starburst.data.repository
 
 import org.hiylo.starburst.domain.model.*
 import kotlinx.coroutines.flow.update
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.Json
 
 /**
@@ -37,7 +38,7 @@ internal fun EventReducer.handleNextPrompted(event: SseEvent.Prompted, serverId:
         sessionId = event.sessionId,
         time = TimeInfo(timestamp),
     )))
-    val prompt = event.prompt?.jsonObject ?: return
+    val prompt = event.prompt as? JsonObject ?: return
     prompt["text"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let { text ->
         handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.Text(
             id = "${event.messageId}-prompt",
@@ -47,8 +48,8 @@ internal fun EventReducer.handleNextPrompted(event: SseEvent.Prompted, serverId:
             time = Part.Text.Time(timestamp, timestamp),
         )))
     }
-    prompt["files"]?.jsonArray?.forEachIndexed { index, element ->
-        val file = element.jsonObject
+    prompt["files"]?.let { it as? kotlinx.serialization.json.JsonArray }?.forEachIndexed { index, element ->
+        val file = element as? JsonObject ?: return@forEachIndexed
         handleMessagePartUpdated(SseEvent.MessagePartUpdated(Part.File(
             id = "${event.messageId}-file-$index",
             sessionId = event.sessionId,
@@ -63,7 +64,7 @@ internal fun EventReducer.handleNextPrompted(event: SseEvent.Prompted, serverId:
 
 internal fun EventReducer.handleNextStepStarted(event: SseEvent.NextStepStarted, serverId: String) {
     trackSession(serverId, event.sessionId)
-    val model = event.model.jsonObject
+    val model = event.model as? JsonObject ?: JsonObject(emptyMap())
     val parentId = _messages.value[event.sessionId]
         ?.filterIsInstance<Message.User>()
         ?.maxByOrNull { it.time.created }
@@ -75,7 +76,8 @@ internal fun EventReducer.handleNextStepStarted(event: SseEvent.NextStepStarted,
         time = TimeInfo(event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
         parentId = parentId,
         providerId = model["providerID"]?.jsonPrimitive?.contentOrNull,
-        modelId = model["modelID"]?.jsonPrimitive?.contentOrNull,
+        modelId = model["id"]?.jsonPrimitive?.contentOrNull
+            ?: model["modelID"]?.jsonPrimitive?.contentOrNull,
         variant = model["variant"]?.jsonPrimitive?.contentOrNull,
         agent = event.agent,
     )))
@@ -87,8 +89,8 @@ internal fun EventReducer.handleNextStepEnded(event: SseEvent.NextStepEnded) {
         ?.filterIsInstance<Message.Assistant>()
         ?.firstOrNull { it.id == event.assistantMessageId }
         ?: return
-    val tokens = event.tokens.jsonObject
-    val cache = tokens["cache"]?.jsonObject
+    val tokens = event.tokens as? JsonObject ?: JsonObject(emptyMap())
+    val cache = tokens["cache"] as? JsonObject
     handleMessageUpdated(SseEvent.MessageUpdated(existing.copy(
         time = existing.time.copy(completed = event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
         finish = event.finish,
@@ -114,14 +116,17 @@ internal fun EventReducer.updateMessage(sessionId: String, messageId: String, tr
 }
 
 internal fun EventReducer.handleNextStepFailed(event: SseEvent.NextStepFailed) {
-    val error = event.error.jsonObject
+    val error = event.error as? JsonObject
     updateMessage(event.sessionId, event.assistantMessageId) { message ->
         val assistant = message as? Message.Assistant ?: return@updateMessage message
         assistant.copy(
             time = assistant.time.copy(completed = event.timestamp.takeIf { it > 0 } ?: System.currentTimeMillis()),
             error = Message.Assistant.ErrorInfo(
-                name = error["name"]?.jsonPrimitive?.contentOrNull ?: "Error",
-                data = error["data"] ?: event.error,
+                name = error?.let { e ->
+                    (e["type"] as? JsonPrimitive)?.contentOrNull
+                        ?: (e["name"] as? JsonPrimitive)?.contentOrNull
+                } ?: "Error",
+                data = error?.get("message") ?: event.error,
             ),
         )
     }
@@ -143,20 +148,25 @@ internal fun EventReducer.handleNextShellStarted(event: SseEvent.NextShellStarte
 }
 
 internal fun EventReducer.handleNextShellEnded(event: SseEvent.NextShellEnded) {
-    // 优先走 callId 索引 O(1) 定位（shell.ended 事件不带 messageId），
-    // 避免每次对全部会话的所有 parts 做全量扫描。
-    val existing = _parts.value[messageIdForCall(event.callId)]
+    val existing = (event.messageId.takeIf { it.isNotBlank() }?.let { mid ->
+        _parts.value[mid]?.filterIsInstance<Part.Tool>()?.firstOrNull { it.callId == event.callId }
+    } ?: _parts.value[messageIdForCall(event.callId)]
         ?.filterIsInstance<Part.Tool>()
         ?.firstOrNull { it.callId == event.callId }
         ?: _parts.value.values.asSequence().flatten()
             .filterIsInstance<Part.Tool>()
-            .firstOrNull { it.sessionId == event.sessionId && it.callId == event.callId }
+            .firstOrNull { it.sessionId == event.sessionId && it.callId == event.callId })
         ?: return
     val running = existing.state as? ToolState.Running ?: return
+    val failed = event.exitCode != null && event.exitCode != 0
     handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
-        state = ToolState.Completed(
+        state = if (failed) ToolState.Error(
             input = running.input,
-            output = event.output,
+            error = event.output.ifBlank { "Exit code ${event.exitCode}" },
+            time = ToolState.Error.Time(running.time?.start ?: event.timestamp, event.timestamp),
+        ) else ToolState.Completed(
+            input = running.input,
+            result = event.output,
             time = ToolState.Completed.Time(running.time?.start ?: event.timestamp, event.timestamp),
         ),
     )))
@@ -225,7 +235,7 @@ internal fun EventReducer.handleNextToolCalled(event: SseEvent.NextToolCalled) {
         callId = event.callId,
         tool = event.tool,
         state = ToolState.Running(
-            input = event.input.jsonObject,
+            input = event.input as? JsonObject ?: JsonObject(emptyMap()),
             title = running?.title,
             metadata = running?.metadata,
             time = ToolState.Running.Time(event.timestamp),
@@ -234,13 +244,13 @@ internal fun EventReducer.handleNextToolCalled(event: SseEvent.NextToolCalled) {
 }
 
 internal fun EventReducer.toolContentText(content: kotlinx.serialization.json.JsonElement): String =
-    content.jsonArray.mapNotNull { item ->
-        item.jsonObject.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "text" }
+    (content as? kotlinx.serialization.json.JsonArray).orEmpty().mapNotNull { item ->
+        (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "text" }
             ?.get("text")?.jsonPrimitive?.contentOrNull
     }.joinToString("\n")
 
 internal fun EventReducer.toolMetadata(structured: kotlinx.serialization.json.JsonElement, output: String): Map<String, kotlinx.serialization.json.JsonElement> =
-    structured.jsonObject + if (output.isNotBlank()) mapOf("output" to JsonPrimitive(output)) else emptyMap()
+    (structured as? JsonObject).orEmpty() + if (output.isNotBlank()) mapOf("output" to JsonPrimitive(output)) else emptyMap()
 
 internal fun EventReducer.handleNextToolProgress(event: SseEvent.NextToolProgress) {
     val existing = findToolPart(event.messageId, event.callId) ?: return
@@ -264,9 +274,12 @@ internal fun EventReducer.handleNextToolSuccess(event: SseEvent.NextToolSuccess)
     val existing = findToolPart(event.messageId, event.callId) ?: return
     val running = existing.state as? ToolState.Running
     val input = running?.input ?: (existing.state as? ToolState.Pending)?.input.orEmpty()
-    val output = toolContentText(event.content)
-    val attachments = event.content.jsonArray.mapIndexedNotNull { index, item ->
-        val file = item.jsonObject.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "file" } ?: return@mapIndexedNotNull null
+    val output = event.result.takeIf { it.isNotBlank() }
+        ?: toolContentText(event.content)
+    val attachments = (event.content as? kotlinx.serialization.json.JsonArray).orEmpty()
+        .mapIndexedNotNull { index, item ->
+            val file = (item as? JsonObject)?.takeIf { it["type"]?.jsonPrimitive?.contentOrNull == "file" }
+                ?: return@mapIndexedNotNull null
         ToolState.Completed.Attachment(
             id = "${event.callId}-file-$index",
             sessionId = event.sessionId,
@@ -279,9 +292,9 @@ internal fun EventReducer.handleNextToolSuccess(event: SseEvent.NextToolSuccess)
     handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
         state = ToolState.Completed(
             input = input,
-            output = output,
+            result = output,
             title = running?.title,
-            metadata = running?.metadata.orEmpty() + event.structured.jsonObject,
+            metadata = running?.metadata.orEmpty() + (event.structured as? JsonObject ?: JsonObject(emptyMap())),
             time = ToolState.Completed.Time(running?.time?.start ?: event.timestamp, event.timestamp),
             attachments = attachments,
         ),
@@ -292,9 +305,12 @@ internal fun EventReducer.handleNextToolFailed(event: SseEvent.NextToolFailed) {
     val existing = findToolPart(event.messageId, event.callId) ?: return
     val running = existing.state as? ToolState.Running
     val input = running?.input ?: (existing.state as? ToolState.Pending)?.input.orEmpty()
-    val errorObject = event.error.jsonObject
-    val error = errorObject["message"]?.jsonPrimitive?.contentOrNull
-        ?: errorObject["data"]?.jsonObject?.get("message")?.jsonPrimitive?.contentOrNull
+    val errorObj = event.error as? JsonObject
+    val error = errorObj?.let { e ->
+        (e["message"] as? JsonPrimitive)?.contentOrNull
+            ?: (e["type"] as? JsonPrimitive)?.contentOrNull
+    }
+        ?: (event.error as? JsonPrimitive)?.contentOrNull
         ?: event.error.toString()
     handleMessagePartUpdated(SseEvent.MessagePartUpdated(existing.copy(
         state = ToolState.Error(

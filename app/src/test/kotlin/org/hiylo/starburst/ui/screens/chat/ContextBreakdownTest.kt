@@ -46,7 +46,7 @@ class ContextBreakdownTest {
                 tool = "bash",
                 state = ToolState.Completed(
                     input = (0 until inputEntries).associate { i -> "key$i" to JsonPrimitive("value$i") },
-                    output = output,
+                    result = output,
                 ),
             ),
         ),
@@ -173,5 +173,33 @@ class ContextBreakdownTest {
         assertTrue(segments.sumOf { it.tokens } <= 100)
         segments.forEach { assertTrue(it.tokens >= 0) }
         segments.forEach { assertTrue(abs(it.percentage - it.tokens / 100.0 * 100) < 1e-9) }
+    }
+
+    @Test
+    fun estimateContextTokens_countsTextParts() {
+        // 4 ASCII 字符 ≈ 1 token
+        assertEquals(1, estimateContextTokens(listOf(user("u-1", "abcd"))))
+        // 3 CJK 字符 ≈ 2 token（ceil(3/1.5)=2）
+        assertEquals(2, estimateContextTokens(listOf(assistant("a-1", "你好啊"))))
+    }
+
+    @Test
+    fun estimateContextTokens_countsToolResultAndInput() {
+        val withTool = assistantWithTool(output = "abcdefgh", inputEntries = 2)
+        // result 8 字符 + input 值（含 JSON 引号）`"value0" "value1"` 17 字符 = 25 → ceil(25/4)=7
+        assertEquals(7, estimateContextTokens(listOf(withTool)))
+    }
+
+    @Test
+    fun estimateContextTokens_countsFileAndSubtask() {
+        val msg = ChatMessage(
+            message = Message.Assistant("a-2", "session", time = TimeInfo(2), parentId = "root"),
+            parts = listOf(
+                Part.File(id = "p-f", sessionId = "session", messageId = "a-2", mime = "text/plain", url = "file:///data/readme.md"),
+                Part.Subtask(id = "p-s", sessionId = "session", messageId = "a-2", prompt = "probe"),
+            ),
+        )
+        // url 22 字符 + prompt 5 字符 = 27 → ceil(27/4) = 7
+        assertEquals(7, estimateContextTokens(listOf(msg)))
     }
 }

@@ -97,11 +97,13 @@ import org.hiylo.starburst.ui.theme.StatusError
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.serialization.json.jsonArray
-import java.util.Locale
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.buildJsonObject
 import android.os.Build
 import android.view.MotionEvent
 import android.webkit.WebView
@@ -139,7 +141,7 @@ internal fun ToolCallCard(tool: Part.Tool) {
     var expanded by remember(autoExpand) { mutableStateOf(autoExpand) }
 
     Surface(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(12.dp),
         color = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surface,
         border = if (isAmoled) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)) else null,
         tonalElevation = if (isAmoled) 0.dp else 1.dp,
@@ -201,7 +203,7 @@ internal fun ToolCallCard(tool: Part.Tool) {
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
                         contentDescription = if (expanded) stringResource(R.string.chat_collapse) else stringResource(R.string.chat_expand),
                         modifier = Modifier.size(16.dp),
-                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 } else if (tool.state is ToolState.Running) {
                     PulsingDotsIndicator(
@@ -380,6 +382,34 @@ private fun resolveToolDisplay(
 /**
  * Extract common tool input values.
  */
+/**
+ * 从工具 metadata.files 提取规范化对象列表。
+ *
+ * 兼容两种来源：
+ *  - opencode 工具的对象数组（`{filePath, relativePath, additions, deletions}`）原样透传；
+ *  - agent apply_patch 的字符串数组（`"A path"` / `"M path"` / `"D path"`，前缀
+ *    A=新增 M=修改 D=删除）→ 派生 `filePath`/`relativePath`（stats 由 patch 文本计）。
+ * 非数组/元素非对象非字符串时跳过。
+ */
+internal fun parseToolFilesMetadata(filesElement: kotlinx.serialization.json.JsonElement?): List<JsonObject> {
+    val arr = runCatching { filesElement?.jsonArray }.getOrNull() ?: return emptyList()
+    return arr.mapNotNull { item ->
+        val obj = item as? JsonObject
+        if (obj != null) return@mapNotNull obj
+        val p = item as? JsonPrimitive
+        if (p == null || !p.isString) return@mapNotNull null
+        val s = p.content.trim()
+        if (s.isEmpty()) return@mapNotNull null
+        val path = s.substringAfter(' ').trim()
+        buildJsonObject {
+            put("filePath", JsonPrimitive(path))
+            put("relativePath", JsonPrimitive(path))
+            put("additions", JsonPrimitive(0))
+            put("deletions", JsonPrimitive(0))
+        }
+    }
+}
+
 internal fun extractToolInput(tool: Part.Tool): Map<String, kotlinx.serialization.json.JsonElement> {
     return when (val state = tool.state) {
         is ToolState.Pending -> state.input
@@ -391,8 +421,8 @@ internal fun extractToolInput(tool: Part.Tool): Map<String, kotlinx.serializatio
 
 internal fun extractToolOutput(tool: Part.Tool): String {
     return when (val s = tool.state) {
-        is ToolState.Completed -> s.output
-        is ToolState.Error -> s.error
+        is ToolState.Completed -> cleanToolOutputText(s.output)
+        is ToolState.Error -> cleanToolOutputText(s.error)
         else -> ""
     }
 }
@@ -407,9 +437,7 @@ internal fun ApplyPatchToolCard(tool: Part.Tool) {
         is ToolState.Error -> state.metadata
         is ToolState.Pending -> null
     }
-    val files = metadata?.get("files")?.let { element ->
-        runCatching { element.jsonArray.mapNotNull { it.jsonObject } }.getOrDefault(emptyList())
-    }.orEmpty()
+    val files = parseToolFilesMetadata(metadata?.get("files"))
     val patch = metadata?.get("diff")?.jsonPrimitive?.contentOrNull
         ?: input["patchText"]?.jsonPrimitive?.contentOrNull
         ?: metadata?.get("patch")?.jsonPrimitive?.contentOrNull
@@ -419,14 +447,7 @@ internal fun ApplyPatchToolCard(tool: Part.Tool) {
         ?: input["path"]?.jsonPrimitive?.contentOrNull
         ?: files.firstOrNull()?.get("relativePath")?.jsonPrimitive?.contentOrNull
         ?: files.firstOrNull()?.get("filePath")?.jsonPrimitive?.contentOrNull
-    val stats = remember(patch, files) {
-        if (files.isNotEmpty()) {
-            files.sumOf { it["additions"]?.jsonPrimitive?.intOrNull ?: 0 } to
-                files.sumOf { it["deletions"]?.jsonPrimitive?.intOrNull ?: 0 }
-        } else {
-            countUnifiedPatchChanges(patch)
-        }
-    }
+    val stats = remember(patch, files) { resolvePatchStats(files, patch) }
     val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
     val context = LocalContext.current
     val hapticView = LocalView.current
@@ -510,6 +531,19 @@ internal fun ApplyPatchToolCard(tool: Part.Tool) {
     }
 }
 
+/**
+ * 解析 apply_patch 卡片头部的 +/- 行数。
+ *
+ * 优先用工具自带的每文件统计（opencode 对象数组形态 `{filePath, additions, deletions}`）。
+ * agent apply_patch 的 files 是字符串数组（`"A path"`），[parseToolFilesMetadata] 会填
+ * 0/0 占位，若直接求和会让整卡不显示 +/- 行数——此时回退到按 patch 文本统计。
+ */
+internal fun resolvePatchStats(files: List<JsonObject>, patch: String): Pair<Int, Int> {
+    val fromFiles = files.sumOf { it["additions"]?.jsonPrimitive?.intOrNull ?: 0 } to
+        files.sumOf { it["deletions"]?.jsonPrimitive?.intOrNull ?: 0 }
+    return if (fromFiles.first > 0 || fromFiles.second > 0) fromFiles else countUnifiedPatchChanges(patch)
+}
+
 internal fun countUnifiedPatchChanges(patch: String): Pair<Int, Int> {
     var additions = 0
     var deletions = 0
@@ -591,7 +625,7 @@ internal fun EditToolCard(tool: Part.Tool) {
         is ToolState.Running -> s.metadata
         else -> null
     }
-    val fileDiff = metadata?.get("filediff")?.jsonObject
+    val fileDiff = metadata?.get("filediff") as? JsonObject
     val authoritativePatch = fileDiff?.get("patch")?.jsonPrimitive?.contentOrNull
         ?: metadata?.get("diff")?.jsonPrimitive?.contentOrNull
     val filediffBefore = fileDiff?.get("before")?.jsonPrimitive?.contentOrNull
@@ -815,12 +849,12 @@ private fun DiffView(before: String, after: String) {
                 ) {
                     Text(
                         text = "$prefix ",
-                        style = CodeTypography.copy(fontSize = 13.sp, color = fgColor),
+                        style = CodeTypography.copy(color = fgColor),
                         modifier = Modifier.padding(start = 4.dp)
                     )
                     Text(
                         text = text,
-                        style = CodeTypography.copy(fontSize = 13.sp, color = fgColor)
+                        style = CodeTypography.copy(color = fgColor)
                     )
                 }
             }

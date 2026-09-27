@@ -31,7 +31,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.stringResource
 import org.hiylo.starburst.data.api.isSameOrigin
+import org.hiylo.starburst.R
 import org.hiylo.starburst.logging.AppLogger as Log
 
 private const val PREVIEW_TAG = "DocumentPreviewSheet"
@@ -116,7 +118,7 @@ internal fun DocumentPreviewSheet(
                 IconButton(onClick = onDismiss) {
                     Icon(
                         imageVector = Icons.Default.Close,
-                        contentDescription = null,
+                        contentDescription = stringResource(R.string.close),
                     )
                 }
                 Text(

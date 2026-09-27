@@ -89,7 +89,7 @@ internal fun performHaptic(view: android.view.View, config: AppHapticConfig) {
 }
 
 /**
- * Agent color matching the TUI's opencode theme.
+ * Agent color matching the TUI's server theme.
  * Color cycle: secondary, accent, success, warning, primary, error, info
  * (same order as TUI's local.tsx color array).
  * Fixed palette — tool-specific color, not themed.
@@ -136,7 +136,7 @@ internal enum class ChatInputMode {
     SHELL
 }
 
-/** Client-side slash commands that mirror the original opencode TUI. */
+/** Client-side slash commands that mirror the original server TUI. */
 @Composable
 internal fun clientCommands(): List<SlashCommand> {
     return listOf(

@@ -18,13 +18,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.Lifecycle
 import dagger.hilt.android.lifecycle.HiltViewModel
+import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.AgentInfo
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendDocumentsApi
 import org.hiylo.starburst.data.api.BackendKbApi
 import org.hiylo.starburst.data.api.CommandInfo
 import org.hiylo.starburst.data.api.GeneratedDocument
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.variantKeys
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ProviderInfo
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SuggestionProvider
@@ -52,6 +54,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -70,7 +73,7 @@ class ChatViewModel @Inject constructor(
     @ApplicationContext internal val context: Context,
     savedStateHandle: SavedStateHandle,
     internal val eventReducer: EventReducer,
-    internal val api: OpenCodeApi,
+    internal val api: StarBurstApi,
     internal val backendApi: BackendApi,
     internal val draftRepository: DraftRepository,
     internal val settingsRepository: SettingsRepository,
@@ -98,7 +101,13 @@ class ChatViewModel @Inject constructor(
     val sessionId: String = savedStateHandle.get<String>("sessionId").orEmpty()
     private val retryOnOpen: Boolean = savedStateHandle.get<Boolean>("retry") ?: false
 
-    internal val conn = ServerConnection.from(serverUrl, username, password.ifEmpty { null })
+    /**
+     * 实际请求用连接：优先复用连接服务解析后的连接（SSH 隧道 `127.0.0.1:localPort`；
+     * 同主机直连型后端 starburst-agent 时已带上 Bearer），否则回退到连接配置地址。
+     */
+    internal val conn: ServerConnection
+        get() = connectionStateRepository.resolvedDirectConnections.value[serverId]
+            ?: ServerConnection.from(serverUrl, username, password.ifEmpty { null })
 
     /**
      * 实际用于 shell/PTY 的连接：优先复用连接服务解析后的直连地址（SSH 隧道
@@ -111,6 +120,13 @@ class ChatViewModel @Inject constructor(
     /** 发送消息用的连接缓存：后端镜像可用时指向 `{backendUrl}/api/opencode`，否则直连。 */
     @Volatile
     internal var sendingConnCache: ServerConnection? = null
+
+    /**
+     * 首条消息后的待应用会话标题。V2 agent 的 finishTurn 会用回合开始时的旧 title
+     * 回写会话（并发 PATCH 会被覆盖），故延迟到首个回合 idle 后再 PATCH。
+     */
+    @Volatile
+    internal var pendingAutoTitle: Pair<ServerConnection, List<PromptPart>>? = null
 
     internal val _isLoading = MutableStateFlow(true)
     internal val _error = MutableStateFlow<String?>(null)
@@ -185,6 +201,15 @@ class ChatViewModel @Inject constructor(
     internal var sessionDirectory: String? = eventReducer.sessions.value
         .firstOrNull { it.id == sessionId }
         ?.directory
+        ?.takeIf { it.isNotBlank() }
+    /**
+     * 服务器 home 目录（`GET /path/home`），仅用于把 [sessionDirectory] 折叠成 `~/...`，
+     * 让聊天顶栏与会话列表显示同一路径。取不到时为空串（不折叠）。
+     */
+    internal var serverHomeDirectory: String = ""
+    internal var sessionWorkspaceId: String? = eventReducer.sessions.value
+        .firstOrNull { it.id == sessionId }
+        ?.workspaceId
         ?.takeIf { it.isNotBlank() }
     /** Signals when [loadSession] has finished (successfully or with error), so that terminal
      *  creation can wait for [sessionDirectory] to be populated. */
@@ -464,15 +489,17 @@ class ChatViewModel @Inject constructor(
                 sorted
             }
             suppressRepeatedPatchCards(
-                (visible.map { msg ->
-                    val pending = pendingById[msg.id]
-                    val authoritativeParts = allParts[msg.id].orEmpty()
-                    ChatMessage(
-                        message = msg,
-                        parts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() },
-                        delivery = pending?.let { deliveryFor(msg.id) },
-                    )
-                } + optimisticMessages).sortedBy { it.message.time.created },
+                dedupeTurnParts(
+                    (visible.map { msg ->
+                        val pending = pendingById[msg.id]
+                        val authoritativeParts = allParts[msg.id].orEmpty()
+                        ChatMessage(
+                            message = msg,
+                            parts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() },
+                            delivery = pending?.let { deliveryFor(msg.id) },
+                        )
+                    } + optimisticMessages).sortedBy { it.message.time.created },
+                ),
             )
         }
 
@@ -581,7 +608,7 @@ class ChatViewModel @Inject constructor(
             }
         }
         // Match the Web UI by preserving the variant order supplied by the server.
-        val availableVariants = currentModel?.variants?.keys?.toList() ?: emptyList()
+        val availableVariants = currentModel?.variantKeys.orEmpty()
 
         // 上下文预算：估算当前会话 token 用量与有效上下文窗口（模型元数据 > 每服务器覆盖 > 默认 32k）。
         val estimatedContextTokens = estimateContextTokens(chatMessages)
@@ -592,6 +619,7 @@ class ChatViewModel @Inject constructor(
         ChatUiState(
             sessionTitle = session?.title ?: "Chat",
             sessionDirectory = session?.directory ?: "",
+            serverHomeDirectory = serverHomeDirectory,
             sessionLoaded = session != null,
             parentSessionId = session?.parentId,
             childSessions = childSessions,
@@ -659,6 +687,16 @@ class ChatViewModel @Inject constructor(
                 delay(STREAM_THROTTLE_MS)
             }
         }
+        // 首条消息的待应用标题：首个回合 idle 后 PATCH（避开 finishTurn 的并发覆盖）。
+        viewModelScope.launch {
+            eventReducer.sessionStatuses.collect { statuses ->
+                val pending = pendingAutoTitle ?: return@collect
+                if (statuses[sessionId] is SessionStatus.Idle) {
+                    pendingAutoTitle = null
+                    autoTitleFromParts(pending.first, pending.second)
+                }
+            }
+        }
         // 通知「重试」按钮触发的自动重试：等消息加载完成后，重新生成最后一条 assistant 消息。
         if (retryOnOpen) {
             viewModelScope.launch {
@@ -707,6 +745,19 @@ class ChatViewModel @Inject constructor(
             settingsRepository.hiddenModels(serverId).collect { hidden ->
                 _hiddenModels.value = hidden
                 applyProviderFilter()
+            }
+        }
+
+        // 连接服务解析出带 Bearer 的直连连接后，重载目录（provider/agent/command）：
+        // init 阶段的 loadProviders 可能在连接解析前执行，裸 conn 无 Bearer 会 401
+        // 导致模型列表/agent/命令为空（同 v2fix51 设置屏场景）。
+        viewModelScope.launch {
+            connectionStateRepository.resolvedDirectConnections.drop(1).collect { resolved ->
+                if (resolved[serverId] != null) {
+                    loadProviders()
+                    loadAgents()
+                    loadCommands()
+                }
             }
         }
 

@@ -153,6 +153,8 @@ internal fun ChatMessageBubble(
     onBookmark: (() -> Unit)? = null,
     onNavigateToChildSession: (String) -> Unit = {},
     onContinue: (() -> Unit)? = null,
+    suppressInlinePermission: Boolean = false,
+    suppressInlineQuestion: Boolean = false,
 ) {
     val chatMessage = chatMessages.last()
     val isUser = chatMessage.isUser
@@ -335,6 +337,8 @@ internal fun ChatMessageBubble(
                                         isUser = isUser,
                                         onNavigateToChildSession = onNavigateToChildSession,
                                         onContinue = onContinue,
+                                        suppressInlinePermission = suppressInlinePermission,
+                                        suppressInlineQuestion = suppressInlineQuestion,
                                     )
                                 }
                             }
@@ -370,6 +374,8 @@ internal fun ChatMessageBubble(
                                 isUser = isUser,
                                 onNavigateToChildSession = onNavigateToChildSession,
                                 onContinue = onContinue,
+                                suppressInlinePermission = suppressInlinePermission,
+                                suppressInlineQuestion = suppressInlineQuestion,
                             )
                             renderedContent = true
                         }
@@ -414,6 +420,9 @@ internal fun ChatMessageBubble(
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
                             )
                         }
+                        // 回合失败内联重试：错误文本下方直接提供「重试」入口（8a，借鉴
+                        // ChatGPT/Copilot 的失败重试体验——替代仅 snackbar 提示）。
+                        ContinueInlineAction(onContinue)
                     }
 
                     // If text parts are absent but server provided a summary, render it.
@@ -730,6 +739,20 @@ internal fun ChatLinkHandlerProvider(
     )
 }
 
+/**
+ * 剥离助手文本中的推理包装标记（显示层，非破坏源数据）。
+ * 仅剥离有明确开/闭标记的包装，避免误伤正常文本：
+ *  - Qwen/opencode 风格 `...`
+ *  - `<|im_start|>thinking ... <|im_end|>`
+ *  - `<!thinking> ... <!/thinking>`
+ */
+internal fun stripThinkingTags(text: String): String {
+    var out = text.replace(Regex("(?s)<!thinking>.*?<!/thinking>"), "")
+    out = out.replace(Regex("(?s)<\\|im_start\\|>\\s*thinking.*?<\\|im_end\\|>"), "")
+    out = out.replace(Regex("(?s)[<]think[>].*?[<]/think[>]"), "")
+    return out.trim()
+}
+
 @Composable
 private fun PartContent(
     part: Part,
@@ -737,6 +760,8 @@ private fun PartContent(
     isUser: Boolean = false,
     onNavigateToChildSession: (String) -> Unit = {},
     onContinue: (() -> Unit)? = null,
+    suppressInlinePermission: Boolean = false,
+    suppressInlineQuestion: Boolean = false,
 ) {
     when (part) {
         is Part.Text -> {
@@ -751,7 +776,7 @@ private fun PartContent(
                     )
                 } else {
                     MarkdownContent(
-                        markdown = part.text,
+                        markdown = if (isUser) part.text else stripThinkingTags(part.text),
                         textColor = textColor,
                         isUser = isUser
                     )
@@ -811,19 +836,26 @@ private fun PartContent(
         is Part.File -> {
             FileCard(file = part)
         }
+        // Permission/Question 有两条渲染入口：pendingInteractions 的可交互卡片
+        // （ChatScreenMessageBody）与消息 part 的只读内联摘要。历史重载后内联摘要
+        // 会出现，而卡片往往仍在，导致同一个请求显示两遍——有卡片时跳过内联摘要。
         is Part.Permission -> {
-            Text(
-                text = stringResource(R.string.chat_permission_label, part.message),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary
-            )
+            if (!suppressInlinePermission) {
+                Text(
+                    text = stringResource(R.string.chat_permission_label, part.message),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
         is Part.Question -> {
-            Text(
-                text = stringResource(R.string.chat_question_inline, part.question),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.tertiary
-            )
+            if (!suppressInlineQuestion) {
+                Text(
+                    text = stringResource(R.string.chat_question_inline, part.question),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
         }
         is Part.Abort -> {
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
