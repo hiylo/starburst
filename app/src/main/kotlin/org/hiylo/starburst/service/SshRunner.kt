@@ -20,9 +20,9 @@ import org.hiylo.starburst.domain.model.ServerConfig
 import java.io.File
 
 /**
- * 通过 SSH 在远程服务器上执行命令（独立于 OpenCode 的 HTTP 连接）。
+ * 通过 SSH 在远程服务器上执行命令（独立于 服务器的 HTTP 连接）。
  *
- * 用于 OpenCode 后端崩溃后仍能远程重启服务等运维场景。
+ * 用于 后端崩溃后仍能远程重启服务等运维场景。
  *
  * @author Hsi Chu
  * @since V1.2.0
@@ -107,7 +107,7 @@ object SshRunner {
         buildSession(server.host, server.sshPort, server.sshUsername, server.sshPassword ?: "")
 
     /**
-     * 按独立主机参数构建 SSH 会话（供 SFTP 备份等非 OpenCode 服务器目标复用）。
+     * 按独立主机参数构建 SSH 会话（供 SFTP 备份等非 服务器目标复用）。
      * 与 [buildSession] 共享同一 known_hosts TOFU 策略与 UserInfo。
      */
     internal fun buildSession(host: String, port: Int, username: String, password: String): Session {

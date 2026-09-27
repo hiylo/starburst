@@ -9,7 +9,7 @@
  */
 package org.hiylo.starburst.data.shell
 
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.PtySocket
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.createPty
@@ -47,7 +47,7 @@ data class ShellCommandResult(val exitCode: Int, val output: String)
  * 计数管理，因此可被 Git 页与服务器管理页共用，而不再绑定到某个 ViewModel。
  */
 class ServerShellSession internal constructor(
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val conn: ServerConnection,
     private val directory: String,
 ) {
@@ -261,7 +261,7 @@ class ServerShellRegistry @Inject constructor() {
      * @param conn 服务器连接信息
      * @param directory 会话初始工作目录，可空
      */
-    fun acquire(serverId: String, api: OpenCodeApi, conn: ServerConnection, directory: String): ServerShellSession {
+    fun acquire(serverId: String, api: StarBurstApi, conn: ServerConnection, directory: String): ServerShellSession {
         synchronized(lock) {
             val entry = sessions.getOrPut(serverId) { Entry(ServerShellSession(api, conn, directory)) }
             entry.refs++

@@ -155,7 +155,7 @@ internal fun StarBurstConnectionService.startSseConnection(
             // If this server was removed from connections, stop the loop
             if (!connections.containsKey(server.id)) break
 
-            // 后端镜像 SSE 连续失败：回退直连 opencode。镜像 SSE 端点异常（网关反复
+            // 后端镜像 SSE 连续失败：回退直连服务器。镜像 SSE 端点异常（网关反复
             // 打开后立即断开）时 REST 消息仍走直连、能正常收发，但 SSE 状态会一直卡在
             // connecting；这里在连续失败达到阈值后主动回退直连，打破无限重连。
             if (attempt >= BACKEND_FALLBACK_THRESHOLD) {
@@ -163,7 +163,7 @@ internal fun StarBurstConnectionService.startSseConnection(
                 if (st != null && st.directConn != null && st.directConn !== currentConn) {
                     Log.w(
                         TAG,
-                        "[${server.displayName}] Backend-mirrored SSE failing repeatedly (attempt=$attempt), falling back to direct opencode",
+                        "[${server.displayName}] Backend-mirrored SSE failing repeatedly (attempt=$attempt), falling back to direct server",
                     )
                     fallbackToDirectConn(server)
                     return@launch

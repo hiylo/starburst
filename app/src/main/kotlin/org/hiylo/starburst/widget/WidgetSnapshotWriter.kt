@@ -126,7 +126,8 @@ class WidgetSnapshotWriter @Inject constructor(
             )
         }
 
-        // 「有新消息/活动」的会话 = ① Busy/Retry（正在生成回复）② 未读完成（Busy→Idle 且用户未打开）。
+        // 「有新消息/活动」的会话 = ① Busy/Retry（正在生成回复）② 待决授权（等待用户批准/拒绝，服务端仍 busy）
+        // ③ 未读完成（Busy→Idle 且用户未打开）。
         // 排序：未读完成 + 活动会话优先，其次最近更新；仅展示有 server 归属的根会话。
         val activeSessionIds = sessions.asSequence()
             .filter { it.parentId == null && !it.isArchived }
@@ -134,6 +135,7 @@ class WidgetSnapshotWriter @Inject constructor(
             .filter { session ->
                 val status = statuses[session.id]
                 status is SessionStatus.Busy || status is SessionStatus.Retry ||
+                    status is SessionStatus.Permission ||
                     session.id in unconfirmed
             }
             .sortedWith(

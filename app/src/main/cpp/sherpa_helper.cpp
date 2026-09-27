@@ -1,4 +1,4 @@
-// OpenCode Android - MNN ASR dependency loader JNI.
+// StarBurst Android - MNN ASR dependency loader JNI.
 //
 // libsherpa-mnn-jni.so is built against "monolithic MNN" (its DT_NEEDED points
 // only at libMNN.so), but this app ships the split MNN build where the

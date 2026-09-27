@@ -1,7 +1,7 @@
 /*
  * Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
  * Project : StarBurst
- * File : OpenCodeApiEvents.kt
+ * File : StarBurstApiEvents.kt
  * Date : 2026/09/14 15:42:23
  * Author : Hsi Chu
  * Contact : hiylo@live.com
@@ -44,7 +44,7 @@ fun SessionEventRecord.createdAtEpochMillis(): Long =
  * [since] 传上一次返回的最后一条 createdAt（后端按 created_at ASC、id ASC 返回，形成稳定的正向游标）；
  * 省略时返回最近 [limit] 条（后端默认 200、上限 1000）。
  */
-suspend fun OpenCodeApi.listSessionEvents(
+suspend fun StarBurstApi.listSessionEvents(
     backendUrl: String,
     token: String,
     since: String? = null,

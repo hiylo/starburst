@@ -65,7 +65,7 @@ class WidgetSnapshotStore @Inject constructor(
             }.getOrDefault(WidgetSnapshot())
         }
 
-        /** 请求系统刷新所有 OpenCode AppWidget。 */
+        /** 请求系统刷新所有 StarBurst AppWidget。 */
         fun requestUpdate(context: Context) {
             runCatching {
                 val manager = AppWidgetManager.getInstance(context)

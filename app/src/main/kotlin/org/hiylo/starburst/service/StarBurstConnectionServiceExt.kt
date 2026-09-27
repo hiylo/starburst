@@ -35,8 +35,8 @@ import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.BackendStatus
 import org.hiylo.starburst.data.api.HardwareAlertEvent
 import org.hiylo.starburst.data.api.IntelTestRun
-import org.hiylo.starburst.data.api.OpenCodeApi
-import org.hiylo.starburst.data.api.OpenCodeGateway
+import org.hiylo.starburst.data.api.StarBurstApi
+import org.hiylo.starburst.data.api.StarBurstGateway
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SseClient
 import org.hiylo.starburst.data.backend.BackendPushListener
@@ -48,8 +48,10 @@ import org.hiylo.starburst.data.api.listSessions
 import org.hiylo.starburst.data.api.listSessionStatuses
 import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.MessageIdGenerator
+import org.hiylo.starburst.data.api.PermissionRequest
 import org.hiylo.starburst.data.api.PromptPart
-import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.QuestionRequest
+import org.hiylo.starburst.data.api.sendPrompt
 import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.repository.EventReducer
 import org.hiylo.starburst.data.repository.PendingPromptRecord
@@ -83,6 +85,35 @@ import javax.inject.Inject
 
 private const val NOTIFICATION_CHANNELS_PREFS = "starburst_notification_channels"
 private const val NOTIFICATION_CHANNELS_MIGRATED_KEY = "notif_channels_migrated_v1"
+
+/** 待决授权 REST 模型 → 领域事件。 */
+private fun PermissionRequest.toSseEvent() = SseEvent.PermissionAsked(
+    id = id,
+    sessionId = sessionId,
+    permission = permission,
+    patterns = patterns,
+    always = always,
+    metadata = metadata,
+    tool = tool,
+)
+
+/** 待决问题 REST 模型 → 领域事件。 */
+private fun QuestionRequest.toSseEvent() = SseEvent.QuestionAsked(
+    id = id,
+    sessionId = sessionId,
+    questions = questions.map { question ->
+        SseEvent.QuestionAsked.Question(
+            header = question.header,
+            question = question.question,
+            multiple = question.multiple,
+            custom = question.custom,
+            options = question.options.map { option ->
+                SseEvent.QuestionAsked.Option(option.label, option.description)
+            },
+        )
+    },
+    tool = tool,
+)
 
 /** 通知 ID：掺入 serverId 避免跨服务器冲突；位与 Int.MAX_VALUE 规避 Int.MIN_VALUE 取负。 */
 private fun stableNotifId(seed: Int, salt: String): Int = (salt + seed).hashCode() and Int.MAX_VALUE
@@ -144,35 +175,8 @@ internal suspend fun StarBurstConnectionService.reconcileServerState(server: Ser
         eventReducer.replaceSessionStatuses(server.id, sessionIds, statuses, connected = false)
         for (dir in directories) {
             try {
-                permissions += api.listPendingPermissions(conn, directory = dir).map { request ->
-                    SseEvent.PermissionAsked(
-                        id = request.id,
-                        sessionId = request.sessionId,
-                        permission = request.permission,
-                        patterns = request.patterns,
-                        always = request.always,
-                        metadata = request.metadata,
-                        tool = request.tool,
-                    )
-                }
-                questions += api.listPendingQuestions(conn, directory = dir).map { request ->
-                    SseEvent.QuestionAsked(
-                        id = request.id,
-                        sessionId = request.sessionId,
-                        questions = request.questions.map { question ->
-                            SseEvent.QuestionAsked.Question(
-                                header = question.header,
-                                question = question.question,
-                                multiple = question.multiple,
-                                custom = question.custom,
-                                options = question.options.map { option ->
-                                    SseEvent.QuestionAsked.Option(option.label, option.description)
-                                },
-                            )
-                        },
-                        tool = request.tool,
-                    )
-                }
+                permissions += api.listPendingPermissions(conn, directory = dir).map { it.toSseEvent() }
+                questions += api.listPendingQuestions(conn, directory = dir).map { it.toSseEvent() }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -188,6 +192,54 @@ internal suspend fun StarBurstConnectionService.reconcileServerState(server: Ser
     }
     if (complete) {
         eventReducer.replacePendingRequests(server.id, permissions, questions, revision)
+    }
+}
+
+/**
+ * 轻量刷新某服务器的待决授权/问题并写入 reducer（不拉会话/消息）。
+ *
+ * SSE 直连路径的 `permission.asked`/`question.asked` 会实时 `upsertPending`；但镜像推送
+ * 路径只发通知、不写 reducer，导致跨服务器收藏页 / 全局搜索 / 工作台面板拿不到最新待决项。
+ * 这里按目录轮询 `/permission` + `/question` 补齐 reducer 快照（[replacePendingRequests]
+ * 的 revision 守卫保证不覆盖实时 SSE 数据）。
+ */
+internal suspend fun StarBurstConnectionService.refreshPendingInteractions(server: ServerConfig, conn: ServerConnection) {
+    val revision = eventReducer.pendingSnapshotRevision()
+    val serverSessionIds = eventReducer.serverSessions.value[server.id].orEmpty()
+    val directories = eventReducer.sessions.value.asSequence()
+        .filter { it.id in serverSessionIds }
+        .map { it.directory }
+        .filter { it.isNotBlank() }
+        .distinct()
+        .toList()
+    if (directories.isEmpty()) return
+    val permissions = mutableListOf<SseEvent.PermissionAsked>()
+    val questions = mutableListOf<SseEvent.QuestionAsked>()
+    for (dir in directories) {
+        try {
+            permissions += api.listPendingPermissions(conn, directory = dir).map { it.toSseEvent() }
+            questions += api.listPendingQuestions(conn, directory = dir).map { it.toSseEvent() }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Pending refresh failed for directory $dir: ${e.message}")
+        }
+    }
+    eventReducer.replacePendingRequests(server.id, permissions, questions, revision)
+}
+
+/** 推送驱动 + 周期兜底的待决项刷新节流（2s 内合并多次，避免事件风暴时频繁全量拉取）。 */
+private val lastPendingRefreshAtByServer = ConcurrentHashMap<String, Long>()
+
+internal fun StarBurstConnectionService.refreshPendingInteractionsSoon(server: ServerConfig) {
+    val now = System.currentTimeMillis()
+    val last = lastPendingRefreshAtByServer[server.id] ?: 0L
+    if (now - last < 2_000L) return
+    lastPendingRefreshAtByServer[server.id] = now
+    serviceScope.launch {
+        val state = connections[server.id] ?: return@launch
+        if (!state.isConnected) return@launch
+        refreshPendingInteractions(server, state.conn)
     }
 }
 
@@ -207,7 +259,7 @@ internal fun StarBurstConnectionService.calculateBackoff(attempt: Int): Long {
 /**
  * Check if a session is a child/sub-agent session (has parentID set).
  * Child sessions should not trigger user-facing notifications,
- * matching the behavior of the official opencode WebUI and TUI.
+ * matching the behavior of the official server WebUI and TUI.
  */
 internal fun StarBurstConnectionService.isChildSession(sessionId: String): Boolean {
     val session = eventReducer.sessions.value.find { it.id == sessionId }
@@ -218,8 +270,8 @@ internal fun StarBurstConnectionService.isChildSession(sessionId: String): Boole
  * 解析后端镜像地址：
  * - SSH 隧道且隧道映射了后端端口 → 用隧道内本地端口（127.0.0.1:端口）；
  * - SSH 隧道未映射后端端口但仍能直连后端主机（如 VPN 同网段）→ 退回显式或
- *   推断地址（http://<opencode主机>:18880）；探测失败仍由 buildGatewayConn 弹回直连；
- * - 非 SSH 模式 → 显式 [server.backendUrl]，否则推断为 opencode 同主机 18880。
+ *   推断地址（http://<服务器主机>:18880）；探测失败仍由 buildGatewayConn 弹回直连；
+ * - 非 SSH 模式 → 显式 [server.backendUrl]，否则推断为 服务器同主机 18880。
  */
 internal fun StarBurstConnectionService.resolveBackendUrl(server: ServerConfig, backendLocalPort: Int?): String {
     if (server.useSsh) {
@@ -263,7 +315,7 @@ internal fun StarBurstConnectionService.buildAssistantMessageSummary(sessionId: 
         .firstOrNull { it is Message.Assistant } as? Message.Assistant ?: return null
     val parts = eventReducer.parts.value[latestAssistant.id] ?: return null
     val text = parts.filterIsInstance<Part.Text>()
-        .map { it.text.trim() }
+        .map { part -> org.hiylo.starburst.ui.screens.chat.stripThinkingTags(part.text).trim() }
         .filter { it.isNotEmpty() }
         .joinToString(" ")
     if (text.isEmpty()) return null
@@ -409,7 +461,13 @@ internal suspend fun StarBurstConnectionService.answerQuestionFromReply(state: S
     }
     val directory = sessionDirectoryOf(sessionId)
     val ok = try {
-        api.replyToQuestion(state.conn, question.id, listOf(listOf(replyText)), directory)
+        api.replyToQuestion(
+            conn = state.conn,
+            sessionId = question.sessionId,
+            requestId = question.id,
+            answers = listOf(listOf(replyText)),
+            directory = directory,
+        )
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -430,7 +488,7 @@ internal suspend fun StarBurstConnectionService.sendFollowUpPrompt(state: Server
     val messageId = MessageIdGenerator.next()
     val parts = listOf(PromptPart(type = "text", text = replyText))
     try {
-        api.promptAsync(
+        api.sendPrompt(
             conn = state.conn,
             sessionId = sessionId,
             messageId = messageId,

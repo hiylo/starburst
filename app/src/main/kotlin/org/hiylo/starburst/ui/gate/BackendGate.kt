@@ -36,10 +36,10 @@ data class BackendProbeResult(
 object BackendGate {
 
     /** App 要求的最低 starburst-backend 版本，低于该版本时视为后端状态异常（需要升级）。 */
-    const val MIN_BACKEND_VERSION: String = "2.1.0"
+    const val MIN_BACKEND_VERSION: String = "0.1.0"
 
-    /** 一键安装 starburst-backend 时钉死的目标版本（install.sh + 二进制版本）。可高于 [MIN_BACKEND_VERSION]。 */
-    const val INSTALL_BACKEND_VERSION: String = "2.1.0"
+    /** 一键安装 starburst-agent 时钉死的目标版本。可高于 [MIN_BACKEND_VERSION]。 */
+    const val INSTALL_BACKEND_VERSION: String = "0.1.1"
 
     /**
      * 后端是否「正常可用」（健康且版本达标）。后端相关功能入口的显隐统一使用该判定。
@@ -66,7 +66,7 @@ object BackendGate {
      *
      * @param backendApi 后端 HTTP 客户端
      * @param server 当前服务器的配置；为 null 时使用默认后端地址（服务器主机名 + 18880）与默认 token
-     * @param serverUrl opencode 服务地址，用于推导默认后端主机名
+     * @param serverUrl 服务器地址，用于推导默认后端主机名
      */
     suspend fun probe(backendApi: BackendApi, server: ServerConfig?, serverUrl: String): BackendProbeResult {
         val backendUrl = (server?.backendResolvedUrl ?: "http://${hostFrom(serverUrl)}:18880").trimEnd('/')
@@ -92,7 +92,7 @@ object BackendGate {
         )
     }
 
-    /** 从 opencode 服务地址推导主机名（不含端口），用于默认后端地址。 */
+    /** 从 服务器地址推导主机名（不含端口），用于默认后端地址。 */
     private fun hostFrom(rawUrl: String): String =
         runCatching { java.net.URL(rawUrl).host }.getOrNull()
             ?: rawUrl.substringAfter("://").substringBefore(":")

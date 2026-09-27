@@ -9,7 +9,7 @@
  */
 package org.hiylo.starburst.data.repository
 
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.getSharedSession
 import org.hiylo.starburst.domain.model.SharedSession
@@ -19,14 +19,14 @@ import javax.inject.Singleton
 /**
  * 会话分享只读仓库：通过分享 ID 加载只读会话，供后续只读查看器 UI 使用。
  *
- * 目前仅对 [OpenCodeApi] 做薄封装，方便 UI 层统一注入数据来源。
+ * 目前仅对 [StarBurstApi] 做薄封装，方便 UI 层统一注入数据来源。
  *
  * @author Hsi Chu
  * @since V1.3.0
  */
 @Singleton
 class SharedSessionRepository @Inject constructor(
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
 ) {
     /**
      * 通过分享 ID 加载只读会话（标题 + 消息列表）。

@@ -32,7 +32,7 @@
         android:label="${appLabel}"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/Theme.OpenCode"
+        android:theme="@style/Theme.StarBurst"
         android:usesCleartextTraffic="true"
         tools:targetApi="31">
 
@@ -40,7 +40,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden|smallestScreenSize"
-            android:theme="@style/Theme.OpenCode"
+            android:theme="@style/Theme.StarBurst"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

@@ -17,7 +17,7 @@ import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
 import android.os.Looper
 import org.hiylo.starburst.data.api.BackendStatus
-import org.hiylo.starburst.data.api.OpenCodeGateway
+import org.hiylo.starburst.data.api.StarBurstGateway
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.backend.PushSessionEvent
 import org.hiylo.starburst.data.backend.AlertHardwareParsedEvent
@@ -43,7 +43,7 @@ import kotlinx.coroutines.flow.update
 /**
  * Dual-channel gateway wiring and the starburst-backend push channel:
  * mirror connection build, /api/ws session-event handling, the fallback to a
- * direct opencode connection and the debounced session-status refresh.
+ * direct server connection and the debounced session-status refresh.
  * Extracted verbatim from StarBurstConnectionService as extension functions;
  * no behaviour change.
  */
@@ -54,7 +54,7 @@ internal fun StarBurstConnectionService.getServerConnection(server: ServerConfig
 
 /**
  * 双通道网关：服务器配置了 starburst-backend 且后端存活时，把连接切到
- * `${backendUrl}/api/opencode` 镜像（Bearer 后端 token）；否则原样直连 opencode。
+ * `${backendUrl}/api/opencode` 镜像（Bearer 后端 token）；否则原样直连服务器。
  * 探测有 2.5s 总超时；主线程或后端不可达时安全回退到直连。
  */
 internal fun StarBurstConnectionService.buildGatewayConn(server: ServerConfig, baseConn: ServerConnection, backendLocalPort: Int?): ServerConnection {
@@ -89,7 +89,7 @@ internal fun StarBurstConnectionService.buildGatewayConn(server: ServerConfig, b
                     Log.w(TAG, "[${server.displayName}] buildGatewayConn: /api/system invalid or backend blank at $backendUrl")
                     return@withTimeoutOrNull baseConn
                 }
-                OpenCodeGateway.resolve(
+                StarBurstGateway.resolve(
                     baseConn,
                     BackendStatus(
                         backendUrl = backendUrl,
@@ -118,7 +118,7 @@ internal fun StarBurstConnectionService.buildGatewayConn(server: ServerConfig, b
  */
 internal fun StarBurstConnectionService.startBackendPushJob(server: ServerConfig, conn: ServerConnection, backendLocalPort: Int?): Job? {
     val backendUrl = resolveBackendUrl(server, backendLocalPort).trim().trimEnd('/').takeIf { it.isNotBlank() } ?: return null
-    if (!conn.baseUrl.startsWith("$backendUrl${OpenCodeGateway.BACKEND_API_PREFIX}")) return null
+    if (!conn.baseUrl.startsWith("$backendUrl${StarBurstGateway.BACKEND_API_PREFIX}")) return null
     val token = server.backendResolvedToken.trim().takeIf { it.isNotBlank() } ?: return null
     if (BuildConfig.DEBUG) {
         Log.d(TAG, "[${server.displayName}] Backend gateway active, listening /api/ws pushes")
@@ -145,7 +145,7 @@ internal fun StarBurstConnectionService.startBackendPushJob(server: ServerConfig
             }
             // 后端连续不可用：回退到直连，保证聊天与会话列表仍然可用。
             if (consecutiveFailures >= BACKEND_FALLBACK_THRESHOLD) {
-                Log.w(TAG, "[${server.displayName}] Backend push failing repeatedly, falling back to direct opencode")
+                Log.w(TAG, "[${server.displayName}] Backend push failing repeatedly, falling back to direct server")
                 fallbackToDirectConn(server)
                 return@launch
             }
@@ -155,7 +155,7 @@ internal fun StarBurstConnectionService.startBackendPushJob(server: ServerConfig
     }
 }
 
-/** 后端不可用时把该 server 的连接切回直连 opencode（重建 SSE；push 镜像关闭）。 */
+/** 后端不可用时把该 server 的连接切回直连服务器（重建 SSE；push 镜像关闭）。 */
 internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfig) {
     // 并发去重：SSE 失联循环与后端推送 job 都会触发 fallback，且 fallback 内部会取消旧 sseJob
     // 并启动新 job；若同时执行会互相取消、反复重建隧道，导致两侧都连不上。
@@ -165,8 +165,16 @@ internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfi
         val state = connections[server.id] ?: return
         val directConn = state.directConn ?: return
         if (state.conn === directConn) return
-        val job = startSseConnection(state.config, directConn, preload = false)
-        val replacement = state.copy(conn = directConn, sseJob = job, isConnected = false, pushJob = null)
+        // 同主机直连型后端（starburst-agent）回退直连后仍需 Bearer 走 /api/* V2 面：
+        // state.directConn 是原始无鉴权连接，直接用它重建 SSE 会被 guard 401 拒绝，
+        // 进而命中 SseAuthException 终止重连（UI「Authentication failed」）。
+        val bearerConn = StarBurstGateway.applySelfBackendBearer(
+            directConn,
+            state.config.backendResolvedUrl,
+            state.config.backendResolvedToken,
+        )
+        val job = startSseConnection(state.config, bearerConn, preload = false)
+        val replacement = state.copy(conn = bearerConn, sseJob = job, isConnected = false, pushJob = null)
         if (!connections.replace(server.id, state, replacement)) {
             job.cancel()
             return
@@ -181,7 +189,7 @@ internal fun StarBurstConnectionService.fallbackToDirectConn(server: ServerConfi
         connectStartedAt[server.id] = SystemClock.elapsedRealtime()
         _serverMetrics.update { it - server.id }
         job.start()
-        if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct opencode")
+        if (BuildConfig.DEBUG) Log.d(TAG, "[${server.displayName}] Fell back to direct server")
         publishResolvedConnections()
     } finally {
         fallbackInFlight.remove(server.id)
@@ -219,13 +227,15 @@ internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerCon
             if (child) return
         }
         "question.asked", "question.updated" -> {
+            // 推送只带通知字段、不带完整待决项，拉一次 REST 补齐 reducer（父会话徽标/跨服务器视图）。
+            refreshPendingInteractionsSoon(server)
             if (isChildSession(ev.sessionId)) return
             val questionText = ev.questionText()
                 ?: getString(R.string.notification_has_question, getString(R.string.notification_new_session))
             showQuestionNotification(server, ev.sessionId, questionText)
         }
         "question.replied", "question.rejected" -> {
-            // web 端用 opencode 通道选中/拒绝问题后，App 走推送通道也要同步清除 pending，
+            // web 端用服务器通道选中/拒绝问题后，App 走推送通道也要同步清除 pending，
             // 否则会话列表/工作台一直挂着「待回答问题」无法取消。
             if (ev.sessionId.isNotBlank() && isChildSession(ev.sessionId)) return
             val requestId = ev.questionId().orEmpty()
@@ -237,6 +247,8 @@ internal fun StarBurstConnectionService.handleBackendPushEvent(server: ServerCon
             }
         }
         "permission.asked", "permission.updated" -> {
+            // 推送只带通知字段、不带完整待决项，拉一次 REST 补齐 reducer（父会话徽标/跨服务器视图）。
+            refreshPendingInteractionsSoon(server)
             if (isChildSession(ev.sessionId)) return
             val permission = ev.permission() ?: return
             showPermissionNotification(server, ev.sessionId, permission)
@@ -326,14 +338,15 @@ internal suspend fun StarBurstConnectionService.handleIntelPushEvent(server: Ser
 }
 
 /**
- * 推送状态单调守卫：Busy / Retry / Question 均视为比 Idle 活跃（更新）。
+ * 推送状态单调守卫：Busy / Retry / Question / Permission 均视为比 Idle 活跃（更新）。
  * 仅当推送状态不比当前状态「更旧」时才放行写入——聚合快照滞后的旧 Idle
  * 不得覆盖真实 Busy/Retry，避免运行中会话被误标完成并触发完成通知。
  * SSE 直连路径不经过此守卫（SSE 是权威实时源，直接驱动各分支）。
  */
 private fun shouldApplyPushStatus(current: SessionStatus?, incoming: SessionStatus): Boolean {
     return when (current) {
-        is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Retry -> incoming !is SessionStatus.Idle
+        is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Permission, is SessionStatus.Retry ->
+            incoming !is SessionStatus.Idle
         else -> true
     }
 }

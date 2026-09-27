@@ -44,7 +44,7 @@ internal data class SttTranscript(
 )
 
 /**
- * OpenCode Backend 的流式语音识别端点客户端（`/api/stt`）。
+ * Backend 的流式语音识别端点客户端（`/api/stt`）。
  *
  * 后端把音频分片代理给部署在 NAS 上的流式识别引擎；这里只负责协议与错误收敛，
  * 分片重试与 UI 交互由 [ServerAsrRecorder] 处理。失败一律返回 null，不抛异常，

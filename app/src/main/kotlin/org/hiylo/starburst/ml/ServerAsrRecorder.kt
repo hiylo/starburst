@@ -25,7 +25,7 @@ import kotlinx.coroutines.withContext
 import org.hiylo.starburst.logging.AppLogger as Log
 
 /**
- * 服务端语音识别：录音分片上传到 OpenCode Backend，由 NAS 上的流式引擎返回增量文本。
+ * 服务端语音识别：录音分片上传到 Backend，由 NAS 上的流式引擎返回增量文本。
  *
  * 与 [MnnAsrRecorder] 的交互约定一致（AudioRecord 16kHz 单声道、按住说话松手上屏），
  * 区别是编码格式为 PCM16LE 裸字节，且识别在远端完成。用于端侧 MNN 模型不可用的设备。

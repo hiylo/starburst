@@ -29,7 +29,8 @@ import org.hiylo.starburst.R
 import android.os.Handler
 import android.os.Looper
 import org.hiylo.starburst.data.api.BackendApi
-import org.hiylo.starburst.data.api.OpenCodeApi
+import org.hiylo.starburst.data.api.StarBurstApi
+import org.hiylo.starburst.data.api.StarBurstGateway
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SseClient
 import org.hiylo.starburst.data.backend.BackendPushListener
@@ -81,9 +82,10 @@ private const val SSH_CONNECT_TIMEOUT_MS = 15_000
 private const val SSE_STALL_TIMEOUT_MS = 30_000L
 /** SSE 假死检测的检查间隔。 */
 private const val SSE_STALL_CHECK_INTERVAL_MS = 15_000L
+private const val PENDING_REFRESH_INTERVAL_MS = 15_000L
 /** 会话完成兜底轮询间隔：SSE 假死收不到 session.idle 时，靠轮询 /session/status 检测 busy→idle。 */
 private const val COMPLETION_POLL_INTERVAL_MS = 15_000L
-/** 后端推送连续失败达到该次数后，把该 server 连接回退到直连 opencode。 */
+/** 后端推送连续失败达到该次数后，把该 server 连接回退到直连服务器。 */
 internal const val BACKEND_FALLBACK_THRESHOLD = 3
 /** 通知正文结果摘要的最大字符数（约 80 字）。 */
 internal const val NOTIFICATION_SUMMARY_MAX_CHARS = 80
@@ -135,7 +137,7 @@ internal data class ServerConnectionState(
 )
 
 /**
- * Foreground Service for maintaining OpenCode SSE connections to multiple servers.
+ * Foreground Service for maintaining SSE connections to multiple servers.
  *
  * This service:
  * - Maintains persistent SSE connections to one or more servers simultaneously
@@ -166,7 +168,7 @@ class StarBurstConnectionService : Service() {
     }
 
     @Inject
-    internal lateinit var api: OpenCodeApi
+    internal lateinit var api: StarBurstApi
 
     @Inject
     lateinit var sseClient: SseClient
@@ -391,6 +393,18 @@ class StarBurstConnectionService : Service() {
                 pollSessionCompletions()
             }
         }
+        // 待决授权/问题周期兜底刷新：镜像推送路径（handleBackendPushEvent）只发通知、
+        // 不写 reducer，跨服务器收藏页 / 全局搜索 / 工作台面板依赖 reducer 的 pendingInteractions，
+        // 靠此轮询维持快照；SSE 直连路径由事件实时写入，此处 revision 守卫不会覆盖。
+        serviceScope.launch {
+            while (isActive) {
+                delay(PENDING_REFRESH_INTERVAL_MS)
+                for ((_, state) in connections) {
+                    if (!state.isConnected) continue
+                    refreshPendingInteractions(state.config, state.conn)
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -472,6 +486,8 @@ class StarBurstConnectionService : Service() {
             sshPort = intent.getIntExtra("server_ssh_port", 22),
             sshUsername = intent.getStringExtra("server_ssh_username") ?: "",
             sshPassword = intent.getStringExtra("server_ssh_password"),
+            backendUrl = intent.getStringExtra("server_backend_url"),
+            backendToken = intent.getStringExtra("server_backend_token"),
         )
     }
 
@@ -489,7 +505,7 @@ class StarBurstConnectionService : Service() {
     // ============ Public API ============
 
     /**
-     * Connect to an OpenCode server. If already connected to this server, no-op.
+     * Connect to a server. If already connected to this server, no-op.
      * Multiple servers can be connected simultaneously.
      *
      * 注意：不加 @Synchronized——阻塞的 SSH 建连/网关探测放在 [connectInternal] 的锁外执行，
@@ -589,12 +605,21 @@ class StarBurstConnectionService : Service() {
     }
 
     /**
-     * 把每台服务器解析后的「直连 opencode」连接发布到 [ServerConnectionStateRepository]，
+     * 把每台服务器解析后的「直连服务器」连接发布到 [ServerConnectionStateRepository]，
      * 供 Git 页 / 终端等 shell 消费者复用（SSH 隧道模式下是 `127.0.0.1:localPort`，
      * 手机蜂窝/VPN 下才连得上）。任何时候连接状态变化后都应调用一次以保持同步。
      */
     internal fun publishResolvedConnections() {
-        val resolved = connections.mapValues { (_, state) -> state.directConn ?: state.conn }
+        val resolved = connections.mapValues { (_, state) ->
+            // 同主机直连型后端（starburst-agent）需要 Bearer 才能走 /api/* V2 面：
+            // directConn 是原始无鉴权连接，各 ViewModel 的列表/会话/模型 REST 调用都依赖它，
+            // 发布前统一应用同主机 Bearer，否则这些调用会 401。
+            StarBurstGateway.applySelfBackendBearer(
+                state.directConn ?: state.conn,
+                state.config.backendResolvedUrl,
+                state.config.backendResolvedToken,
+            )
+        }
         serverConnectionStateRepository.updateResolvedDirectConnections(resolved)
     }
 
@@ -761,7 +786,7 @@ class StarBurstConnectionService : Service() {
     internal fun resolveConnection(server: ServerConfig): ResolvedConnection {
         if (!server.useSsh) return ResolvedConnection(server.url, null)
         val host = server.host
-        val openCodePort = server.openCodePort
+        val serverPort = server.serverPort
         var session: JschSession? = null
         return try {
             session = SshRunner.buildSession(server)
@@ -769,8 +794,8 @@ class StarBurstConnectionService : Service() {
             session.setServerAliveInterval(15_000)
             session.setServerAliveCountMax(3)
             session.connect(SSH_CONNECT_TIMEOUT_MS)
-            val localPort = session.setPortForwardingL(0, host, openCodePort)
-            Log.i(TAG, "[${server.displayName}] SSH tunnel established: 127.0.0.1:$localPort -> $host:$openCodePort")
+            val localPort = session.setPortForwardingL(0, host, serverPort)
+            Log.i(TAG, "[${server.displayName}] SSH tunnel established: 127.0.0.1:$localPort -> $host:$serverPort")
             // 后端镜像端口：显式 backendUrl 的端口优先，否则默认 18880。
             val backendRemotePort = try {
                 java.net.URL(server.backendResolvedUrl).port.takeIf { it != -1 } ?: 18880
@@ -801,7 +826,7 @@ class StarBurstConnectionService : Service() {
     }
 
     /** 用重建后的 SSH 隧道替换某 server 的连接信息（关闭旧会话），并同步后端本地端口、重启推送 job。
-     * [newDirectConn] 指向重建后隧道上的直连 opencode 连接，用于后端镜像失败时回退直连。 */
+     * [newDirectConn] 指向重建后隧道上的直连服务器 连接，用于后端镜像失败时回退直连。 */
     internal fun replaceSshSession(serverId: String, newConn: ServerConnection, newSsh: JschSession?, newBackendLocalPort: Int?, newDirectConn: ServerConnection) {
         val oldState = connections[serverId] ?: return
         val oldSsh = oldState.sshSession
@@ -981,7 +1006,7 @@ class StarBurstConnectionService : Service() {
             state.directConn ?: state.conn
         }
         // 网络切换后重跑网关探测：旧镜像（backend mirror）端点可能随路由变化失效，
-        // 探测失败会自动回退直连 opencode，避免复用死掉的镜像连接永远连不上。
+        // 探测失败会自动回退直连服务器，避免复用死掉的镜像连接永远连不上。
         val conn = if (config.useSsh) {
             if (resolved != null) buildGatewayConn(config, baseConn, resolved.backendLocalPort) else state.conn
         } else {

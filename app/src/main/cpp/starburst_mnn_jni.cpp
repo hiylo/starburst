@@ -1,4 +1,4 @@
-// OpenCode Android - MNN on-device LLM inference JNI.
+// StarBurst Android - MNN on-device LLM inference JNI.
 // Minimal wrapper around MNN's Llm API for the on-device next-step suggestion feature.
 
 #include <jni.h>

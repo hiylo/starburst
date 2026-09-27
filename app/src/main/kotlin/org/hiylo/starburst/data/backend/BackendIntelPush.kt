@@ -11,6 +11,7 @@ package org.hiylo.starburst.data.backend
 
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -223,5 +224,5 @@ internal object IntelPushParser {
         this[key]?.jsonPrimitive?.contentOrNull
 
     private fun JsonObject.stringList(key: String): List<String> =
-        this[key]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
+        (this[key] as? JsonArray)?.mapNotNull { it.jsonPrimitive.contentOrNull } ?: emptyList()
 }

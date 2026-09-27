@@ -19,6 +19,7 @@ import io.ktor.websocket.readText
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -89,9 +90,9 @@ data class PushSessionEvent(
 
     /** 定位事件主体容器：优先 `properties`/`data`，否则用 `payload` 自身。 */
     private fun container(): JsonObject? {
-        payload["properties"]?.jsonObject?.let { return it }
-        payload["data"]?.jsonObject?.let { return it }
-        payload["payload"]?.jsonObject?.let { return it }
+        (payload["properties"] as? JsonObject)?.let { return it }
+        (payload["data"] as? JsonObject)?.let { return it }
+        (payload["payload"] as? JsonObject)?.let { return it }
         return payload
     }
 
@@ -101,9 +102,9 @@ data class PushSessionEvent(
             map[k]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }?.let { return it }
         }
         for (ak in arrayKeys) {
-            map[ak]?.jsonArray?.firstOrNull()?.jsonObject?.let { first ->
-                keys.firstNotNullOfOrNull { first[it]?.jsonPrimitive?.contentOrNull?.takeIf { v -> v.isNotBlank() } }
-            }?.let { return it }
+            val first = (map[ak] as? JsonArray)?.firstOrNull() as? JsonObject ?: continue
+            keys.firstNotNullOfOrNull { first[it]?.jsonPrimitive?.contentOrNull?.takeIf { v -> v.isNotBlank() } }
+                ?.let { return it }
         }
         return null
     }
@@ -156,10 +157,10 @@ class BackendPushListener @Inject constructor(
             if (frame !is Frame.Text) continue
             val root = runCatching { json.parseToJsonElement(frame.readText()).jsonObject }.getOrNull() ?: continue
             if (root["type"]?.jsonPrimitive?.content != "session.event") continue
-            val payload = root["payload"]?.jsonObject ?: continue
+            val payload = root["payload"] as? JsonObject ?: continue
             val sessionId = payload["sessionId"]?.jsonPrimitive?.contentOrNull ?: continue
             val eventType = payload["eventType"]?.jsonPrimitive?.contentOrNull ?: continue
-            val raw = payload["payload"]?.jsonObject ?: JsonObject(emptyMap())
+            val raw = payload["payload"] as? JsonObject ?: JsonObject(emptyMap())
             emit(PushSessionEvent(sessionId = sessionId, eventType = eventType, payload = raw))
         }
     }

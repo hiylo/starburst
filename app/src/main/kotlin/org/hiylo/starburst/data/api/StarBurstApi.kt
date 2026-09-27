@@ -1,7 +1,7 @@
 /*
  * Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
  * Project : StarBurst
- * File : OpenCodeApi.kt
+ * File : StarBurstApi.kt
  * Date : 2026/09/06 15:42:23
  * Author : Hsi Chu
  * Contact : hiylo@live.com
@@ -81,34 +81,39 @@ internal fun healthStatusException(statusCode: Int): Exception? = when (statusCo
 }
 
 /**
- * OpenCode REST API Client
+ * StarBurst REST API Client
  *
  * All methods take a [ServerConnection] so the client is stateless
  * and safe to use for multiple servers concurrently.
  *
  * The functional API methods live in this package as extension functions
- * (see OpenCodeApiSessions.kt / OpenCodeApiMessages.kt / OpenCodeApiMeta.kt / OpenCodeApiFiles.kt),
+ * (see StarBurstApiSessions.kt / StarBurstApiMessages.kt / StarBurstApiMeta.kt / StarBurstApiFiles.kt),
  * so this file only keeps the class skeleton plus shared infrastructure helpers.
  */
 @Singleton
-class OpenCodeApi @Inject constructor(
+class StarBurstApi @Inject constructor(
     internal val httpClient: HttpClient,
     internal val json: Json,
     internal val settingsRepository: SettingsRepository,
     internal val messageImageCache: MessageImageCache,
 ) {
     companion object {
-        internal const val TAG = "OpenCodeApi"
+        internal const val TAG = "StarBurstApi"
         internal const val BYTES_PER_MEGABYTE = 1024L * 1024L
 
-        /** 会话分享内容的只读后端基础地址；分享数据的读取与本地 opencode 服务器无关。 */
+        /** 会话分享内容的只读后端基础地址；分享数据的读取与本地 服务器无关。 */
         internal const val SHARE_BASE_URL = "https://opncd.ai"
     }
 
     // ============ Global ============
 
+    /**
+     * 探测服务器健康状态。
+     * V2 `GET /api/health`：响应仅 `{"healthy":true}`（无 version 字段），
+     * `ServerHealth.version` 保持为空；真值源 1.18.30 实测 200。
+     */
     suspend fun getHealth(conn: ServerConnection): ServerHealth {
-        val response = httpClient.get("${conn.baseUrl}/global/health") {
+        val response = httpClient.get("${conn.baseUrl}/api/health") {
             conn.authHeader?.let { header("Authorization", it) }
         }
         healthStatusException(response.status.value)?.let { throw it }
@@ -116,27 +121,40 @@ class OpenCodeApi @Inject constructor(
     }
 
     /**
-     * Get server paths (home directory, worktree, etc.).
-     * GET /path
+     * 获取服务器路径（home 目录等）。
+     * V2 `GET /api/location`：真值源 1.18.30 返回 LocationInfo `{directory, workspaceID?, project}`，
+     * 从中派生 home；部分环境套 `{data:{directory,...}}` 信封，宽容解析。V2 无 `/path`，
+     * `home`/`directory` 取 location.directory，其余字段（state/config/worktree）V2 无等价，填空串。
      */
     suspend fun getServerPaths(conn: ServerConnection): ServerPaths {
-        return httpClient.get("${conn.baseUrl}/path") {
+        val response = httpClient.get("${conn.baseUrl}/api/location") {
             conn.authHeader?.let { header("Authorization", it) }
-        }.body()
+        }
+        healthStatusException(response.status.value)?.let { throw it }
+        return try {
+            val root = json.parseToJsonElement(response.bodyAsText()).jsonObject
+            // 兼容 `{data:{...}}` 与顶层 LocationInfo 两种响应形状，directory 优先取信封内的值。
+            val directoryElement = (root["data"] as? JsonObject)?.get("directory") ?: root["directory"]
+            val directory = directoryElement?.jsonPrimitive?.contentOrNull.orEmpty()
+            ServerPaths(home = directory, directory = directory)
+        } catch (e: Exception) {
+            Log.w(TAG, "getServerPaths: 解析 V2 /api/location 失败，返回空路径", e)
+            ServerPaths()
+        }
     }
 
     // ============ Shared infrastructure helpers ============
 
     /** 将分享后端返回的条目流重组成只读会话（session + message + text part）。 */
     internal fun assembleSharedSession(items: List<ShareDataItem>): SharedSession {
-        val sessionObj = items.firstOrNull { it.type == "session" }?.data?.jsonObject
+        val sessionObj = items.firstOrNull { it.type == "session" }?.data as? JsonObject
         val sessionId = sessionObj?.get("id")?.jsonPrimitive?.contentOrNull.orEmpty()
         val title = sessionObj?.get("title")?.jsonPrimitive?.contentOrNull
-        val createdAt = sessionObj?.get("time")?.jsonObject?.get("created")?.jsonPrimitive?.longOrNull
+        val createdAt = (sessionObj?.get("time") as? JsonObject)?.get("created")?.jsonPrimitive?.longOrNull
 
         val textByMessage = items.asSequence()
             .filter { it.type == "part" }
-            .mapNotNull { it.data.jsonObject }
+            .mapNotNull { it.data as? JsonObject }
             .filter { part ->
                 part["type"]?.jsonPrimitive?.contentOrNull == "text" &&
                     part["synthetic"]?.jsonPrimitive?.contentOrNull != "true" &&
@@ -149,10 +167,10 @@ class OpenCodeApi @Inject constructor(
 
         val messages = items.asSequence()
             .filter { it.type == "message" }
-            .mapNotNull { it.data.jsonObject }
+            .mapNotNull { it.data as? JsonObject }
             .mapNotNull { message ->
                 val messageId = message["id"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val time = message["time"]?.jsonObject
+                val time = message["time"] as? JsonObject
                 SharedMessage(
                     id = messageId,
                     role = message["role"]?.jsonPrimitive?.contentOrNull ?: "user",
@@ -248,11 +266,12 @@ class OpenCodeApi @Inject constructor(
         var currentLimit = initialLimit
 
         while (true) {
-            val response = httpClient.get("${conn.baseUrl}/session/$sessionId/message") {
+            // V2：GET /api/session/{id}/message，分页用 cursor（非 before），返回 {data, cursor}。
+            val response = httpClient.get("${conn.baseUrl}/api/session/$sessionId/message") {
                 conn.authHeader?.let { header("Authorization", it) }
                 currentLimit?.let { parameter("limit", it) }
-                before?.let { parameter("before", it) }
-                directory?.let { header("x-starburst-directory", it) }
+                before?.let { parameter("cursor", it) }
+                directory?.let { parameter("directory", it) }
             }
             val contentLength = response.contentLength()
 
@@ -265,7 +284,6 @@ class OpenCodeApi @Inject constructor(
             }
 
             val rawFile = withContext(Dispatchers.IO) { File.createTempFile("oc-messages-", ".json") }
-            var decodeFile = rawFile
             try {
                 var downloaded = 0L
                 val aborted = withContext(Dispatchers.IO) {
@@ -298,35 +316,16 @@ class OpenCodeApi @Inject constructor(
                     continue
                 }
 
-                val oversized = downloaded > maxResponseBytes
-                decodeFile = withContext(Dispatchers.IO) {
-                    File.createTempFile("oc-messages-transformed-", ".json").also { transformed ->
-                        InputStreamReader(FileInputStream(rawFile), Charsets.UTF_8).use { input ->
-                            OutputStreamWriter(FileOutputStream(transformed), Charsets.UTF_8).use { output ->
-                                transformMessageJson(
-                                    input = input,
-                                    output = output,
-                                    omitPayloadFields = oversized,
-                                    cacheImageDataUrl = messageImageCache::cacheDataUrl,
-                                )
-                            }
-                        }
-                    }
-                }
-                if (oversized) {
-                    Log.w(TAG, "Sanitized oversized message response ($downloaded bytes) for session $sessionId")
-                }
-                val messages = withContext(Dispatchers.IO) {
-                    FileInputStream(decodeFile).use { json.decodeFromStream<List<MessageWithParts>>(it) }
+                val v2Resp = withContext(Dispatchers.IO) {
+                    FileInputStream(rawFile).use { json.decodeFromStream<V2MessagesResponse>(it) }
                 }
                 return MessagePage(
-                    messages = messages,
-                    nextCursor = response.headers["X-Next-Cursor"]?.takeIf { it.isNotBlank() },
+                    messages = v2Resp.data.map { it.toMessageWithParts(sessionId) },
+                    nextCursor = v2Resp.cursor?.get("next")?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() },
                 )
             } finally {
                 withContext(Dispatchers.IO) {
                     rawFile.delete()
-                    if (decodeFile != rawFile) decodeFile.delete()
                 }
             }
         }
