@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
@@ -50,6 +49,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -261,7 +262,7 @@ private fun FeatureItem(
 ) {
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -396,8 +397,9 @@ private fun TestRunItem(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val statusColor = runStatusColor(run.status)
+    val expandStateDescription = stringResource(if (expanded) R.string.chat_collapse else R.string.chat_expand)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -410,6 +412,7 @@ private fun TestRunItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .semantics { stateDescription = expandStateDescription }
                     .clickable {
                         expanded = !expanded
                         if (expanded && !resultsLoaded) onLoadResults()
@@ -575,7 +578,7 @@ private fun IssueItem(
     val statColor = issueStatusColor(issue.status)
     val isOpen = issue.status.lowercase() !in setOf("resolved", "fixed", "closed", "acknowledged", "ack")
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -680,7 +683,7 @@ private fun FixItem(
     val isProposed = fix.status.equals("proposed", ignoreCase = true)
     val isApplied = fix.status.equals("applied", ignoreCase = true)
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(12.dp),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.55f),
         modifier = Modifier.fillMaxWidth(),
     ) {

@@ -53,6 +53,7 @@ import org.hiylo.starburst.R
 import org.hiylo.starburst.domain.model.SharedMessage
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -181,7 +182,7 @@ private fun MessageBubble(message: SharedMessage) {
             shape = AppCardShape,
             colors = CardDefaults.cardColors(containerColor = containerColor),
             border = border,
-            modifier = Modifier.widthIn(max = 320.dp),
+            modifier = Modifier.cartoonChrome(AppCardShape).widthIn(max = 320.dp),
         ) {
             Column(modifier = Modifier.padding(12.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

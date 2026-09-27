@@ -49,14 +49,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.HelpOutline
@@ -172,6 +175,8 @@ fun WorkbenchScreen(
     val refreshing by viewModel.refreshing.collectAsState()
     val voiceActive by viewModel.voiceActive.collectAsState()
     val recognizedText by viewModel.recognizedText.collectAsState(null)
+    val templates by viewModel.templates.collectAsState()
+    val sessionErrors by viewModel.sessionErrors.collectAsState()
     val context = LocalContext.current
 
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -308,6 +313,8 @@ fun WorkbenchScreen(
                     selected = selected,
                     refreshing = refreshing,
                     sendingSessionIds = sendingSessionIds,
+                    templates = templates,
+                    sessionErrors = sessionErrors,
                     voiceActive = voiceActive,
                     onToggleVoice = toggleVoiceInput,
                     recognizedText = recognizedTextForPanel,
@@ -322,6 +329,11 @@ fun WorkbenchScreen(
                     onTogglePin = viewModel::togglePin,
                     onEnsurePreview = viewModel::ensurePreview,
                     onRefresh = viewModel::manualRefresh,
+                    onToggleAllMessages = viewModel::toggleAllMessages,
+                    onRetry = viewModel::retrySession,
+                    onReplyPermission = { sessionId, requestId, reply -> viewModel.replyToPermission(sessionId, requestId, reply) },
+                    onAddTemplate = viewModel::addTemplate,
+                    onRemoveTemplate = viewModel::removeTemplate,
                     onSendQuickReply = sendQuickReply,
                     onAnswerQuestion = replyToQuestion,
                     onDeleteSession = deleteSession,
@@ -345,6 +357,8 @@ private fun AllSessionsSection(
     selected: Set<String>,
     refreshing: Boolean,
     sendingSessionIds: Set<String>,
+    templates: List<String>,
+    sessionErrors: Map<String, String>,
     voiceActive: Boolean,
     onToggleVoice: () -> Unit,
     recognizedText: String?,
@@ -359,6 +373,11 @@ private fun AllSessionsSection(
     onTogglePin: (String) -> Unit,
     onEnsurePreview: (String) -> Unit,
     onRefresh: () -> Unit,
+    onToggleAllMessages: (String) -> Unit,
+    onRetry: (String) -> Unit,
+    onReplyPermission: (String, String, String) -> Unit,
+    onAddTemplate: (String) -> Unit,
+    onRemoveTemplate: (String) -> Unit,
     onSendQuickReply: (String, String) -> Unit,
     onAnswerQuestion: (String, String, List<List<String>>) -> Unit,
     onDeleteSession: (String) -> Unit,
@@ -441,7 +460,7 @@ private fun AllSessionsSection(
                         Text(
                             text = stringResource(R.string.workbench_sessions_empty),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -455,10 +474,45 @@ private fun AllSessionsSection(
                             Text(
                                 text = stringResource(R.string.workbench_filter_empty),
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
                     } else {
+                        val pinned = filtered.filter { it.pinned }
+                        val others = filtered.filterNot { it.pinned }
+                        val renderCard: @Composable (WorkbenchSession) -> Unit = { item ->
+                            WorkbenchSessionCard(
+                                item = item,
+                                expanded = item.session.id in panels,
+                                panelContent = panels[item.session.id],
+                                sending = item.session.id in sendingSessionIds,
+                                selectionMode = selectionMode,
+                                selected = item.session.id in selected,
+                                templates = templates,
+                                errorMessage = sessionErrors[item.session.id],
+                                voiceActive = voiceActive,
+                                onToggleVoice = onToggleVoice,
+                                recognizedText = recognizedText,
+                                onClick = {
+                                    if (selectionMode) onToggleSelected(item.session.id) else onTogglePanel(item.session.id)
+                                },
+                                onToggleSelected = { onToggleSelected(item.session.id) },
+                                onEnsurePreview = { onEnsurePreview(item.session.id) },
+                                onRenameSession = { title -> onRenameSession(item.session.id, title) },
+                                onTogglePin = { onTogglePin(item.session.id) },
+                                onToggleAllMessages = { onToggleAllMessages(item.session.id) },
+                                onRetry = { onRetry(item.session.id) },
+                                onReplyPermission = { requestId, reply -> onReplyPermission(item.session.id, requestId, reply) },
+                                onAddTemplate = onAddTemplate,
+                                onRemoveTemplate = onRemoveTemplate,
+                                onSendQuickReply = { text -> onSendQuickReply(item.session.id, text) },
+                                onAnswerQuestion = { requestId, answers ->
+                                    onAnswerQuestion(item.session.id, requestId, answers)
+                                },
+                                onDeleteSession = { onDeleteSession(item.session.id) },
+                                onOpenSession = { onOpenSession(item.session.id) },
+                            )
+                        }
                         SwipeRefresh(
                             state = rememberSwipeRefreshState(isRefreshing = refreshing),
                             onRefresh = onRefresh,
@@ -469,31 +523,20 @@ private fun AllSessionsSection(
                                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 12.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                             ) {
-                                items(filtered, key = { it.session.id }) { item ->
-                                    WorkbenchSessionCard(
-                                        item = item,
-                                        expanded = item.session.id in panels,
-                                        panelContent = panels[item.session.id],
-                                        sending = item.session.id in sendingSessionIds,
-                                        selectionMode = selectionMode,
-                                        selected = item.session.id in selected,
-                                        voiceActive = voiceActive,
-                                        onToggleVoice = onToggleVoice,
-                                        recognizedText = recognizedText,
-                                        onClick = {
-                                            if (selectionMode) onToggleSelected(item.session.id) else onTogglePanel(item.session.id)
-                                        },
-                                        onToggleSelected = { onToggleSelected(item.session.id) },
-                                        onEnsurePreview = { onEnsurePreview(item.session.id) },
-                                        onRenameSession = { title -> onRenameSession(item.session.id, title) },
-                                        onTogglePin = { onTogglePin(item.session.id) },
-                                        onSendQuickReply = { text -> onSendQuickReply(item.session.id, text) },
-                                        onAnswerQuestion = { requestId, answers ->
-                                            onAnswerQuestion(item.session.id, requestId, answers)
-                                        },
-                                        onDeleteSession = { onDeleteSession(item.session.id) },
-                                        onOpenSession = { onOpenSession(item.session.id) },
-                                    )
+                                if (pinned.isNotEmpty()) {
+                                    item(key = "header_pinned") {
+                                        SectionHeader(stringResource(R.string.workbench_pinned_header), count = pinned.size)
+                                    }
+                                    items(pinned, key = { it.session.id }) { renderCard(it) }
+                                }
+                                if (others.isNotEmpty()) {
+                                    item(key = "header_others") {
+                                        SectionHeader(
+                                            stringResource(R.string.workbench_others_header),
+                                            count = others.size,
+                                        )
+                                    }
+                                    items(others, key = { it.session.id }) { renderCard(it) }
                                 }
                             }
                         }
@@ -515,7 +558,9 @@ private fun filterAndSearch(
         val matchStatus = when (filter) {
             WorkbenchFilter.All -> true
             WorkbenchFilter.Question -> item.status is SessionStatus.Question
+            WorkbenchFilter.Permission -> item.status is SessionStatus.Permission
             WorkbenchFilter.Busy -> item.status is SessionStatus.Busy || item.status is SessionStatus.Retry
+            WorkbenchFilter.Error -> item.hasError
             WorkbenchFilter.Idle -> item.status is SessionStatus.Idle
         }
         if (!matchStatus) return@filter false
@@ -601,7 +646,9 @@ private fun WorkbenchFilterBar(
     onFilterChange: (WorkbenchFilter) -> Unit,
 ) {
     val questionCount = sessions.count { it.status is SessionStatus.Question }
+    val permissionCount = sessions.count { it.status is SessionStatus.Permission }
     val busyCount = sessions.count { it.status is SessionStatus.Busy || it.status is SessionStatus.Retry }
+    val errorCount = sessions.count { it.hasError }
     val idleCount = sessions.count { it.status is SessionStatus.Idle }
     Row(
         modifier = Modifier
@@ -626,11 +673,25 @@ private fun WorkbenchFilterBar(
             onClick = { onFilterChange(WorkbenchFilter.Question) },
         )
         WorkbenchFilterChip(
+            label = stringResource(R.string.workbench_filter_permission),
+            count = permissionCount,
+            selected = filter == WorkbenchFilter.Permission,
+            highlight = true,
+            onClick = { onFilterChange(WorkbenchFilter.Permission) },
+        )
+        WorkbenchFilterChip(
             label = stringResource(R.string.workbench_filter_busy),
             count = busyCount,
             selected = filter == WorkbenchFilter.Busy,
             highlight = true,
             onClick = { onFilterChange(WorkbenchFilter.Busy) },
+        )
+        WorkbenchFilterChip(
+            label = stringResource(R.string.workbench_filter_error),
+            count = errorCount,
+            selected = filter == WorkbenchFilter.Error,
+            highlight = true,
+            onClick = { onFilterChange(WorkbenchFilter.Error) },
         )
         WorkbenchFilterChip(
             label = stringResource(R.string.workbench_filter_idle),
@@ -707,6 +768,8 @@ private fun WorkbenchSessionCard(
     selected: Boolean,
     onClick: () -> Unit,
     panelContent: DecisionPanelState?,
+    templates: List<String>,
+    errorMessage: String?,
     voiceActive: Boolean,
     onToggleVoice: () -> Unit,
     recognizedText: String?,
@@ -714,6 +777,11 @@ private fun WorkbenchSessionCard(
     onEnsurePreview: () -> Unit,
     onRenameSession: (String) -> Unit,
     onTogglePin: () -> Unit,
+    onToggleAllMessages: () -> Unit,
+    onRetry: () -> Unit,
+    onReplyPermission: (String, String) -> Unit,
+    onAddTemplate: (String) -> Unit,
+    onRemoveTemplate: (String) -> Unit,
     onSendQuickReply: (String) -> Unit,
     onAnswerQuestion: (String, List<List<String>>) -> Unit,
     onDeleteSession: (String) -> Unit,
@@ -727,9 +795,9 @@ private fun WorkbenchSessionCard(
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
         ),
-        // 提问中 / 处理中的活跃会话用彩色描边突出，便于一眼定位需要关注的会话。
+// 提问中 / 待授权 / 处理中的活跃会话用彩色描边突出，便于一眼定位需要关注的会话。
         border = when (item.status) {
-            is SessionStatus.Question -> BorderStroke(1.5.dp, StatusWarning.copy(alpha = 0.9f))
+            is SessionStatus.Question, is SessionStatus.Permission -> BorderStroke(1.5.dp, StatusWarning.copy(alpha = 0.9f))
             is SessionStatus.Busy, is SessionStatus.Retry -> BorderStroke(1.5.dp, StatusProcessing.copy(alpha = 0.9f))
             is SessionStatus.Idle -> appAmoledBorder()
         },
@@ -752,11 +820,18 @@ private fun WorkbenchSessionCard(
                     DecisionPanelContent(
                         panel = panelContent,
                         sending = sending,
+                        templates = templates,
+                        errorMessage = errorMessage,
                         voiceActive = voiceActive,
                         onToggleVoice = onToggleVoice,
                         recognizedText = recognizedText,
                         onSend = onSendQuickReply,
                         onAnswerQuestion = onAnswerQuestion,
+                        onReplyPermission = onReplyPermission,
+                        onToggleAllMessages = onToggleAllMessages,
+                        onRetry = onRetry,
+                        onAddTemplate = onAddTemplate,
+                        onRemoveTemplate = onRemoveTemplate,
                         onOpenSession = onOpenSession,
                     )
                 }
@@ -981,11 +1056,11 @@ private fun SessionSummaryRow(
     }
 }
 
-/** 状态指示点：提问中(amber) > 处理中(blue) > 重试(red) > 空闲(灰)。 */
+/** 状态指示点：提问中/待授权(amber) > 处理中(blue) > 重试(red) > 空闲(灰)。 */
 @Composable
 private fun StatusDot(status: SessionStatus) {
     val color = when (status) {
-        is SessionStatus.Question -> StatusWarning
+        is SessionStatus.Question, is SessionStatus.Permission -> StatusWarning
         is SessionStatus.Busy -> StatusProcessing
         is SessionStatus.Retry -> StatusError
         is SessionStatus.Idle -> MaterialTheme.colorScheme.outlineVariant
@@ -1016,15 +1091,16 @@ private fun UnreadDot() {
 private fun StatusLabel(status: SessionStatus) {
     val text: String? = when (status) {
         is SessionStatus.Question -> stringResource(R.string.session_status_pending_question)
+        is SessionStatus.Permission -> stringResource(R.string.session_status_pending_permission)
         is SessionStatus.Busy -> stringResource(R.string.session_status_busy)
         is SessionStatus.Retry -> stringResource(R.string.sessions_retrying)
         is SessionStatus.Idle -> stringResource(R.string.workbench_status_idle)
     }
     val color = when (status) {
-        is SessionStatus.Question -> StatusWarning
+        is SessionStatus.Question, is SessionStatus.Permission -> StatusWarning
         is SessionStatus.Busy -> StatusProcessing
         is SessionStatus.Retry -> StatusError
-        is SessionStatus.Idle -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+        is SessionStatus.Idle -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Text(
         text = text ?: "",
@@ -1033,372 +1109,3 @@ private fun StatusLabel(status: SessionStatus) {
     )
 }
 
-/** 待决问题徽标：amber 胶囊 + 问题数，提示该会话等待回答。 */
-@Composable
-private fun PendingQuestionBadge(count: Int) {
-    Surface(
-        shape = CircleShape,
-        color = StatusWarning.copy(alpha = 0.18f),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(3.dp),
-        ) {
-            Surface(modifier = Modifier.size(5.dp), shape = CircleShape, color = StatusWarning) {}
-            Text(
-                text = count.toString(),
-                style = MaterialTheme.typography.labelSmall,
-                fontWeight = FontWeight.Bold,
-                color = StatusWarning,
-            )
-        }
-    }
-}
-
-/** 决策面板：AI 最近回复摘要 + 待决问题选项 + 快捷回复输入 + 进入完整会话。 */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun DecisionPanelContent(
-    panel: DecisionPanelState,
-    sending: Boolean,
-    voiceActive: Boolean,
-    onToggleVoice: () -> Unit,
-    recognizedText: String?,
-    onSend: (String) -> Unit,
-    onAnswerQuestion: (String, List<List<String>>) -> Unit,
-    onOpenSession: () -> Unit,
-) {
-    var quickReply by rememberSaveable(panel.sessionId) { mutableStateOf("") }
-    // 语音识别结果自动填入快捷回复输入框。
-    LaunchedEffect(recognizedText) {
-        if (!recognizedText.isNullOrBlank()) {
-            quickReply = recognizedText
-        }
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        // 快捷回复输入框 + 语音 + 发送，置顶便于快速操作。
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            val submit: () -> Unit = {
-                val trimmed = quickReply.trim()
-                if (trimmed.isNotEmpty() && !sending) {
-                    // 发送后保留草稿，便于连续补充/改写再发。
-                    onSend(trimmed)
-                }
-            }
-            BasicTextField(
-                value = quickReply,
-                onValueChange = { quickReply = it },
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                    .padding(horizontal = 14.dp, vertical = 10.dp),
-                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
-                minLines = 1,
-                maxLines = 4,
-                cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
-                keyboardActions = KeyboardActions(onSend = { submit() }),
-                decorationBox = { innerTextField ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.weight(1f),
-                            contentAlignment = Alignment.CenterStart,
-                        ) {
-                            if (quickReply.isEmpty()) {
-                                Text(
-                                    text = stringResource(R.string.workbench_quick_reply_hint),
-                                    style = MaterialTheme.typography.bodyLarge,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                                )
-                            }
-                            innerTextField()
-                        }
-                        if (quickReply.isNotEmpty()) {
-                            IconButton(
-                                onClick = { quickReply = "" },
-                                modifier = Modifier.size(24.dp),
-                            ) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = stringResource(R.string.workbench_clear_draft),
-                                    modifier = Modifier.size(16.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                )
-                            }
-                        }
-                    }
-                },
-            )
-            IconButton(
-                onClick = onToggleVoice,
-                enabled = !sending,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    imageVector = if (voiceActive) Icons.Default.Stop else Icons.Default.Mic,
-                    contentDescription = stringResource(R.string.chat_voice_input),
-                    modifier = Modifier.size(22.dp),
-                    tint = if (voiceActive) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-                    },
-                )
-            }
-            IconButton(
-                onClick = submit,
-                enabled = quickReply.isNotBlank() && !sending,
-                modifier = Modifier.size(44.dp),
-            ) {
-                Icon(
-                    Icons.AutoMirrored.Filled.Send,
-                    contentDescription = stringResource(R.string.chat_send),
-                    modifier = Modifier.size(22.dp),
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.78f),
-                )
-            }
-        }
-
-        // 处理中的实时指示：会话仍在生成/重试时置顶展示，内容随推送去抖刷新。
-        if (panel.sessionStatus is SessionStatus.Busy || panel.sessionStatus is SessionStatus.Retry) {
-            Row(
-                modifier = Modifier.fillMaxWidth().background(
-                    StatusProcessing.copy(alpha = 0.10f),
-                    RoundedCornerShape(8.dp),
-                ).padding(horizontal = 10.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = StatusProcessing)
-                Text(
-                    text = stringResource(R.string.workbench_panel_processing),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = StatusProcessing,
-                )
-            }
-        }
-
-        AppPrimaryButton(
-            onClick = onOpenSession,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Default.OpenInFull, contentDescription = null)
-            Spacer(Modifier.width(8.dp))
-            Text(stringResource(R.string.workbench_open_full_session))
-        }
-
-        // 会话标题/路径/状态在卡片顶部已显示，面板内不再重复。
-        Text(
-            text = stringResource(R.string.workbench_decision_ai_reply),
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        when {
-            panel.loading -> {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
-                    Text(
-                        text = stringResource(R.string.workbench_loading),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            panel.recentMessages.isEmpty() -> {
-                Text(
-                    text = stringResource(R.string.workbench_decision_no_reply),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                )
-            }
-            else -> {
-                panel.recentMessages.forEach { msg ->
-                    RecentMessageRow(msg)
-                }
-            }
-        }
-
-        if (panel.questions.isNotEmpty()) {
-            Text(
-                text = stringResource(R.string.workbench_decision_questions),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            val requestId = panel.questionRequestId
-            if (requestId != null) {
-                val single = panel.questions.size == 1 && panel.questions.first().multiple != true
-                if (single) {
-                    panel.questions.forEach { question ->
-                        QuestionOptions(
-                            question = question,
-                            onSelect = { label -> onAnswerQuestion(requestId, listOf(listOf(label))) },
-                        )
-                    }
-                } else {
-                    val answersPerQuestion = remember(panel.sessionId, requestId) {
-                        mutableStateListOf<List<String>>().apply {
-                            repeat(panel.questions.size) { add(emptyList()) }
-                        }
-                    }
-                    panel.questions.forEachIndexed { index, question ->
-                        QuestionOptions(
-                            question = question,
-                            onSelect = { label ->
-                                answersPerQuestion[index] = listOf(label)
-                                if (answersPerQuestion.all { it.isNotEmpty() }) {
-                                    onAnswerQuestion(requestId, answersPerQuestion.toList())
-                                }
-                            },
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** 决策面板里的一条最近对话消息（角色标签 + 文本）。 */
-@Composable
-private fun RecentMessageRow(msg: PanelMessage) {
-    val isUser = msg.role == "user"
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
-        Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = if (isUser) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-            } else {
-                MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
-            },
-        ) {
-            Text(
-                text = if (isUser) stringResource(R.string.workbench_panel_me) else stringResource(R.string.workbench_panel_ai),
-                style = MaterialTheme.typography.labelSmall,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                color = if (isUser) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSecondaryContainer,
-            )
-        }
-        Text(
-            text = msg.text,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurface,
-            maxLines = if (msg.full) Int.MAX_VALUE else 3,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f),
-        )
-    }
-}
-
-/** 单个待决问题：题面 + 选项（点击选项即作为快捷回复发送）。 */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun QuestionOptions(
-    question: QuestionInfo,
-    onSelect: (String) -> Unit,
-) {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        val title = question.header.takeIf { it.isNotBlank() } ?: question.question
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodySmall,
-            fontWeight = FontWeight.Medium,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
-        if (question.question.isNotBlank() && question.question != title) {
-            Text(
-                text = question.question,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        if (question.options.isNotEmpty()) {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                question.options.forEachIndexed { index, option ->
-                    OptionCard(
-                        index = index,
-                        label = option.label,
-                        description = option.description,
-                        onSelect = { onSelect(option.label) },
-                    )
-                }
-            }
-        }
-    }
-}
-
-/** 待决问题选项卡片：编号圆点 + 名称/描述 + 箭头，点击即作为快捷回复发送。 */
-@Composable
-private fun OptionCard(
-    index: Int,
-    label: String,
-    description: String,
-    onSelect: () -> Unit,
-) {
-    Surface(
-        onClick = onSelect,
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(22.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = "${index + 1}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = label,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                if (description.isNotBlank()) {
-                    Text(
-                        text = description,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                }
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-            )
-        }
-    }
-}

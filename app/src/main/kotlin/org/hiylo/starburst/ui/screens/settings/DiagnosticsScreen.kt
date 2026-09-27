@@ -25,7 +25,6 @@ import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Card
@@ -71,6 +70,7 @@ import kotlinx.coroutines.withContext
 import org.hiylo.starburst.ui.components.appPopupBorder
 import org.hiylo.starburst.ui.components.CartoonStickerIcon
 import org.hiylo.starburst.ui.components.appPopupContainerColor
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.components.AppCardShape
 import org.hiylo.starburst.ui.components.AppDialog
@@ -261,7 +261,7 @@ fun DiagnosticsScreen(
                         "${entry.timestamp}-${entry.level}-${entry.category}-$index"
                     }) { _, entry ->
                         Card(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
                             shape = AppCardShape,
                             colors = CardDefaults.cardColors(
                                 containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,

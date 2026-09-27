@@ -17,6 +17,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -46,14 +47,16 @@ import org.hiylo.starburst.BuildConfig
 import org.hiylo.starburst.R
 import org.hiylo.starburst.data.api.BackendApi
 import org.hiylo.starburst.data.api.MessageIdGenerator
-import org.hiylo.starburst.data.api.OpenCodeApi
-import org.hiylo.starburst.data.api.OpenCodeGateway
+import org.hiylo.starburst.data.api.StarBurstApi
+import org.hiylo.starburst.data.api.StarBurstGateway
 import org.hiylo.starburst.data.api.PromptPart
 import org.hiylo.starburst.data.api.ServerConnection
 import org.hiylo.starburst.data.api.SessionEventRecord
 import org.hiylo.starburst.data.api.createdAtEpochMillis
+import org.hiylo.starburst.data.api.abortSession
 import org.hiylo.starburst.data.api.deleteSession
 import org.hiylo.starburst.data.api.listMessages
+import org.hiylo.starburst.data.api.listPendingPermissions
 import org.hiylo.starburst.data.api.listPendingQuestions
 import org.hiylo.starburst.data.api.getSession
 import org.hiylo.starburst.data.api.listSessions
@@ -61,16 +64,20 @@ import org.hiylo.starburst.data.api.listSessionStatusesForDirectories
 import org.hiylo.starburst.data.api.updateSession
 import org.hiylo.starburst.data.api.QuestionInfo
 import org.hiylo.starburst.data.api.QuestionRequest
-import org.hiylo.starburst.data.api.promptAsync
+import org.hiylo.starburst.data.api.PermissionRequest
+import org.hiylo.starburst.data.api.sendPrompt
+import org.hiylo.starburst.data.api.replyToPermission
 import org.hiylo.starburst.data.api.replyToQuestion
 import org.hiylo.starburst.data.backend.BackendPushListener
 import org.hiylo.starburst.data.backend.PushSessionEvent
+import org.hiylo.starburst.data.repository.ServerConnectionStateRepository
 import org.hiylo.starburst.data.repository.ServerRepository
 import org.hiylo.starburst.domain.model.Message
 import org.hiylo.starburst.domain.model.MessageWithParts
 import org.hiylo.starburst.domain.model.Part
 import org.hiylo.starburst.domain.model.Session
 import org.hiylo.starburst.domain.model.SessionStatus
+import org.hiylo.starburst.domain.model.ToolState
 import org.hiylo.starburst.logging.AppLogger as Log
 import org.hiylo.starburst.ui.util.launchWhileStarted
 import org.hiylo.starburst.ml.AsrSession
@@ -78,6 +85,9 @@ import org.hiylo.starburst.ml.MnnAsr
 import org.hiylo.starburst.ml.MnnAsrRecorder
 import org.hiylo.starburst.ml.ServerAsrApi
 import org.hiylo.starburst.ml.ServerAsrRecorder
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -101,6 +111,8 @@ private const val PANEL_MESSAGE_LIMIT = 40
 private const val PANEL_RECENT_COUNT = 8
 /** 决策面板单条消息的最大字符数。 */
 private const val PANEL_MESSAGE_CHAR_LIMIT = 400
+/** 面板「查看全部消息」的最大消息条数。 */
+private const val PANEL_ALL_LIMIT = 200
 /** 卡片未展开时「最后消息预览」的最大字符数。 */
 private const val PREVIEW_CHAR_LIMIT = 96
 /** 卡片预览懒加载拉取的消息条数（够取最后一条有效消息即可）。 */
@@ -111,12 +123,16 @@ data class WorkbenchSession(
     val session: Session,
     val status: SessionStatus = SessionStatus.Idle,
     val pendingQuestion: QuestionRequest? = null,
+    /** 待处理的权限请求（等待授权/拒绝）。 */
+    val pendingPermissions: List<PermissionRequest> = emptyList(),
     /** 后端 session_unread 记录的有新消息未读（Web/App 共享，仅后端可用时有意义）。 */
     val unread: Boolean = false,
     /** 最后一条有效消息预览（懒加载，null 表示尚未加载）。 */
     val aiPreview: String? = null,
     /** 本地置顶（本机持久化，跨重启保留）。 */
     val pinned: Boolean = false,
+    /** 最近推送出现过失败（用于「出错」筛选 / 置顶 / 面板重试横幅）。 */
+    val hasError: Boolean = false,
 )
 
 /** AI 工作台看板的完整 UI 状态。 */
@@ -133,6 +149,17 @@ data class PanelMessage(
     val text: String,
     /** true 表示最近一条 AI 回复：完整显示不截断。 */
     val full: Boolean = false,
+    /** 该消息里的非文本部件（图片 / 工具 / 文件）。 */
+    val attachments: List<PanelAttachment> = emptyList(),
+)
+
+/** 决策面板消息里的非文本部件。 */
+data class PanelAttachment(
+    /** image / tool / file。 */
+    val kind: String,
+    val label: String,
+    val detail: String = "",
+    val url: String? = null,
 )
 
 /** 展开中的会话「决策面板」内容。 */
@@ -142,15 +169,25 @@ data class DecisionPanelState(
     val questions: List<QuestionInfo> = emptyList(),
     /** 待决提问的 requestId，用于把选项作为问题答案提交（而非当作普通消息发送）。 */
     val questionRequestId: String? = null,
+    /** 待处理的权限请求（面板内快捷授权/拒绝）。 */
+    val permissions: List<PermissionRequest> = emptyList(),
     val recentMessages: List<PanelMessage> = emptyList(),
     val sessionTitle: String = "",
     val sessionDirectory: String = "",
     val sessionStatus: SessionStatus = SessionStatus.Idle,
     val loading: Boolean = true,
+    /** 是否展开「全部消息」视图。 */
+    val showAll: Boolean = false,
+    /** 「全部消息」内容（null 表示尚未加载）。 */
+    val allMessages: List<PanelMessage>? = null,
+    /** 最近一轮模型上下文占用（token）。 */
+    val contextTokens: Int = 0,
+    /** 模型上下文窗口上限（token），未知为 0。 */
+    val contextWindow: Int = 0,
 )
 
-/** 工作台会话列表筛选维度：全部 / 待回复(提问中) / 处理中 / 空闲。 */
-enum class WorkbenchFilter { All, Question, Busy, Idle }
+/** 工作台会话列表筛选维度：全部 / 待回复(提问中) / 待授权 / 处理中 / 出错 / 空闲。 */
+enum class WorkbenchFilter { All, Question, Permission, Busy, Error, Idle }
 
 /**
  * AI 工作台看板 ViewModel（服务器级）：轮询后端 /api/events 事件流 + 会话列表/状态，
@@ -162,9 +199,10 @@ enum class WorkbenchFilter { All, Question, Busy, Idle }
 @HiltViewModel
 class WorkbenchViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
-    private val api: OpenCodeApi,
+    private val api: StarBurstApi,
     private val backendApi: BackendApi,
     private val serverRepository: ServerRepository,
+    private val connectionStateRepository: ServerConnectionStateRepository,
     private val backendPushListener: BackendPushListener,
     @ApplicationContext private val context: Context,
     private val serverAsrApi: ServerAsrApi,
@@ -177,7 +215,7 @@ class WorkbenchViewModel @Inject constructor(
     private val passwordArg = savedStateHandle.get<String>("password").orEmpty()
     private val serverNameArg = savedStateHandle.get<String>("serverName").orEmpty()
 
-    /** OpenCode 直连连接（会话列表 / 消息 / prompt_async 用）。 */
+    /** 服务器直连连接（会话列表 / 消息 / prompt_async 用）。 */
     private var conn: ServerConnection? = null
     /** starburst-backend 地址与 APP token（镜像通道 / 用量统计 / 任务中心用）。 */
     private var backendUrl = ""
@@ -220,6 +258,17 @@ class WorkbenchViewModel @Inject constructor(
 
     /** 置顶集合的 DataStore key。 */
     private val pinnedKey = stringSetPreferencesKey("workbench_pinned_$serverId")
+
+    /** 快捷回复模板（本机持久化，跨服务器共享）。 */
+    private val _templates = MutableStateFlow<List<String>>(emptyList())
+    val templates: StateFlow<List<String>> = _templates.asStateFlow()
+
+    /** 快捷回复模板的 DataStore key（JSON 数组字符串）。 */
+    private val templatesKey = stringPreferencesKey("workbench_quick_reply_templates")
+
+    /** 各会话最近一次推送的失败信息（面板展示错误摘要 + 一键重试）。 */
+    private val _sessionErrors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val sessionErrors: StateFlow<Map<String, String>> = _sessionErrors.asStateFlow()
 
     /** 预览懒加载中的会话集合（防并发重复加载）。 */
     private val previewLoading = mutableSetOf<String>()
@@ -330,14 +379,15 @@ class WorkbenchViewModel @Inject constructor(
             val baseUrl = server?.url?.trimEnd('/') ?: serverUrlArg
             val username = server?.username ?: usernameArg
             val password = server?.password ?: passwordArg.ifEmpty { null }
-            conn = ServerConnection.from(baseUrl, username, password)
+            conn = connectionStateRepository.resolvedConnectionFor(serverId, baseUrl)
+                ?: ServerConnection.from(baseUrl, username, password)
             backendUrl = server?.backendResolvedUrl.orEmpty()
             backendToken = server?.backendResolvedToken.orEmpty()
             // 后端可用时走镜像通道：状态/列表走后端增强接口（快照+事件+活跃度聚合，准确）。
-            // token 为空（未配置/显式禁用后端）时保持直连 opencode，避免用空 Bearer 请求镜像。
+            // token 为空（未配置/显式禁用后端）时保持直连服务器，避免用空 Bearer 请求镜像。
             if (backendUrl.isNotBlank() && backendToken.isNotBlank()) {
                 conn = ServerConnection(
-                    baseUrl = backendUrl.trimEnd('/') + OpenCodeGateway.BACKEND_API_PREFIX,
+                    baseUrl = backendUrl.trimEnd('/') + StarBurstGateway.BACKEND_API_PREFIX,
                     authHeader = "Bearer $backendToken",
                 )
             }
@@ -358,7 +408,19 @@ class WorkbenchViewModel @Inject constructor(
                 }
             }
         }
+        // 快捷回复模板：DataStore 持久化（JSON 数组），断点续集无需额外处理。
+        viewModelScope.launch {
+            dataStore.data.map { it[templatesKey] }.collect { raw ->
+                _templates.value = raw?.let { decodeTemplates(it) }.orEmpty()
+            }
+        }
     }
+
+    private fun decodeTemplates(raw: String): List<String> =
+        runCatching { Json.decodeFromString<List<String>>(raw) }.getOrDefault(emptyList())
+
+    private fun encodeTemplates(list: List<String>): String =
+        runCatching { Json.encodeToString(list) }.getOrDefault("[]")
 
     /** 推送流是否在线：在线时不轮询，断线期间由周期刷新兜底。 */
     @Volatile
@@ -427,15 +489,24 @@ class WorkbenchViewModel @Inject constructor(
                 refreshSessionsSoon()
                 refreshPreviewSoon(ev.sessionId)
             }
+            "session.error", "session.failed" -> {
+                val msg = ev.errorMessage() ?: context.getString(R.string.workbench_error_unknown)
+                _sessionErrors.update { it + (ev.sessionId to msg) }
+                refreshSessionsSoon()
+                refreshPanelSoon(ev.sessionId)
+            }
             "question.asked", "question.updated", "permission.asked", "permission.updated",
-            "session.error", "session.failed", "message.complete",
+            "message.complete",
             -> {
+                // 有新的成功活动发生即视作已恢复，清除之前的失败摘要。
+                _sessionErrors.update { it - ev.sessionId }
                 refreshSessionsSoon()
                 refreshPanelSoon(ev.sessionId)
                 refreshPreviewSoon(ev.sessionId)
             }
             "message.created", "message.updated",
             -> {
+                _sessionErrors.update { it - ev.sessionId }
                 refreshSessionsSoon()
                 refreshPanelSoon(ev.sessionId)
             }
@@ -457,7 +528,8 @@ class WorkbenchViewModel @Inject constructor(
         // childBusyByParent 归并出来的「处理中」覆盖回空闲，造成列表显示空闲。
         val current = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.status
         val applicable = when (current) {
-            is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Retry -> status !is SessionStatus.Idle
+            is SessionStatus.Busy, is SessionStatus.Question, is SessionStatus.Permission, is SessionStatus.Retry ->
+                status !is SessionStatus.Idle
             else -> true
         }
         if (!applicable) return
@@ -481,43 +553,53 @@ class WorkbenchViewModel @Inject constructor(
         viewModelScope.launch { refreshSessions() }
     }
 
-    /** 拉取全量会话 + 状态 + 待决问题，派生排序后刷新列表。 */
+    /** 拉取全量会话 + 状态 + 待决问题/授权，派生排序后刷新列表。 */
     private suspend fun refreshSessions() {
         val activeConn = conn ?: return
         try {
             val sessions = api.listSessions(activeConn)
-            // 服务器 /question 按 query 参数 directory 过滤，按会话目录分组聚合查询。
+            // 服务器 /question 与 /permission 都按 query 参数 directory 过滤，按会话目录分组聚合查询。
             val directories = sessions.asSequence()
                 .map { it.directory }
                 .filter { it.isNotBlank() }
                 .distinct()
                 .toList()
-            // 待决问题按目录并发拉取；状态走后端聚合（镜像）或目录并发（直连上游）自适配。
-            val pendingBySession: Map<String, List<QuestionRequest>> = coroutineScope {
+            // 待决问题/授权按目录并发拉取；状态走后端聚合（镜像）或目录并发（直连上游）自适配。
+            val pendingBySession = mutableMapOf<String, List<QuestionRequest>>()
+            val pendingPermissionBySession = mutableMapOf<String, List<PermissionRequest>>()
+            coroutineScope {
                 directories.map { dir ->
                     async {
-                        runCatching { api.listPendingQuestions(activeConn, directory = dir) }
-                            .getOrElse { e ->
-                                if (e is CancellationException) throw e
-                                if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending questions for $dir: ${e.message}")
-                                emptyList()
-                            }
+                        runCatching {
+                            val questions = api.listPendingQuestions(activeConn, directory = dir)
+                            val permissions = api.listPendingPermissions(activeConn, directory = dir)
+                            questions to permissions
+                        }.getOrElse { e ->
+                            if (e is CancellationException) throw e
+                            if (BuildConfig.DEBUG) Log.d(TAG, "Failed to load pending interactions for $dir: ${e.message}")
+                            emptyList<QuestionRequest>() to emptyList<PermissionRequest>()
+                        }
                     }
-                }.awaitAll().flatten().groupBy { it.sessionId }
+                }.awaitAll().forEach { (questions, permissions) ->
+                    questions.groupBy { it.sessionId }.forEach { (sid, list) -> pendingBySession[sid] = list }
+                    permissions.groupBy { it.sessionId }.forEach { (sid, list) -> pendingPermissionBySession[sid] = list }
+                }
             }
             val statuses = api.listSessionStatusesForDirectories(activeConn, directories)
             // 补齐缺失的 busy/retry 子会话对象，保证父会话能归并子会话的处理中状态。
             val sessionsWithChildren = hydrateBusyChildren(activeConn, sessions, statuses)
-            val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession)
+            val items = buildWorkbenchSessions(sessionsWithChildren, statuses, pendingBySession, pendingPermissionBySession)
             // 未读不再随每次刷新轮询 /api/unread：保留当前本地已跟踪的未读集合（由推送标记/读后清除驱动）。
             val currentUnread = _uiState.value.sessions.asSequence().filter { it.unread }.map { it.session.id }.toSet()
             val previews = _uiState.value.sessions.associate { it.session.id to it.aiPreview }
             val pinnedSet = _pinned.value
+            val errorSet = _sessionErrors.value
             val enriched = items.map {
                 it.copy(
                     unread = it.session.id in currentUnread,
                     aiPreview = previews[it.session.id],
                     pinned = it.session.id in pinnedSet,
+                    hasError = it.session.id in errorSet,
                 )
             }
             _uiState.update { current ->
@@ -550,6 +632,7 @@ class WorkbenchViewModel @Inject constructor(
                     sessionStatus = item.status,
                     questions = item.pendingQuestion?.questions.orEmpty(),
                     questionRequestId = item.pendingQuestion?.id,
+                    permissions = item.pendingPermissions,
                 )
             }
         }
@@ -579,18 +662,27 @@ class WorkbenchViewModel @Inject constructor(
 
     /**
      * 把服务器全量会话归并为根会话条目并计算派生状态：
-     * 子会话的忙/待决问题归并到父会话，与现有 SessionListViewModel 的口径一致。
+     * 子会话的忙/待决问题/待决授权归并到父会话，与现有 SessionListViewModel 的口径一致。
      */
     private fun buildWorkbenchSessions(
         sessions: List<Session>,
         statuses: Map<String, SessionStatus>,
         pendingBySession: Map<String, List<QuestionRequest>>,
+        pendingPermissionBySession: Map<String, List<PermissionRequest>>,
     ): List<WorkbenchSession> {
         val childBusyByParent = mutableMapOf<String, SessionStatus>()
         val parentWithQuestion = mutableSetOf<String>()
+        val parentWithPermission = mutableSetOf<String>()
+        // 子会话的权限请求归并到父会话（授权面板在父会话上处理）。
+        val permissionsBySessionId = pendingPermissionBySession.toMutableMap()
         for (child in sessions) {
             val parentId = child.parentId ?: continue
             if (child.id in pendingBySession) parentWithQuestion += parentId
+            if (child.id in pendingPermissionBySession) parentWithPermission += parentId
+            val childPermissions = pendingPermissionBySession[child.id].orEmpty()
+            if (childPermissions.isNotEmpty()) {
+                permissionsBySessionId[parentId] = permissionsBySessionId[parentId].orEmpty() + childPermissions
+            }
             val childStatus = statuses[child.id] ?: continue
             if (childStatus is SessionStatus.Busy || childStatus is SessionStatus.Retry) {
                 childBusyByParent[parentId] = childStatus
@@ -600,6 +692,7 @@ class WorkbenchViewModel @Inject constructor(
             .filter { it.parentId == null && !it.isArchived }
             .map { session ->
                 val status = when {
+                    session.id in pendingPermissionBySession || session.id in parentWithPermission -> SessionStatus.Permission
                     session.id in pendingBySession || session.id in parentWithQuestion -> SessionStatus.Question
                     else -> {
                         val self = statuses[session.id]
@@ -613,14 +706,16 @@ class WorkbenchViewModel @Inject constructor(
                     session = session,
                     status = status,
                     pendingQuestion = pendingBySession[session.id]?.firstOrNull(),
+                    pendingPermissions = permissionsBySessionId[session.id].orEmpty(),
                 )
             }
             .sortedWith(workbenchSessionComparator)
     }
 
-    /** 会话排序：置顶 > 提问中 > 处理中 > 空闲；同优先级内未读优先、最近更新优先，状态不变时顺序不跳动。 */
+    /** 会话排序：置顶 > 出错 > 提问中 > 处理中 > 空闲；同优先级内未读优先、最近更新优先，状态不变时顺序不跳动。 */
     private val workbenchSessionComparator: Comparator<WorkbenchSession> =
         compareBy<WorkbenchSession> { if (it.pinned) 0 else 1 }
+            .thenBy { if (it.hasError) 0 else 1 }
             .thenBy { statusRank(it.status) }
             .thenByDescending { it.unread }
             .thenByDescending { it.session.time.updated }
@@ -628,7 +723,7 @@ class WorkbenchViewModel @Inject constructor(
             .thenByDescending { it.session.id }
 
     private fun statusRank(status: SessionStatus): Int = when (status) {
-        is SessionStatus.Question -> 0
+        is SessionStatus.Permission, is SessionStatus.Question -> 0
         is SessionStatus.Busy, is SessionStatus.Retry -> 1
         is SessionStatus.Idle -> 2
     }
@@ -732,19 +827,26 @@ class WorkbenchViewModel @Inject constructor(
             if (BuildConfig.DEBUG) Log.d(TAG, "load panel messages failed: ${e.message}")
             emptyList()
         }
-        val session = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.session
-        val pending = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.pendingQuestion
-        val status = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.status ?: SessionStatus.Idle
+        val session = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }
+        val pending = session?.pendingQuestion
+        val status = session?.status ?: SessionStatus.Idle
+        val prev = _panels.value[sessionId]
+        val (contextTokens, contextWindow) = sessionContextStats(messages, session?.session?.model?.id.orEmpty())
         return DecisionPanelState(
             sessionId = sessionId,
             aiSummary = buildAiSummary(messages),
             questions = pending?.questions.orEmpty(),
             questionRequestId = pending?.id,
+            permissions = session?.pendingPermissions.orEmpty(),
             recentMessages = buildRecentMessages(messages),
-            sessionTitle = session?.title.orEmpty(),
-            sessionDirectory = session?.directory.orEmpty(),
+            sessionTitle = session?.session?.title.orEmpty(),
+            sessionDirectory = session?.session?.directory.orEmpty(),
             sessionStatus = status,
             loading = false,
+            showAll = prev?.showAll ?: false,
+            allMessages = prev?.allMessages,
+            contextTokens = contextTokens,
+            contextWindow = contextWindow,
         )
     }
 
@@ -759,18 +861,9 @@ class WorkbenchViewModel @Inject constructor(
         return text.take(AI_SUMMARY_CHAR_LIMIT)
     }
 
-    /** 取最近几轮有文本内容的对话（user/assistant 交替），最近一条 assistant 完整显示。 */
+    /** 取最近几轮有内容（文本或附件）的对话，最近一条 assistant 完整显示。 */
     private fun buildRecentMessages(messages: List<MessageWithParts>): List<PanelMessage> {
-        val withText = messages.asReversed().mapNotNull { mw ->
-            val text = mw.parts
-                .filterIsInstance<Part.Text>()
-                .filter { it.synthetic != true && it.ignored != true }
-                .joinToString("\n") { it.text }
-                .trim()
-            if (text.isBlank()) return@mapNotNull null
-            val role = if (mw.info is Message.Assistant) "assistant" else "user"
-            PanelMessage(role = role, text = text)
-        }.take(PANEL_RECENT_COUNT)
+        val withText = messages.asReversed().mapNotNull { buildPanelMessage(it) }.take(PANEL_RECENT_COUNT)
         val lastAssistantIndex = withText.indexOfFirst { it.role == "assistant" }
         return withText.mapIndexed { index, msg ->
             if (msg.role == "assistant" && index == lastAssistantIndex) {
@@ -778,6 +871,73 @@ class WorkbenchViewModel @Inject constructor(
             } else {
                 msg.copy(text = msg.text.take(PANEL_MESSAGE_CHAR_LIMIT))
             }
+        }
+    }
+
+    /** 由一条消息构件面板行：提取文本 + 附件；无任何内容返回 null。 */
+    private fun buildPanelMessage(mw: MessageWithParts): PanelMessage? {
+        val text = mw.parts
+            .filterIsInstance<Part.Text>()
+            .filter { it.synthetic != true && it.ignored != true }
+            .joinToString("\n") { it.text }
+            .trim()
+        val attachments = buildPanelAttachments(mw)
+        if (text.isBlank() && attachments.isEmpty()) return null
+        val role = if (mw.info is Message.Assistant) "assistant" else "user"
+        return PanelMessage(role = role, text = text, attachments = attachments)
+    }
+
+    /** 提取一条消息里的非文本部件（图片 / 工具 / 文件）供面板展示。 */
+    private fun buildPanelAttachments(mw: MessageWithParts): List<PanelAttachment> {
+        val out = mutableListOf<PanelAttachment>()
+        mw.parts.forEach { part ->
+            when (part) {
+                is Part.File -> {
+                    if (part.mime.startsWith("image/") && !part.url.isNullOrBlank()) {
+                        out += PanelAttachment("image", part.filename ?: "image", detail = part.mime, url = part.url)
+                    } else {
+                        out += PanelAttachment("file", part.filename ?: part.mime, detail = part.mime)
+                    }
+                }
+                is Part.Tool -> {
+                    val detail = when (val s = part.state) {
+                        is ToolState.Running -> s.title ?: "running"
+                        is ToolState.Completed -> "completed"
+                        is ToolState.Error -> "error"
+                        is ToolState.Pending -> "pending"
+                    }
+                    out += PanelAttachment("tool", part.tool, detail = detail)
+                }
+                else -> {}
+            }
+        }
+        return out
+    }
+
+    /** 最近一轮模型上下文占用（token）+ 模型窗口上限；窗口未知时上限为 0。 */
+    private fun sessionContextStats(messages: List<MessageWithParts>, modelId: String): Pair<Int, Int> {
+        val lastWithOutput = messages.lastOrNull { mw ->
+            mw.info is Message.Assistant && mw.parts.any { it is Part.StepFinish && (it.tokens?.output ?: 0) > 0 }
+        }
+        val tokens = lastWithOutput?.parts
+            ?.filterIsInstance<Part.StepFinish>()
+            ?.lastOrNull { (it.tokens?.output ?: 0) > 0 }
+            ?.tokens
+        val used = tokens?.let { it.total ?: (it.input + it.output) } ?: 0
+        return used to modelContextWindow(modelId)
+    }
+
+    /** 常见模型上下文窗口（token）兜底映射；未知模型返回 0（面板不显示占比）。 */
+    private fun modelContextWindow(modelId: String): Int {
+        val id = modelId.lowercase()
+        return when {
+            "gemini" in id -> 1_048_576
+            "claude" in id -> 200_000
+            "gpt-5" in id || "gpt-4o" in id || "gpt-4.1" in id || "o3" in id || "o4" in id -> 128_000
+            "gpt-4" in id || "gpt-3.5" in id -> 16_384
+            "deepseek" in id || "qwen" in id || "glm" in id || "llama" in id || "kimi" in id -> 128_000
+            "mistral" in id -> 32_768
+            else -> 0
         }
     }
 
@@ -793,7 +953,7 @@ class WorkbenchViewModel @Inject constructor(
         _sendingSessionIds.update { it + sessionId }
         viewModelScope.launch {
             try {
-                api.promptAsync(
+                api.sendPrompt(
                     conn = activeConn,
                     sessionId = sessionId,
                     messageId = MessageIdGenerator.next(),
@@ -837,6 +997,7 @@ class WorkbenchViewModel @Inject constructor(
                 val session = _uiState.value.sessions.firstOrNull { it.session.id == requestSessionId }?.session
                 val success = api.replyToQuestion(
                     conn = activeConn,
+                    sessionId = requestSessionId,
                     requestId = requestId,
                     answers = answers,
                     directory = session?.directory?.takeIf { it.isNotBlank() },
@@ -966,6 +1127,136 @@ class WorkbenchViewModel @Inject constructor(
             dataStore.edit { prefs ->
                 val cur = prefs[pinnedKey].orEmpty()
                 prefs[pinnedKey] = if (sessionId in cur) cur - sessionId else cur + sessionId
+            }
+        }
+    }
+
+    // ============ 快捷回复模板（D2） ============
+
+    /** 把当前草稿存为快捷回复模板（已存在则忽略）。 */
+    fun addTemplate(text: String) {
+        val t = text.trim()
+        if (t.isEmpty()) return
+        viewModelScope.launch {
+            dataStore.edit { prefs ->
+                val cur = decodeTemplates(prefs[templatesKey].orEmpty())
+                if (t !in cur) prefs[templatesKey] = encodeTemplates(cur + t)
+            }
+        }
+    }
+
+    /** 删除一条快捷回复模板。 */
+    fun removeTemplate(text: String) {
+        viewModelScope.launch {
+            dataStore.edit { prefs ->
+                val cur = decodeTemplates(prefs[templatesKey].orEmpty())
+                prefs[templatesKey] = encodeTemplates(cur.filterNot { it == text })
+            }
+        }
+    }
+
+    // ============ 面板「查看全部消息」（B2）与失败重试（B3） ============
+
+    /** 展开 / 收起面板里的完整消息列表；首次展开时异步拉全量消息。 */
+    fun toggleAllMessages(sessionId: String) {
+        val current = _panels.value[sessionId] ?: return
+        val show = !current.showAll
+        _panels.value = _panels.value + (sessionId to current.copy(showAll = show))
+        if (show) loadAllMessages(sessionId)
+    }
+
+    private fun loadAllMessages(sessionId: String) {
+        viewModelScope.launch {
+            val activeConn = conn ?: return@launch
+            val messages = runCatching {
+                api.listMessages(activeConn, sessionId, limit = PANEL_ALL_LIMIT)
+            }.getOrElse { e ->
+                if (e is CancellationException) throw e
+                if (BuildConfig.DEBUG) Log.d(TAG, "load all messages failed: ${e.message}")
+                emptyList()
+            }
+            val all = buildAllMessages(messages)
+            _panels.update { ps ->
+                val cur = ps[sessionId] ?: return@update ps
+                ps + (sessionId to cur.copy(allMessages = all))
+            }
+        }
+    }
+
+    /** 完整消息列表（每条完整显示，不截断）。 */
+    private fun buildAllMessages(messages: List<MessageWithParts>): List<PanelMessage> =
+        messages.asReversed().mapNotNull { buildPanelMessage(it)?.copy(full = true) }
+
+    /** 失败一键重试：abort 掉可能的自动重试后，重发该会话最后一条有文本的用户消息。 */
+    fun retrySession(sessionId: String, onResult: (Boolean) -> Unit = {}) {
+        val activeConn = conn ?: return
+        val session = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.session ?: return
+        if (sessionId in _sendingSessionIds.value) return
+        viewModelScope.launch {
+            try {
+                val messages = runCatching { api.listMessages(activeConn, sessionId, limit = PANEL_MESSAGE_LIMIT) }.getOrElse { emptyList() }
+                val lastUser = messages.lastOrNull { mw ->
+                    mw.info is Message.User && mw.parts.any {
+                        it is Part.Text && it.synthetic != true && it.ignored != true && it.text.isNotBlank()
+                    }
+                }
+                val text = lastUser?.parts
+                    ?.filterIsInstance<Part.Text>()
+                    ?.filter { it.synthetic != true && it.ignored != true }
+                    ?.joinToString("\n") { it.text }
+                    ?.trim()
+                if (text.isNullOrBlank()) { onResult(false); return@launch }
+                runCatching { api.abortSession(activeConn, sessionId) }
+                _sendingSessionIds.update { it + sessionId }
+                api.sendPrompt(
+                    conn = activeConn,
+                    sessionId = sessionId,
+                    messageId = MessageIdGenerator.next(),
+                    parts = listOf(PromptPart(type = "text", text = text)),
+                    directory = session.directory,
+                )
+                _uiState.update { s ->
+                    s.copy(sessions = s.sessions.map { if (it.session.id == sessionId) it.copy(status = SessionStatus.Busy) else it })
+                }
+                _sessionErrors.update { it - sessionId }
+                refreshPanel(sessionId)
+                if (BuildConfig.DEBUG) Log.d(TAG, "Retried session $sessionId")
+                onResult(true)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Retry session $sessionId failed", e)
+                onResult(false)
+            } finally {
+                _sendingSessionIds.update { it - sessionId }
+            }
+        }
+    }
+
+    /** 面板内快捷处理权限请求（once / always / reject）。 */
+    fun replyToPermission(sessionId: String, requestId: String, reply: String, onResult: (Boolean) -> Unit = {}) {
+        val activeConn = conn ?: return
+        val session = _uiState.value.sessions.firstOrNull { it.session.id == sessionId }?.session ?: return
+        viewModelScope.launch {
+            try {
+                val ok = api.replyToPermission(
+                    conn = activeConn,
+                    sessionId = sessionId,
+                    requestId = requestId,
+                    reply = reply,
+                    directory = session.directory,
+                )
+                if (ok) {
+                    refreshSessionsSoon()
+                    refreshPanel(sessionId)
+                }
+                if (BuildConfig.DEBUG) Log.d(TAG, "Permission $requestId -> $reply (ok=$ok)")
+                onResult(ok)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Log.e(TAG, "Reply permission $requestId failed", e)
+                onResult(false)
             }
         }
     }

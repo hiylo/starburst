@@ -226,7 +226,7 @@ internal fun FeatureChatDialog(
                                 Text(
                                     text = stringResource(R.string.test_intel_chat_hint),
                                     style = MaterialTheme.typography.bodyLarge.copy(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     ),
                                     maxLines = 1,
                                     overflow = TextOverflow.Ellipsis,
@@ -269,7 +269,7 @@ private fun ChatBubble(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = if (isAmoled) {
                     MaterialTheme.colorScheme.surfaceVariant
                 } else {
@@ -295,7 +295,7 @@ private fun ChatBubble(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Surface(
-                shape = RoundedCornerShape(10.dp),
+                shape = RoundedCornerShape(12.dp),
                 color = if (isAmoled) {
                     MaterialTheme.colorScheme.surfaceVariant
                 } else {

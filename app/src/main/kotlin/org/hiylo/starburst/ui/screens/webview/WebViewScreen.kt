@@ -32,10 +32,10 @@ import androidx.compose.foundation.background
 import kotlinx.coroutines.flow.SharedFlow
 
 /**
- * WebView Screen - loads the remote OpenCode Web UI
+ * WebView Screen - loads the remote server Web UI
  *
  * This replaces all native Chat/Session screens with the full-featured
- * web UI served by the OpenCode server, while the Android foreground
+ * web UI served by the server, while the Android foreground
  * service keeps the SSE connection alive in the background.
  *
  * Features:

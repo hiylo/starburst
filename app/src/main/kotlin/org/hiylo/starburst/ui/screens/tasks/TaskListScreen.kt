@@ -33,7 +33,6 @@ import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DeleteSweep
-import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.HourglassEmpty
@@ -58,6 +57,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRow
+import androidx.compose.material3.Surface
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -92,6 +93,7 @@ import org.hiylo.starburst.ui.components.AppDialog
 import org.hiylo.starburst.ui.components.AppDialogActions
 import org.hiylo.starburst.ui.components.AppPrimaryButton
 import org.hiylo.starburst.ui.components.appAmoledBorder
+import org.hiylo.starburst.ui.components.cartoonChrome
 import org.hiylo.starburst.ui.components.isAmoledTheme
 import org.hiylo.starburst.ui.theme.StatusConnected
 import org.hiylo.starburst.ui.theme.StatusError
@@ -527,7 +529,7 @@ private fun TaskStatsCard(tasks: BackendTaskStats) {
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -596,7 +598,7 @@ private fun TokenUsageCard(usages: List<BackendTokenUsage>, archiveCount: Int) {
             containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer,
         ),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
@@ -658,7 +660,7 @@ private fun ArchiveCard(archive: BackendArchive, onDelete: () -> Unit) {
         shape = AppCardShape,
         colors = CardDefaults.cardColors(containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -714,7 +716,7 @@ private fun StatsBar(tasks: List<BackendTask>) {
         shape = AppCardShape,
         colors = CardDefaults.cardColors(containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 14.dp, vertical = 12.dp),
@@ -744,6 +746,42 @@ private fun StatsBar(tasks: List<BackendTask>) {
     }
 }
 
+/**
+ * 任务类型 → 展示标签。返回 null 表示不展示徽章。
+ *
+ * `kind` 是后端 `tasks.kind` 的原值（`tasks/executor.go` 以 `Kind != ""` 作为
+ * 「不走 OpenCode prompt 路径」的开关）。空值 = agent 编排任务（最常见，不必打标）；
+ * 非空按已知值翻译，未知值原样透出便于排查新增类型。
+ */
+@Composable
+internal fun taskKindLabel(kind: String): String? {
+    return when (kind.trim()) {
+        "" -> null
+        "test-run" -> stringResource(R.string.task_kind_test_run)
+        "doc-generate" -> stringResource(R.string.task_kind_doc_generate)
+        "ai-suggest" -> stringResource(R.string.task_kind_ai_suggest)
+        "intel-run" -> stringResource(R.string.task_kind_intel_run)
+        else -> kind.trim()
+    }
+}
+
+/** 任务类型/计划徽章：弱化的容器样式，不与状态徽章抢视觉权重。 */
+@Composable
+private fun TaskKindBadge(label: String) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            maxLines = 1,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+        )
+    }
+}
+
 @Composable
 private fun TaskCard(
     task: BackendTask,
@@ -758,7 +796,7 @@ private fun TaskCard(
         shape = AppCardShape,
         colors = CardDefaults.cardColors(containerColor = if (isAmoled) Color.Black else MaterialTheme.colorScheme.surfaceContainer),
         border = appAmoledBorder(0.65f),
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.cartoonChrome(AppCardShape).fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().let { it }) {
@@ -771,6 +809,19 @@ private fun TaskCard(
                     color = if (recurring) MaterialTheme.colorScheme.tertiary else style.color,
                     fontWeight = FontWeight.SemiBold,
                 )
+                // 任务类型（后端 tasks.kind）：空 = agent 编排任务；非空 = 内置追踪任务
+                // （test-run / doc-generate / ai-suggest …）。此前 App 完全未读取该字段，
+                // 用户看不到「这是什么类型的任务」。
+                val kindLabel = taskKindLabel(task.kind)
+                if (kindLabel != null) {
+                    Spacer(Modifier.width(6.dp))
+                    TaskKindBadge(label = kindLabel)
+                }
+                // 多步骤计划标识：workflowId 非空即属于一个计划（任务模式「多步骤计划」的落库依据）。
+                if (!task.workflowId.isNullOrBlank()) {
+                    Spacer(Modifier.width(6.dp))
+                    TaskKindBadge(label = stringResource(R.string.task_kind_plan))
+                }
                 Spacer(Modifier.width(8.dp))
                 Text(
                     text = when {
@@ -793,7 +844,7 @@ private fun TaskCard(
                 IconButton(onClick = { expanded = !expanded }, modifier = Modifier.size(24.dp)) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                        contentDescription = null,
+                        contentDescription = stringResource(if (expanded) R.string.chat_collapse else R.string.chat_expand),
                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
