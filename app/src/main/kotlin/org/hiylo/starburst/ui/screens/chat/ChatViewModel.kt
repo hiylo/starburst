@@ -495,7 +495,7 @@ class ChatViewModel @Inject constructor(
                         val authoritativeParts = allParts[msg.id].orEmpty()
                         val rawParts = authoritativeParts.ifEmpty { pending?.toLocalParts().orEmpty() }
                         ChatMessage(
-                            message = msg.withAuthoringFallback(pending),
+                            message = msg.withAuthoringFallback(pending, session),
                             // 用户消息的同一个 part 会有 3 个不同 id 的副本（prompt/text/local），
                             // 按内容折叠；助手消息由 dedupeTurnParts 按 callID 归并。
                             parts = if (msg is Message.User) dedupeUserMessageParts(rawParts) else rawParts,
@@ -966,14 +966,24 @@ class ChatViewModel @Inject constructor(
  * 消息里已有的值覆盖成空，那行元信息随之消失。此处按字段逐个回填（有值的不动），
  * 使发送前后的显示保持一致。
  */
-internal fun Message.withAuthoringFallback(pending: PendingPromptRecord?): Message {
-    if (pending == null) return this
+internal fun Message.withAuthoringFallback(
+    pending: PendingPromptRecord?,
+    session: Session?,
+): Message {
     if (this !is Message.User) return this
     val needAgent = agent.isNullOrBlank()
     val needModel = model == null
     if (!needAgent && !needModel) return this
+    // 消息自带值是后端记录的精确值；pending 覆盖刚发送的短暂窗口；会话当前值兜住
+    // 修复前发出的历史消息（它们落库即空串，pending 早已清除，只有会话还留值）。
+    val fallbackAgent = pending?.agent?.takeIf { it.isNotBlank() }
+        ?: session?.agent?.takeIf { it.isNotBlank() }
+    val fallbackModel = pending?.model
+        ?.let { Message.User.Model(providerId = it.providerId, modelId = it.modelId) }
+        ?: session?.model?.takeIf { it.id.isNotBlank() }
+            ?.let { Message.User.Model(providerId = it.providerId, modelId = it.id) }
     return copy(
-        agent = agent?.takeIf { it.isNotBlank() } ?: pending.agent,
-        model = model ?: pending.model?.let { Message.User.Model(providerId = it.providerId, modelId = it.modelId) },
+        agent = agent?.takeIf { it.isNotBlank() } ?: fallbackAgent,
+        model = model ?: fallbackModel,
     )
 }

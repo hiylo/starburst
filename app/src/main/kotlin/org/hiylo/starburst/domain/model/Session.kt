@@ -31,7 +31,10 @@ data class Session(
     val share: Share? = null,
     val permission: List<PermissionRule>? = null,
     val revert: Revert? = null,
-    val model: SessionModel? = null
+    val model: SessionModel? = null,
+    // 后端会话对象带 agent（首个回合起才有值）；此前未解析，气泡下方的
+    // 「Agent 类型」在消息缺值时无处回落。
+    val agent: String? = null
 ) {
     @Serializable
     data class Time(
