@@ -240,7 +240,7 @@ components:
 
 ## Overview
 
-StarBurst is a "terminal-as-a-service" mobile client: users manage multiple OpenCode
+StarBurst is a "terminal-as-a-service" mobile client: users manage multiple servers
 servers from their device, browse sessions, run commands in a real terminal emulator, and view
 AI-generated content. The whole UI is built on **Material 3 (Material You)** with Jetpack Compose.
 Every design token comes from `app/src/main/kotlin/org/hiylo/starburst/ui/theme/`

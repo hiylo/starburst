@@ -71,7 +71,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 - [x] `/api/ws` live push channel (401 without token, 101 with token)
 - [x] Accurate `/session/status`: snapshot + event aggregation, idle set explicitly, busy corrected by recent message activity, DB-seeded
 - [x] App dual-channel: backend mirror preferred when healthy (2.5s probe), direct fallback on repeated failures
-- [x] SSH tunnel forwards the backend port (18880) alongside the OpenCode port so pushes work through the tunnel
+- [x] SSH tunnel forwards the backend port (18880) alongside the server port so pushes work through the tunnel
 
 ### Push notifications
 
@@ -110,7 +110,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 ### Engineering
 
 - [x] Server-side ASR preferred over on-device model
-- [x] Source split: ChatScreen / NavGraph / OpenCodeApi broken into per-concern files
+- [x] Source split: ChatScreen / NavGraph / StarBurstApi broken into per-concern files
 - [x] Renamed project to StarBurst (app id, label, keystore)
 
 ## 3.0.0 (Released ✅)
@@ -177,9 +177,9 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## 1.3.0 (Released ✅)
 
-> Released 2026-09-13. Everything below is a **pure client** change — the opencode server is untouched.
+> Released 2026-09-13. Everything below is a **pure client** change — the server is untouched.
 > Exceptions: voice input (relies on an on-device ASR model or the starburst-backend engine) and image
-> understanding (relies on the model supporting vision); neither involves opencode server-side code.
+> understanding (relies on the model supporting vision); neither involves server-side code.
 
 ### Sessions & project management
 
@@ -332,29 +332,35 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 #### Knowledge-base references (RAG-in-Prompt passthrough)
 
-- [ ] Session sends carry knowledge-base context automatically (spliced in the backend
-      `prompt_async` mirror-proxy layer; zero APP changes)
+- [x] Session sends carry knowledge-base context automatically (spliced in the backend
+      `prompt_async` mirror-proxy layer; zero APP changes — chat messages route through
+      the backend mirror via `resolveSendingConnection`, `3cb7f9a`)
 - [ ] Optional: consume `X-Rag-Spliced` response header → "N sources brought in" / "no
-      relevant material found" hint
-- [ ] Source display for KB citations (doc / section, tap-through to preview)
+      relevant material found" hint (the folded RAG chip already surfaces the count)
+- [ ] Source display for KB citations (doc / section, tap-through to preview; backend now
+      tags each `[来源N]` with the `#documentID`)
 
 #### Document generation & iteration
 
-- [ ] Network layer: `/api/documents/*` (generate / regenerate) + `doc.event` WS consumption
-- [ ] Entry points: workbench / chat action "Generate PPT / Word / Excel" (backendReady +
-      version gate)
+- [x] Network layer: `/api/documents/*` (generate / regenerate / list / download / delete)
+      via `BackendDocumentsApi` (generation is synchronous; `doc.event` WS progress not yet
+      consumed — see backlog)
+- [x] Entry point: chat action "Generate PPT / Word / Excel" (backend-token gate, re-enabled
+      `cd3339a`)
 - [ ] Generation task card (progress + completion push) + product attached back into the
-      session (`-@doc-{id}` filename convention)
-- [ ] Attachment-card actions: "Regenerate" / "Revise per instruction" → regenerate (with
-      recent session context)
+      session (`-@doc-{id}` filename convention) — currently a notice message + local card
+- [x] Attachment-card actions: "Regenerate" / "Revise per instruction" → regenerate
+      (`GeneratedDocumentCard` + `ChatViewModelDocuments.regenerateDocument`)
 
 #### In-session document preview
 
-- [ ] Network layer: document-attachment URL resolution + preview-page address composition
-- [ ] Document attachment card → WebView sheet loading the backend
-      `webui/static/doc/preview.html` (pdf.js / mammoth / SheetJS / pptxjs; one renderer
-      page shared by both clients)
-- [ ] In-preview paging / zoom / download; full coverage of `.docx/.xlsx/.pptx/.pdf`
+- [x] Network layer: document-attachment URL resolution + preview-page address composition
+      (`resolveDocumentUrl`/`isSameOrigin` + `documentPreviewUrl`)
+- [x] Document attachment card → WebView sheet loading the backend
+      `webui/static/doc/preview.html` (generated-doc cards + KB document cards)
+- [ ] In-preview paging / zoom / download; full coverage of `.docx/.xlsx/.pptx/.pdf` on the
+      Android WebView path (renderer pages support paging/zoom; file-part attachments in
+      conversation history still have no preview button)
 
 ## Later — Backlog
 

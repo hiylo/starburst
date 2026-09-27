@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 # StarBurst（安卓版）
 
-**面向 [OpenCode](https://github.com/anomalyco/opencode) AI 编程代理的原生安卓客户端**
+**面向 AI 编程代理的原生安卓客户端（讲 OpenCode 兼容 V2 协议）**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Min SDK](https://img.shields.io/badge/minSdk-26-brightgreen)]()
@@ -16,11 +16,11 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 </div>
 
-StarBurst是一款功能丰富的原生 Material 3 客户端，让你在手机或平板上操控自己的
-[OpenCode](https://opencode.ai) AI 编程代理。通过网络连接任意 OpenCode 服务器，与代理聊天、
+StarBurst是一款功能丰富的原生 Material 3 客户端，让你在手机或平板上操控 AI 编程代理。
+通过网络连接任意讲 OpenCode 兼容协议（包括 OpenCode 本身）的服务器，与代理聊天、
 浏览工作区文件、运行完整终端、管理会话——一切都在移动端优先的界面中完成。
 
-> 这是一个**独立维护的社区项目**，与 OpenCode 官方团队无关。
+> 这是一个社区项目，不隶属于任何官方团队。
 
 ---
 
@@ -37,11 +37,11 @@ StarBurst是一款功能丰富的原生 Material 3 客户端，让你在手机�
 - **会话管理** — 搜索、收藏、分类、分叉、压缩、分享、导出、删除，以及置顶有新动态的会话；跨服务器/跨项目的全局搜索；置顶会话拖拽排序；搜索时间过滤
 - **模型与代理控制** — 搜索提供方/模型、切换代理、查看 token 用量与上下文。聊天顶栏显示**会话累计 token 用量与费用**，输入框预算环与上下文详情弹窗显示**当前上下文占用**（估算 token / 模型窗口）——两个口径分离，不再误读累计 token
 - **耗电优化** — WakeLock 仅在会话真正运行（busy/retry）时持有；全部后台轮询（会话状态、日志尾随、服务器管理、会话列表、工作台）在 App 退后台时挂起、回前台恢复
-- **多服务器** — 同时连接多个 OpenCode 服务器，支持稳定重连与会话列表一键切换
+- **多服务器** — 同时连接多个服务器，支持稳定重连与会话列表一键切换
 - **AI 工作台** — 跨会话的实时活动看板：实时事件流、每个会话的最新状态，以及决策面板（最新 AI 回复、待决问题一键回答、快捷回复输入框含语音输入、进入完整会话）
-- **后端镜像与实时推送（starburst-backend）** — 后端可达时，SSE 事件/通知通道与 AI 工作台优先走 `/api/opencode/*` 镜像（否则回落直连），聊天与会话列表的 REST 读写仍直连 OpenCode（Basic 鉴权）；记录会话事件并通过 `/api/ws` 推送完成 / 提问 / 授权 / 错误通知（声音 + 震动 + 顶部横幅，即使会话处于打开状态也会推送）
+- **后端镜像与实时推送（starburst-backend）** — 后端可达时，SSE 事件/通知通道与 AI 工作台优先走 `/api/opencode/*` 镜像（否则回落直连），聊天与会话列表的 REST 读写仍直连服务器（Basic 鉴权）；记录会话事件并通过 `/api/ws` 推送完成 / 提问 / 授权 / 错误通知（声音 + 震动 + 顶部横幅，即使会话处于打开状态也会推送）
 - **桌面小部件与快捷方式** — 会话/服务器/任务快照，点击直达；长按快捷方式（新建会话/全局搜索/任务中心）
-- **SSH 隧道** — 可选通过 SSH 隧道连接并远程重启 opencode 服务，服务器管理页提供连接健康监控（延迟/心跳/状态）
+- **SSH 隧道** — 可选通过 SSH 隧道连接并远程重启服务器服务，服务器管理页提供连接健康监控（延迟/心跳/状态）
 - **自定义 Slash 命令** — 定义 `/名称` 命令插入提示词，可持久化并在输入框管理
 - **自适应布局** — 折叠屏和平板双栏布局（会话列表 + 聊天），手机上单栏
 - **会话链接** — 指向已连接服务器的链接在应用内 WebView 打开（带 Basic Auth），其余链接保持系统浏览器打开，避免凭证泄漏
@@ -96,12 +96,12 @@ StarBurst是一款功能丰富的原生 Material 3 客户端，让你在手机�
 ### 环境要求
 
 - Android 8.0 及以上（API 26）
-- 一个可通过网络访问的 OpenCode 服务器
+- 一个可通过网络访问的服务器
 
-### 1. 启动你的 OpenCode 服务器
+### 1. 启动你的服务器
 
 ```bash
-opencode serve --port 4096 --hostname 0.0.0.0
+opencode serve --port 4096 --hostname 0.0.0.0   # 参考服务器；任意 OpenCode 兼容 V2 服务器均可
 ```
 
 ### 2. 在应用中连接
@@ -123,7 +123,7 @@ opencode serve --port 4096 --hostname 0.0.0.0
 
 ### 4.（可选）安装补充后端（starburst-backend）
 
-仅连接 OpenCode 服务器即可正常使用 App。若要启用**任务中心**（后台任务/批量/归档 + AI 规划拆解）、**实时事件推送**（完成/提问/授权/错误通知）与 **AI 工作台**实时镜像、**token 用量统计**等增强功能，App 会自动探测配套的 **starburst-backend**（默认 `http://<服务器>:18880`），缺失时可通过 SSH **一键安装**。后端在可达时承担实时事件通道与工作台 `/api/opencode/*` 镜像（不可达则回落直连），聊天与会话列表的 REST 仍直连 OpenCode（Basic 鉴权）；若 starburst-backend 运行在非 18880 端口，请在服务器设置里显式填写 `backendUrl`。
+仅连接服务器即可正常使用 App。若要启用**任务中心**（后台任务/批量/归档 + AI 规划拆解）、**实时事件推送**（完成/提问/授权/错误通知）与 **AI 工作台**实时镜像、**token 用量统计**等增强功能，App 会自动探测配套的 **starburst-backend**（默认 `http://<服务器>:18880`），缺失时可通过 SSH **一键安装**。后端在可达时承担实时事件通道与工作台 `/api/opencode/*` 镜像（不可达则回落直连），聊天与会话列表的 REST 仍直连服务器（Basic 鉴权）；若 starburst-backend 运行在非 18880 端口，请在服务器设置里显式填写 `backendUrl`。
 
 ## 🔨 构建
 
@@ -163,7 +163,7 @@ app/src/main/
 ├── jniLibs/                # 预编译 MNN 运行时（libMNN、libllm 等）
 ├── assets/models/          # 端侧 Qwen3.5-0.8B（MNN）+ 配置 + 分词器
 └── kotlin/org/hiylo/starburst/
-    ├── data/api/           # OpenCode 服务器 API + SuggestionProvider（外部 LLM）
+    ├── data/api/           # 服务器 API + SuggestionProvider（外部 LLM）
     ├── data/repository/    # EventReducer、设置、服务器/会话仓库
     ├── data/sync/          # 跨设备同步（gist/webdav）+ Keystore 加密密钥
     ├── ml/MnnLlm.kt        # 端侧模型的 Kotlin 封装
@@ -171,16 +171,16 @@ app/src/main/
     └── ui/                 # Compose UI：首页、聊天、会话、设置、导航
 ```
 
-**后端集成** — 可选的 **starburst-backend**（Go 源码见 `../opencode-backend/`）是不替换 OpenCode 服务器的配套增强服务：
+**后端集成** — 可选的 **starburst-backend**（Go 源码见 `../opencode-backend/`）是不替换服务器的配套增强服务：
 
 ```
-聊天 / 会话列表 ──────────────► OpenCode 服务器（REST，Basic 鉴权）      # 直连
+聊天 / 会话列表 ──────────────► 服务器（REST，Basic 鉴权）      # 直连
 实时事件 / 通知 ──────────────► starburst-backend :18880 /api/opencode/* # 镜像，不可达回落直连
 AI 工作台 ─────────────────────► starburst-backend :18880 /api/opencode/* # 镜像，不可达回落直连
 任务 / 归档 / token 统计 ─────► starburst-backend :18880 /api/*          # 仅后端
 ```
 
-App 自动探测后端并支持 SSH 一键安装；后端不可达时全部降级为直连 OpenCode。
+App 自动探测后端并支持 SSH 一键安装；后端不可达时全部降级为直连服务器。
 
 **建议生成链路**
 
@@ -209,7 +209,7 @@ App 自动探测后端并支持 SSH 一键安装；后端不可达时全部降�
 
 ## 🙏 致谢
 
-- [OpenCode](https://opencode.ai) — 本客户端所连接的 AI 编程代理
+- [OpenCode](https://opencode.ai) — 本客户端所讲 V2 协议的参考服务器
 - [MNN](https://github.com/alibaba/MNN) — 端侧推理引擎
 - [Qwen](https://github.com/QwenLM) — 端侧语言模型
 - [OC Remote](https://github.com/crim50n/oc-remote) — 本项目所基于的原版安卓客户端

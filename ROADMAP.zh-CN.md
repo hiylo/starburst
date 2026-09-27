@@ -52,7 +52,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 ## Now — 1.2.0
 
-> 以下全部为**纯客户端**改动，不改 opencode 服务端。
+> 以下全部为**纯客户端**改动，不改服务端。
 > 例外：语音输入（依赖端侧 ASR 模型）、图片理解（依赖模型支持视觉），两者均不涉及服务端代码。
 
 ### 会话与项目管理

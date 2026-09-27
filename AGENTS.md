@@ -2,11 +2,11 @@
 Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 -->
 
-# AGENTS.md — opencode（StarBurst Android）项目规约
+# AGENTS.md — StarBurst Android 项目规约
 
 ## 项目概述
 
-StarBurst —— OpenCode AI 编程助手的原生 Android 客户端（Material 3 + Jetpack Compose）。连接任意 OpenCode 服务器进行流式聊天、文件浏览/编辑、内置 Git 页、PTY 终端、会话管理、端侧 LLM 建议、端侧语音识别、测试智能工作台。
+StarBurst —— AI 编程助手的原生 Android 客户端（Material 3 + Jetpack Compose）。连接任意讲 OpenCode 兼容 V2 协议的服务器进行流式聊天、文件浏览/编辑、内置 Git 页、PTY 终端、会话管理、端侧 LLM 建议、端侧语音识别、测试智能工作台。
 
 - **namespace / applicationId**：`org.hiylo.starburst`（debug 后缀 `.debug`）
 - **versionCode / versionName**：8 / 3.0.0
@@ -26,6 +26,15 @@ StarBurst —— OpenCode AI 编程助手的原生 Android 客户端（Material 
 | 测试 | JUnit 4.13.2 + Espresso 3.6.1 + Compose ui-test-junit4；E2E 用 **Maestro** |
 
 `gradle.properties` 已含工作区硬性要求：`org.gradle.daemon=false`、`kotlin.compiler.execution.strategy=in-process`。
+
+## 部署分工（2026-09-23 起）
+
+- **Debug 包** → 控制**原后端**（opencode 1.18.30 + starburst-backend），发送固定走 V1 `prompt_async`
+  （该后端 V2 发送不可用：工具调用触发服务端 `Failed to drain Session`、`queue` 不启动生成）。
+- **Release 包** → 控制**新的 starburst-agent**（V2 协议 `api` 命名空间），发送走 V2 承认式投递
+  （V1-only 服务器自动回退）。发送协议由 `sendPrompt` 按 `BuildConfig.DEBUG` 门控
+  （`data/api/StarBurstApiMessages.kt`），改部署或协议先读该函数注释。
+- 产品 APK 落 `/opt/starburst-apk/download/`，内网下载 `http://100.66.1.1:18882/<文件名>`。
 
 ## 架构 / 包结构
 

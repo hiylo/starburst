@@ -15,7 +15,7 @@ unacceptable behavior, report it to the maintainers.
 ## Reporting Bugs
 
 - Search [the issue tracker](https://github.com/hiylo/starburst/issues) first to avoid duplicates.
-- Include the app version, Android version, device model, and the OpenCode server version.
+- Include the app version, Android version, device model, and the server version.
 - Attach a reproduction step, expected vs. actual behavior, and a diagnostic log export if possible.
 
 ## Feature Requests

@@ -43,12 +43,12 @@ Items are removed from this list once fixed and verified.
   heap while Ktor buffered and deserialized a history page. History loading now reduces the page size
   from the response `Content-Length` before reading its body, streams accepted pages from disk, and
   caches Base64 image data outside the deserialized model. The refined fallback and cached image
-  rendering still need verification on oversized sessions (`OpenCodeApi.kt`).
+  rendering still need verification on oversized sessions (`StarBurstApi.kt`).
 - Assistant error rendering crashed when a server returned `error.data` as a JSON primitive instead
   of an object. Error messages now accept object and primitive payloads, but the reported
   provider-error flow still needs physical-device verification (`Message.kt`).
 - Question prompts cannot be answered from the Android UI in some remote-server sessions (#33),
-  although the question card and matching OpenCode endpoints are present. The root cause still
+  although the question card and matching server endpoints are present. The root cause still
   requires a diagnostic export captured immediately after reproduction.
 
 ## Navigation & connection

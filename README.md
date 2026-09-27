@@ -6,7 +6,7 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 # StarBurst (Android)
 
-**A native Android client for [OpenCode](https://github.com/anomalyco/opencode) AI coding agents**
+**A native Android client for AI coding agents (speaks the OpenCode-compatible V2 protocol)**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Min SDK](https://img.shields.io/badge/minSdk-26-brightgreen)]()
@@ -16,12 +16,12 @@ Copyright(c) 2016 - Present, Clouds Studio Holding Limited. All rights reserved.
 
 </div>
 
-StarBurst is a feature-rich, native Material 3 client that lets you drive your
-[OpenCode](https://opencode.ai) AI coding agent from your phone or tablet. Connect to any OpenCode
-server over the network, chat with your agent, browse workspace files, run a full terminal, and
-manage sessions — all from a mobile-first UI.
+StarBurst is a feature-rich, native Material 3 client that lets you drive an AI coding agent from
+your phone or tablet. Connect to any server that speaks the OpenCode-compatible protocol (OpenCode
+servers included) over the network, chat with your agent, browse workspace files, run a full
+terminal, and manage sessions — all from a mobile-first UI.
 
-> This is an **independently maintained community project**, not affiliated with the OpenCode team.
+> This is a community project, not affiliated with any official team.
 
 ---
 
@@ -71,19 +71,19 @@ manage sessions — all from a mobile-first UI.
 - **Battery optimization** — WakeLock is held only while a session is actively running (busy/retry),
   not during idle background; all background polling (chat status, log tail, server management,
   session list, workbench) suspends when the app is backgrounded and resumes on return
-- **Multi-server** — connect to several OpenCode servers at once, with stable reconnection and
+- **Multi-server** — connect to several servers at once, with stable reconnection and
   one-tap switching from the session list
 - **AI workbench** — a live dashboard of agent activity across sessions: real-time event stream,
   per-session latest status, and a decision panel with the latest AI reply, pending questions
   (one-tap answers), quick-reply composer with voice input, and jump-into-session
 - **Backend mirror & live push (starburst-backend)** — the live event/notification channel and the
   AI workbench route through the backend `/api/opencode/*` mirror when reachable (direct fallback
-  otherwise), while chat and session-list REST calls still connect to OpenCode directly (Basic
+  otherwise), while chat and session-list REST calls still connect to the server directly (Basic
   auth); records session events and pushes completion / question / permission / error notifications
   with sound, vibration and heads-up banners, even while the session is open
 - **Home-screen Widget & App Shortcuts** — session/server/task snapshot with deep links, plus
   long-press shortcuts (new session / global search / task center)
-- **SSH tunnel** — optionally connect and restart the OpenCode service over an SSH tunnel, with
+- **SSH tunnel** — optionally connect and restart the server service over an SSH tunnel, with
   connection health (latency/heartbeat/status) monitoring
 - **Custom Slash commands** — define `/name` commands that insert a prompt, persisted and manageable
   from the chat input
@@ -132,12 +132,12 @@ manage sessions — all from a mobile-first UI.
 ### Requirements
 
 - Android 8.0+ (API 26)
-- An OpenCode server reachable over your network
+- A server reachable over your network
 
-### 1. Start your OpenCode server
+### 1. Start your server
 
 ```bash
-opencode serve --port 4096 --hostname 0.0.0.0
+opencode serve --port 4096 --hostname 0.0.0.0   # reference server; any OpenCode-compatible V2 server works
 ```
 
 ### 2. Connect in the app
@@ -165,14 +165,14 @@ Android Keystore and never leaves the device in plaintext.
 
 ### 4. (Optional) Install the supplementary backend (starburst-backend)
 
-The app works with a plain OpenCode server alone. For the bonus features — **Task Center**
+The app works with a plain server alone. For the bonus features — **Task Center**
 (background tasks / batch runs / archives with AI plan breakdown), **live event push**
 (completion / question / permission / error notifications), the **AI workbench** live mirror and
 **token usage stats** — the app auto-detects the companion **starburst-backend** (default
 `http://<server>:18880`) and offers a **one-click install over SSH** when it is missing. The backend
 routes the live event channel and workbench through its `/api/opencode/*` mirror, falls back to the
-OpenCode server directly when unreachable, and leaves chat / session-list REST calls connected
-straight to OpenCode ((Basic auth). If starburst-backend runs on a non-18880 port, enter the
+server directly when unreachable, and leaves chat / session-list REST calls connected
+straight to the server (Basic auth). If starburst-backend runs on a non-18880 port, enter the
 `backendUrl` explicitly in the server settings.
 
 ## 🔨 Building
@@ -216,7 +216,7 @@ app/src/main/
 ├── jniLibs/                # Prebuilt MNN runtime (libMNN, libllm, …) + libsherpa-mnn-jni.so (ASR)
 ├── assets/models/          # On-device Qwen3.5-0.8B (MNN) + config + tokenizer
 └── kotlin/org/hiylo/starburst/
-    ├── data/api/           # OpenCode server API + SuggestionProvider (external LLM)
+    ├── data/api/           # server API + SuggestionProvider (external LLM)
     ├── data/repository/    # EventReducer, settings, server/session repositories
     ├── data/sync/          # Cross-device sync (gist/webdav) + Keystore-secured secrets
     ├── ml/MnnLlm.kt        # Kotlin wrapper around the on-device model
@@ -227,17 +227,17 @@ app/src/main/
 ```
 
 **Backend integration** — the optional **starburst-backend** (see `../opencode-backend/` for its
-Go sources) is a companion service that augments the OpenCode server without replacing it:
+Go sources) is a companion service that augments the server without replacing it:
 
 ```
-Chat / session list ──────────────► OpenCode server (REST, Basic auth)      # direct
+Chat / session list ──────────────► server (REST, Basic auth)            # direct
 Live events / notifications ─────► starburst-backend :18880 /api/opencode/* # mirror, falls back to direct
 AI workbench ─────────────────────► starburst-backend :18880 /api/opencode/* # mirror, falls back to direct
 Tasks / archives / token stats ──► starburst-backend :18880 /api/*          # backend-only
 ```
 
 The app detects the backend automatically and offers one-click SSH install; everything degrades to
-direct OpenCode when the backend is unreachable.
+a direct connection when the backend is unreachable.
 
 **Suggestion pipeline**
 
@@ -266,7 +266,7 @@ This project is licensed under the [MIT License](LICENSE). It includes code deri
 
 ## 🙏 Acknowledgements
 
-- [OpenCode](https://opencode.ai) — the AI coding agent this client connects to
+- [OpenCode](https://opencode.ai) — the reference server this client speaks the V2 protocol with
 - [MNN](https://github.com/alibaba/MNN) — on-device inference engine
 - [Qwen](https://github.com/QwenLM) — the on-device language model
 - [OC Remote](https://github.com/crim50n/oc-remote) — original Android client this project builds upon

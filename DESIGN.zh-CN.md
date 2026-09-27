@@ -237,7 +237,7 @@ components:
 
 ## Overview
 
-StarBurst 是一个以「终端即服务」为核心的移动客户端：用户在本机管理多个 OpenCode 服务器、浏览会话、在真实终端仿真器中执行命令，并查看 AI 生成内容。整套 UI 建立在 **Material 3（Material You）** 之上，用 Jetpack Compose 实现，设计 token 全部来自 `app/src/main/kotlin/org/hiylo/starburst/ui/theme/`（`Color.kt` / `Theme.kt` / `Type.kt`）与 `ui/components/`（`AppSurfaces.kt` 等）。
+StarBurst 是一个以「终端即服务」为核心的移动客户端：用户在本机管理多个服务器、浏览会话、在真实终端仿真器中执行命令，并查看 AI 生成内容。整套 UI 建立在 **Material 3（Material You）** 之上，用 Jetpack Compose 实现，设计 token 全部来自 `app/src/main/kotlin/org/hiylo/starburst/ui/theme/`（`Color.kt` / `Theme.kt` / `Type.kt`）与 `ui/components/`（`AppSurfaces.kt` 等）。
 
 品牌识别靠三件事：**靛蓝主色**（`#6366F1`）、**纯黑 AMOLED 表面**（`#000000`）、**M3 语义化容器层级**。它不是营销型网页风格，而是一个「克制的工具型深色优先」系统——默认 Dark 表面为 `#121218`，卡片用 `surfaceContainer` 阶梯（`#1E1E25` → `#262630` → `#31313B`）表达层级，而不是用投影。AMOLED 模式下所有表面塌缩为纯黑，卡片仅靠 1dp 描边区分，最大化 OLED 省电。
 
