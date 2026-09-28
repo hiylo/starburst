@@ -17,6 +17,7 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.http.content.TextContent
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.JsonObject
@@ -25,6 +26,7 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
@@ -146,7 +148,55 @@ suspend fun StarBurstApi.getMcpStatus(conn: ServerConnection): Map<String, McpSt
     }
     if (response.status.value == 404 || response.status.value == 405) return emptyMap()
     if (!response.status.isSuccess()) throw RuntimeException("MCP status failed: ${response.status}")
-    return response.body()
+    return parseMcpStatusMap(response.bodyAsText(), json)
+}
+
+/**
+ * 解析 `GET /mcp` 响应，兼容两种在用的形状。
+ *
+ * - `{"servers":[{"name":"x","status":"connected"}]}` —— starburst-agent；
+ * - `{"x":{"status":"connected"}}` —— 按服务器名作键的扁平 map。
+ *
+ * 两者都见过，且真值源该响应的 schema 本身未被严格约束。这里必须都认：直接
+ * `body<Map<String, McpStatus>>()` 遇到 `{"servers":[...]}` 会抛类型不匹配
+ * （数组塞进对象字段），MCP 屏就整页报错/空白。
+ *
+ * 另容忍 `{location, data:[...]}` 信封（与本仓其他端点一致）。
+ */
+internal fun parseMcpStatusMap(raw: String, json: Json = Json { ignoreUnknownKeys = true }): Map<String, McpStatus> {
+    val root = runCatching { json.parseToJsonElement(raw).jsonObject }.getOrNull() ?: return emptyMap()
+
+    // 形状一：{"servers":[...]} 或 {"data":[...]}（信封）
+    val listElement = root["servers"] as? JsonArray
+        ?: (root["data"] as? JsonObject)?.get("servers") as? JsonArray
+        ?: (root["data"] as? JsonArray)
+    if (listElement != null) {
+        return listElement.mapNotNull { el ->
+            val obj = el as? JsonObject ?: return@mapNotNull null
+            val name = (obj["name"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                ?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            // 显式要求 status 是 JSON 字符串：JsonPrimitive 会把数字 5 宽松转成 "5"，
+            // 那样会把一个明显畸形的条目当正常状态显示出来，宁可丢掉这一条。
+            val status = (obj["status"] as? JsonPrimitive)?.takeIf { it.isString }?.contentOrNull
+                ?: return@mapNotNull null
+            name to McpStatus(
+                status = status,
+                error = (obj["error"] as? JsonPrimitive)?.takeIf { it.isString }
+                    ?.contentOrNull?.takeIf { it.isNotBlank() },
+            )
+        }.toMap()
+    }
+
+    // 形状二：扁平 map，键即服务器名。逐个宽容解码：某个条目形状不符只跳过该条，
+    // 不让一个畸形条目把整页 MCP 状态打挂。
+    return buildMap {
+        for ((name, value) in root) {
+            val obj = value as? JsonObject ?: continue
+            val status = runCatching { json.decodeFromJsonElement<McpStatus>(obj) }.getOrNull()
+                ?: continue
+            if (status.status.isNotBlank()) put(name, status)
+        }
+    }
 }
 
 suspend fun StarBurstApi.connectMcp(conn: ServerConnection, name: String): Boolean {
