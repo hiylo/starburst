@@ -10,6 +10,8 @@
 package org.hiylo.starburst.ui.screens.sessions
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
@@ -69,5 +71,56 @@ class SessionPathFormatterBoundaryTest {
         assertEquals("/", SessionPathFormatter.normalize(""))
         assertEquals("/", SessionPathFormatter.normalize("/"))
         assertEquals("/a/b", SessionPathFormatter.normalize("/a/b/"))
+    }
+
+    // ---- 截断规则：保留尾部 + `…/` 明确标记，不造成误解 ----
+
+    @Test
+    fun `short path is not truncated`() {
+        val p = "/vol1/projects/app"
+        assertEquals(p, SessionPathFormatter.truncateHead(p, 40))
+    }
+
+    @Test
+    fun `long path keeps the distinguishing tail and is marked as truncated`() {
+        val p = "/vol1/docker/starburst-agent/workspace"
+        val out = SessionPathFormatter.truncateHead(p, 30)
+        assertTrue("超长路径应以 …/ 开头表示已省略：$out", out.startsWith(SessionPathFormatter.TRUNCATED_PREFIX))
+        assertTrue("应保留末级目录 workspace：$out", out.endsWith("workspace"))
+        assertTrue("总长应不超过预算：$out", out.length <= 30)
+    }
+
+    @Test
+    fun `truncation breaks at a directory boundary not mid name`() {
+        val p = "/vol1/docker/starburst-agent/workspace"
+        val out = SessionPathFormatter.truncateHead(p, 26)
+        // 目录名不能被从中间劈开（如 works…/x）
+        assertTrue("不应出现被截断的目录名：$out", out == SessionPathFormatter.TRUNCATED_PREFIX || out.removePrefix(SessionPathFormatter.TRUNCATED_PREFIX).none { it == '.' })
+    }
+
+    /** 关键：截断结果不能长得像真实路径，否则用户会以为根目录就在省略处。 */
+    @Test
+    fun `truncated path is never mistakable for a real path`() {
+        val out = SessionPathFormatter.truncateHead("/vol1/docker/starburst-agent/workspace", 30)
+        assertFalse("不应以 / 开头（那会像绝对路径）：$out", out.startsWith("/"))
+        assertFalse("不应是 ~ 简写：$out", out == "~" || out.startsWith("~/"))
+    }
+
+    @Test
+    fun `home folding wins over truncation`() {
+        // home 下的长路径仍以 ~/ 开头，用户一眼认出是 home 内路径
+        val out = SessionPathFormatter.displayForUI("/home/hiylo/a/very/deep/nested/project", "/home/hiylo", 30)
+        assertTrue("home 下路径折叠优先：$out", out.startsWith("~/"))
+    }
+
+    @Test
+    fun `path equal to home is shown as tilde not truncated`() {
+        assertEquals("~", SessionPathFormatter.displayForUI("/home/hiylo", "/home/hiylo", 40))
+    }
+
+    @Test
+    fun `tiny budget degrades to marker only`() {
+        assertEquals(SessionPathFormatter.TRUNCATED_PREFIX, SessionPathFormatter.truncateHead("/a/b/c/d", 2))
+        assertEquals("/a/b/c/d", SessionPathFormatter.truncateHead("/a/b/c/d", 0))
     }
 }

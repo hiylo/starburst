@@ -120,9 +120,14 @@ internal fun ChatScreenTopBar(
                 if (hasDirectory || hasTokenOrCost) {
                     val parts = mutableListOf<String>()
                     if (hasDirectory) {
-                        // 与会话列表统一：home 前缀折叠为 `~/...`，避免两处路径显示不一致。
+                        // 与会话列表统一：home 前缀折叠为 `~/...`；过长时从**头部**截断并加
+                        // `…/` 标记（`displayForUI`）。不用 Compose 的 Ellipsis——那从尾部截，
+                        // 会砍掉最有辨识度的末级目录，还把同行的 token/花费整段挤掉。
                         parts.add(
-                            SessionPathFormatter.display(uiState.sessionDirectory, uiState.serverHomeDirectory),
+                            SessionPathFormatter.displayForUI(
+                                uiState.sessionDirectory,
+                                uiState.serverHomeDirectory,
+                            ),
                         )
                     }
                     if (totalTokens > 0) {
