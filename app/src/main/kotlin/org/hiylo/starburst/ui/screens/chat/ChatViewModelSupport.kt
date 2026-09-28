@@ -175,7 +175,6 @@ data class ChatUiState(
      * 服务器 home 目录（`GET /path/home`），用于把会话目录折叠成 `~/...`，
      * 与会话列表的展示规则保持一致（见 `SessionPathFormatter`）。
      */
-    val serverHomeDirectory: String = "",
     val sessionLoaded: Boolean = false,
     val parentSessionId: String? = null,
     /** 当前会话 fork 出的直接子会话列表（用于分支切换对比）。 */

@@ -206,7 +206,6 @@ class ChatViewModel @Inject constructor(
      * 服务器 home 目录（`GET /path/home`），仅用于把 [sessionDirectory] 折叠成 `~/...`，
      * 让聊天顶栏与会话列表显示同一路径。取不到时为空串（不折叠）。
      */
-    internal var serverHomeDirectory: String = ""
     internal var sessionWorkspaceId: String? = eventReducer.sessions.value
         .firstOrNull { it.id == sessionId }
         ?.workspaceId
@@ -622,7 +621,6 @@ class ChatViewModel @Inject constructor(
         ChatUiState(
             sessionTitle = session?.title ?: "Chat",
             sessionDirectory = session?.directory ?: "",
-            serverHomeDirectory = serverHomeDirectory,
             sessionLoaded = session != null,
             parentSessionId = session?.parentId,
             childSessions = childSessions,
