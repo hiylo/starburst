@@ -25,26 +25,21 @@ object SessionPathFormatter {
     fun normalize(path: String): String = path.trimEnd('/').ifEmpty { "/" }
 
     /**
-     * 展示用路径：`$HOME/x` 折叠为 `~/x`，其余原样（仅去尾部斜杠）。
-     * [homeDir] 为空或取不到时退化为不折叠。
+     * 展示用路径：仅规范化（去尾部斜杠、空串归一为根目录 `/`），**不做任何缩短**。
      *
-     * `~` 只在路径**确实位于 home 之下**时出现——这是 shell 的通用约定，不会误解。
-     * 拿不到 home 时不折叠（显示完整路径），绝不用一个假的简写代替完整路径。
+     * 此前这里会把 `$HOME/x` 折成 `~/x`。已去掉：`~` 在 shell 里是 home 的简写，
+     * 但这里显示的是**项目/会话目录**，绝大多数并不在 home 下（实测 home=/home/hiylo，
+     * 会话目录全在 /vol1/...），于是一个 `~` 会被读成「这是 home 下的路径」——
+     * 与事实不符，正是要避免的误解。缩短统一交给 [truncateHead] 用点点点表示。
      */
-    fun display(path: String, homeDir: String?): String {
-        val dir = normalize(path)
-        if (homeDir.isNullOrBlank()) return dir
-        val home = homeDir.trimEnd('/')
-        if (home.isEmpty()) return dir
-        return if (dir == home || dir.startsWith("$home/")) {
-            "~" + dir.removePrefix(home)
-        } else {
-            dir
-        }
-    }
+    fun display(path: String): String = normalize(path)
 
-    /** 截断标记前缀：以它开头即表示「前面被省略」，不会被当成真实路径。 */
-    const val TRUNCATED_PREFIX: String = "…/"
+    /**
+     * 缩短标记前缀：三个点 + 斜杠。以它开头即表示「前面已省略」。
+     * 刻意不用 `~`（那是 home 的约定，这里省略的可能是任意前缀）或 `…`（单字符，
+     * 部分字体渲染宽度不一致），`.../` 在任何字体下都稳定且不会被误认成真实路径。
+     */
+    const val TRUNCATED_PREFIX: String = ".../"
 
     /**
      * 超长路径的展示：**从头部截断、保留尾部**，并加 [TRUNCATED_PREFIX] 前缀。
@@ -74,11 +69,11 @@ object SessionPathFormatter {
     }
 
     /**
-     * 一步得到可展示的路径：先按 home 折叠（[display]），再按长度截断（[truncateHead]）。
-     * 折叠在前是有意的——`~/very/long/...` 比 `…/long/...` 更容易一眼认出是 home 下路径。
+     * 一步得到可展示的路径：规范化（[display]）后按长度缩短（[truncateHead]）。
+     * 只有超出 [maxChars] 才缩短，短路径一律原样显示 —— 不做无必要的缩写。
      */
-    fun displayForUI(path: String, homeDir: String?, maxChars: Int = DEFAULT_MAX_CHARS): String =
-        truncateHead(display(path, homeDir), maxChars)
+    fun displayForUI(path: String, maxChars: Int = DEFAULT_MAX_CHARS): String =
+        truncateHead(display(path), maxChars)
 
     /** 顶栏等窄控件的默认预算：够放下多数项目路径，又为同行的 token/花费留出余量。 */
     const val DEFAULT_MAX_CHARS: Int = 40

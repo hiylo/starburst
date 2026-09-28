@@ -23,48 +23,13 @@ import org.junit.Test
  */
 class SessionPathFormatterBoundaryTest {
 
-    @Test
-    fun `home blank means no folding - full path is shown`() {
-        val dir = "/vol1/docker/starburst-agent/workspace"
-        // home 取不到 → 不折叠（信息多于错误的简写）
-        assertEquals(dir, SessionPathFormatter.display(dir, null))
-        assertEquals(dir, SessionPathFormatter.display(dir, ""))
-    }
 
-    @Test
-    fun `directory under real home folds to tilde`() {
-        assertEquals(
-            "~/projects/app",
-            SessionPathFormatter.display("/home/hiylo/projects/app", "/home/hiylo"),
-        )
-    }
 
-    @Test
-    fun `directory equal to home keeps the tilde`() {
-        assertEquals("~", SessionPathFormatter.display("/home/hiylo", "/home/hiylo"))
-    }
 
     /** 关键回归：工作区目录不在 home 下时不能被折成 ~（此前因 home 被赋成 directory）。 */
-    @Test
-    fun `workspace outside home is not folded`() {
-        val dir = "/vol1/docker/starburst-agent/workspace"
-        assertEquals(dir, SessionPathFormatter.display(dir, "/home/hiylo"))
-    }
 
     /** 前缀边界：/home/hiylo-backup 不是 /home/hiylo 的子目录，不能折。 */
-    @Test
-    fun `sibling directory sharing name prefix is not folded`() {
-        val dir = "/home/hiylo-backup/secret"
-        assertEquals(dir, SessionPathFormatter.display(dir, "/home/hiylo"))
-    }
 
-    @Test
-    fun `trailing slash on home does not break folding`() {
-        assertEquals(
-            "~/projects",
-            SessionPathFormatter.display("/home/hiylo/projects", "/home/hiylo/"),
-        )
-    }
 
     @Test
     fun `normalize strips trailing slashes and maps empty to root`() {
@@ -106,21 +71,56 @@ class SessionPathFormatterBoundaryTest {
         assertFalse("不应是 ~ 简写：$out", out == "~" || out.startsWith("~/"))
     }
 
-    @Test
-    fun `home folding wins over truncation`() {
-        // home 下的长路径仍以 ~/ 开头，用户一眼认出是 home 内路径
-        val out = SessionPathFormatter.displayForUI("/home/hiylo/a/very/deep/nested/project", "/home/hiylo", 30)
-        assertTrue("home 下路径折叠优先：$out", out.startsWith("~/"))
-    }
 
-    @Test
-    fun `path equal to home is shown as tilde not truncated`() {
-        assertEquals("~", SessionPathFormatter.displayForUI("/home/hiylo", "/home/hiylo", 40))
-    }
 
     @Test
     fun `tiny budget degrades to marker only`() {
         assertEquals(SessionPathFormatter.TRUNCATED_PREFIX, SessionPathFormatter.truncateHead("/a/b/c/d", 2))
         assertEquals("/a/b/c/d", SessionPathFormatter.truncateHead("/a/b/c/d", 0))
+    }
+
+    // ---- 不再使用 ~ 折叠（用户明确要求），只用点点点表示缩短 ----
+
+    /** 核心诉求：任何情况下都不出现波浪号。 */
+    @Test
+    fun `no path is ever displayed with a tilde`() {
+        val paths = listOf(
+            "/home/hiylo",
+            "/home/hiylo/projects/app",
+            "/vol1/docker/starburst-agent/workspace",
+            "/vol1/1000/WorkSpaces",
+        )
+        for (p in paths) {
+            for (max in listOf(8, 20, 40, 200)) {
+                val out = SessionPathFormatter.displayForUI(p, max)
+                assertFalse("不应出现波浪号（$p, max=$max）-> $out", out.contains("~"))
+            }
+        }
+    }
+
+    /** home 下的路径也不再折成 ~/... —— 明确按完整路径显示，除非过长。 */
+    @Test
+    fun `path under home is shown in full when short enough`() {
+        assertEquals(
+            "/home/hiylo/projects/app",
+            SessionPathFormatter.displayForUI("/home/hiylo/projects/app", 40),
+        )
+    }
+
+    /** 过长时用点点点缩短，且保留末级目录。 */
+    @Test
+    fun `long home path is shortened with dots not tilde`() {
+        val out = SessionPathFormatter.displayForUI("/home/hiylo/a/very/deep/nested/project", 24)
+        assertTrue("应以 .../ 开头：$out", out.startsWith(".../"))
+        assertTrue("应保留末级目录 project：$out", out.endsWith("project"))
+        assertFalse("不应含波浪号：$out", out.contains("~"))
+        assertTrue("总长应不超过预算：$out", out.length <= 24)
+    }
+
+    @Test
+    fun `short path is displayed verbatim`() {
+        val p = "/vol1/projects/app"
+        assertEquals(p, SessionPathFormatter.displayForUI(p))
+        assertEquals(p, SessionPathFormatter.displayForUI(p, 40))
     }
 }

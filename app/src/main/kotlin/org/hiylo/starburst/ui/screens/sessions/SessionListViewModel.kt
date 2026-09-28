@@ -131,8 +131,8 @@ internal fun buildProjectSessionGroups(
     serverId: String,
 ): List<ProjectSessionGroup> {
     fun normalized(path: String) = SessionPathFormatter.normalize(path)
-    /** 会话列表展示路径：home 折叠 + 超长从头部截断（与聊天顶栏同一规则）。 */
-    fun displayPath(path: String) = SessionPathFormatter.displayForUI(path, homeDir)
+    /** 会话列表展示路径：超长从头部缩短并加 `.../` 标记（与聊天顶栏同一规则，不用 `~`）。 */
+    fun displayPath(path: String) = SessionPathFormatter.displayForUI(path)
     fun projectFor(session: Session): Project? {
         projects.firstOrNull { it.id.isNotBlank() && it.id == session.projectId }?.let { return it }
         val directory = normalized(session.directory)

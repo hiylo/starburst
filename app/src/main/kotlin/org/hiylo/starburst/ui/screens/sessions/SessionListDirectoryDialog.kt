@@ -191,16 +191,10 @@ internal fun OpenProjectDialog(
     }
 
     /**
-     * Shorten an absolute path by replacing home prefix with `~`.
-     *
-     * 必须按 `home + "/"` 判断边界：原先用 `startsWith(home)`，`/home/hiylo-backup/x`
-     * 会被误判成 home 的子目录，折出 `~-backup/x` 这种越界路径。
+     * 缩短过长路径：保留末级目录，前缀 `.../` 表示已省略（与聊天顶栏同一规则）。
+     * 不用 `~`：这里显示的是服务器上的真实目录树，`~` 会被误读成 home 相对路径。
      */
-    fun tildeReplace(path: String): String {
-        val home = homeDir?.trimEnd('/') ?: return path
-        if (home.isEmpty()) return path
-        return if (path == home || path.startsWith("$home/")) "~" + path.removePrefix(home) else path
-    }
+    fun shortenForDisplay(path: String): String = SessionPathFormatter.displayForUI(path)
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -329,7 +323,7 @@ internal fun OpenProjectDialog(
                             )
                         }
                         Text(
-                            text = tildeReplace(currentDir ?: "/"),
+                            text = shortenForDisplay(currentDir ?: "/"),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1,
@@ -375,7 +369,7 @@ internal fun OpenProjectDialog(
                                     items(searchResults, key = { it }) { path ->
                                         val absolutePath = path.trimEnd('/').ifEmpty { "/" }
                                         DirectoryRow(
-                                            displayPath = tildeReplace(absolutePath) + "/",
+                                            displayPath = shortenForDisplay(absolutePath) + "/",
                                             onClick = { onSelect(absolutePath) },
                                             onNavigate = {
                                                 // Navigate into this directory for further browsing
@@ -427,7 +421,7 @@ internal fun OpenProjectDialog(
                                 }
                                 items(savedPaths, key = { it }) { path ->
                                     SavedPathRow(
-                                        displayPath = tildeReplace(path) + "/",
+                                        displayPath = shortenForDisplay(path) + "/",
                                         onClick = {
                                             // Navigate into the path so the projects below it are listed
                                             searchQuery = ""
@@ -461,7 +455,7 @@ internal fun OpenProjectDialog(
                                 items(directories, key = { it.name }) { node ->
                                     val absPath = node.absolute ?: "${currentDir?.trimEnd('/')}/${node.name}"
                                     DirectoryRow(
-                                        displayPath = tildeReplace(absPath) + "/",
+                                        displayPath = shortenForDisplay(absPath) + "/",
                                         onNavigate = {
                                             // Navigate into this directory
                                             currentDir = absPath
@@ -577,7 +571,7 @@ internal fun OpenProjectDialog(
                                     Toast
                                         .makeText(
                                             context,
-                                            context.getString(R.string.sessions_create_folder_success, tildeReplace(createdPath)),
+                                            context.getString(R.string.sessions_create_folder_success, shortenForDisplay(createdPath)),
                                             Toast.LENGTH_SHORT,
                                         )
                                         .show()

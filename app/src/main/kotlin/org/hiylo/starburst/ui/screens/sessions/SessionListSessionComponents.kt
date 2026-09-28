@@ -342,10 +342,10 @@ internal fun PinnedSortDialog(
                                     )
                                     if (item.session.directory.isNotBlank()) {
                                         Text(
-                                            // 与会话列表、聊天顶栏统一：home 前缀折叠为 `~/...`，
-                                            // 过长时从头部截断并加 `…/` 标记（不用 Ellipsis：
-                                            // 那从尾部截，会砍掉最有辨识度的末级目录）。
-                                            text = SessionPathFormatter.displayForUI(item.session.directory, homeDir),
+                                            // 与会话列表、聊天顶栏统一：过长时从头部缩短并加
+                                            // `.../` 标记，保留末级目录（不用 Ellipsis：那从
+                                            // 尾部截，砍掉的恰是最有辨识度的部分）。
+                                            text = SessionPathFormatter.displayForUI(item.session.directory),
                                             style = MaterialTheme.typography.labelSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                             maxLines = 1,
